@@ -209,10 +209,15 @@ const WeighingStation: React.FC = () => {
   const generateSalesTicketPDF = (order: ClientOrder) => {
     const t = getTotals(order);
     
+    const fullRecords = order.records.filter(r => r.type === 'FULL').sort((a, b) => b.timestamp - a.timestamp);
+    const emptyRecords = order.records.filter(r => r.type === 'EMPTY').sort((a, b) => b.timestamp - a.timestamp);
+    const mortRecords = order.records.filter(r => r.type === 'MORTALITY').sort((a, b) => b.timestamp - a.timestamp);
+    const maxRows = Math.max(fullRecords.length, emptyRecords.length, mortRecords.length);
+
     // Calculate dynamic height
     // Base: ~100mm (Header + Summary + Financials + Footer)
-    // Records: ~8mm per record
-    const estimatedHeight = 150 + (order.records.length * 8) + (order.pricePerKg > 0 ? 30 : 0);
+    // Records: ~5mm per row
+    const estimatedHeight = 150 + (maxRows * 5) + (order.pricePerKg > 0 ? 30 : 0);
     const doc = new jsPDF({ unit: 'mm', format: [80, estimatedHeight] });
     
     let y = 10;
@@ -278,34 +283,27 @@ const WeighingStation: React.FC = () => {
     
     y += 60;
 
-    // DETAILED RECORDS TABLE
+    // DETAILED RECORDS TABLE (3 Columns)
     doc.setFontSize(10).setFont("helvetica", "bold");
     doc.text("DETALLE DE PESOS", 5, y);
     y += 2;
 
-    const records = [...order.records].sort((a, b) => b.timestamp - a.timestamp);
-    const rows = records.map((r, i) => [
-        (records.length - i).toString(),
-        r.type === 'FULL' ? 'LLENA' : r.type === 'EMPTY' ? 'VACÍA' : 'MERMA',
-        r.quantity.toString(),
-        r.weight.toFixed(2),
-        new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    ]);
+    const rows = [];
+    for (let i = 0; i < maxRows; i++) {
+        rows.push([
+            fullRecords[i] ? fullRecords[i].weight.toFixed(2) : '',
+            emptyRecords[i] ? emptyRecords[i].weight.toFixed(2) : '',
+            mortRecords[i] ? mortRecords[i].weight.toFixed(2) : ''
+        ]);
+    }
 
     autoTable(doc, {
         startY: y + 2,
-        head: [['#', 'TIPO', 'CANT', 'PESO', 'HORA']],
+        head: [['LLENAS', 'VACÍAS', 'MERMA']],
         body: rows,
-        theme: 'plain',
-        styles: { fontSize: 7, cellPadding: 1, overflow: 'ellipsize' },
-        headStyles: { fillColor: [220, 220, 220], textColor: 0, fontStyle: 'bold' },
-        columnStyles: {
-            0: { cellWidth: 5 },
-            1: { cellWidth: 15 },
-            2: { cellWidth: 10, halign: 'center' },
-            3: { cellWidth: 15, halign: 'right' },
-            4: { cellWidth: 15, halign: 'right' }
-        },
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 1, halign: 'center' },
+        headStyles: { fillColor: [220, 220, 220], textColor: 0, fontStyle: 'bold', halign: 'center' },
         margin: { left: 5, right: 5 },
         tableWidth: 70
     });
@@ -396,27 +394,29 @@ const WeighingStation: React.FC = () => {
     doc.setFontSize(12).setFont("helvetica", "bold");
     doc.text("DETALLE DE REGISTROS", 14, y);
 
-    // Detailed Records
-    const records = [...order.records].sort((a, b) => b.timestamp - a.timestamp);
-    const rows = records.map((r, i) => [
-        records.length - i,
-        r.type === 'FULL' ? 'LLENA' : r.type === 'EMPTY' ? 'VACÍA' : 'MERMA',
-        r.quantity,
-        r.type === 'FULL' ? r.birds : (r.type === 'MORTALITY' ? r.quantity : '-'),
-        r.weight.toFixed(2),
-        new Date(r.timestamp).toLocaleTimeString()
-    ]);
+    // Detailed Records (3 Columns)
+    const fullRecords = order.records.filter(r => r.type === 'FULL').sort((a, b) => b.timestamp - a.timestamp);
+    const emptyRecords = order.records.filter(r => r.type === 'EMPTY').sort((a, b) => b.timestamp - a.timestamp);
+    const mortRecords = order.records.filter(r => r.type === 'MORTALITY').sort((a, b) => b.timestamp - a.timestamp);
+    const maxRows = Math.max(fullRecords.length, emptyRecords.length, mortRecords.length);
+
+    const rows = [];
+    for (let i = 0; i < maxRows; i++) {
+        rows.push([
+            fullRecords[i] ? fullRecords[i].weight.toFixed(2) : '',
+            emptyRecords[i] ? emptyRecords[i].weight.toFixed(2) : '',
+            mortRecords[i] ? mortRecords[i].weight.toFixed(2) : ''
+        ]);
+    }
 
     autoTable(doc, {
         startY: y + 5,
-        head: [['#', 'TIPO', 'CANT.', 'POLLOS', 'PESO (KG)', 'HORA']],
+        head: [['LLENAS (KG)', 'VACÍAS (KG)', 'MERMA (KG)']],
         body: rows,
-        theme: 'striped',
-        headStyles: { fillColor: [71, 85, 105] },
-        styles: { fontSize: 9, halign: 'center' },
-        columnStyles: {
-            4: { halign: 'right', fontStyle: 'bold' }
-        }
+        theme: 'grid',
+        headStyles: { fillColor: [71, 85, 105], halign: 'center' },
+        styles: { fontSize: 9, halign: 'center', cellPadding: 2 },
+        margin: { left: 14, right: 14 }
     });
     
     // Footer
@@ -590,7 +590,7 @@ const WeighingStation: React.FC = () => {
 
   return (
     <>
-    <div className="flex flex-col h-full space-y-4 max-w-7xl mx-auto animate-fade-in text-left pb-10">
+    <div className="flex flex-col h-full space-y-4 max-w-full mx-auto animate-fade-in text-left pb-10">
       {/* Header HUD - Rediseñado para mostrar Ojo y Liquidar debajo de totales */}
       <div className="bg-blue-950 p-4 md:p-6 rounded-[2rem] shadow-2xl text-white relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none">

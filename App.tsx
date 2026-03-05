@@ -77,7 +77,7 @@ const Container: React.FC<{ children: React.ReactNode; title?: string; showBack?
           </div>
         </div>
       </header>
-      <main className="flex-1 max-w-6xl mx-auto w-full p-4">
+      <main className="flex-1 max-w-[95%] mx-auto w-full p-4">
         {children}
       </main>
     </div>
