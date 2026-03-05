@@ -23,6 +23,7 @@ const WeighingStation: React.FC = () => {
   
   const [showClientModal, setShowClientModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [newClientName, setNewClientName] = useState('');
@@ -188,6 +189,7 @@ const WeighingStation: React.FC = () => {
     const updated = { ...activeOrder, records: [record, ...activeOrder.records] };
     saveOrder(updated);
     setActiveOrder(updated);
+    setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
     setWeightInput('');
     weightInputRef.current?.focus();
   };
@@ -197,6 +199,7 @@ const WeighingStation: React.FC = () => {
     const updated = { ...activeOrder!, records: activeOrder!.records.filter(r => r.id !== id) };
     saveOrder(updated);
     setActiveOrder(updated);
+    setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
   };
 
   const handlePDFOutput = (doc: jsPDF, filename: string) => {
@@ -266,6 +269,50 @@ const WeighingStation: React.FC = () => {
     handlePDFOutput(doc, `Ticket_Venta_${order.id}.pdf`);
   };
 
+  const generateDetailPDF = (order: ClientOrder) => {
+    const t = getTotals(order);
+    const doc = new jsPDF();
+    
+    doc.setFontSize(18).text(config.companyName.toUpperCase(), 105, 20, { align: 'center' });
+    doc.setFontSize(12).text(`DETALLE DE PESAJE - ${order.clientName.toUpperCase()}`, 105, 30, { align: 'center' });
+    doc.setFontSize(10).text(`Fecha: ${new Date().toLocaleString()}`, 105, 36, { align: 'center' });
+
+    // Summary Table
+    autoTable(doc, {
+        startY: 45,
+        head: [['Concepto', 'Cantidad', 'Peso (kg)']],
+        body: [
+            ['Jabas Llenas (Bruto)', `${t.qF} Jabas / ${t.bF} Pollos`, t.wF.toFixed(2)],
+            ['Jabas Vacías (Tara)', `${t.qE} Jabas`, `-${t.wE.toFixed(2)}`],
+            ['Merma', `${t.qM} Pollos`, `-${t.wM.toFixed(2)}`],
+            [{ content: 'TOTAL NETO', styles: { fontStyle: 'bold' } }, '', { content: t.net.toFixed(2), styles: { fontStyle: 'bold' } }]
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [23, 37, 84] },
+    });
+
+    // Detailed Records
+    const records = [...order.records].sort((a, b) => b.timestamp - a.timestamp);
+    const rows = records.map((r, i) => [
+        records.length - i,
+        r.type === 'FULL' ? 'LLENA' : r.type === 'EMPTY' ? 'VACÍA' : 'MERMA',
+        r.quantity,
+        r.type === 'FULL' ? r.birds : (r.type === 'MORTALITY' ? r.quantity : '-'),
+        r.weight.toFixed(2),
+        new Date(r.timestamp).toLocaleTimeString()
+    ]);
+
+    autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 10,
+        head: [['#', 'Tipo', 'Cant.', 'Pollos', 'Peso', 'Hora']],
+        body: rows,
+        theme: 'striped',
+        styles: { fontSize: 8 }
+    });
+
+    doc.save(`Detalle_${order.clientName}_${order.id}.pdf`);
+  };
+
   const handlePayment = () => {
     if (!activeOrder || !pricePerKg) return;
     const price = parseFloat(pricePerKg.toString());
@@ -300,7 +347,12 @@ const WeighingStation: React.FC = () => {
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {orders.map(o => (
+          {orders.map(o => {
+              const t = getTotals(o);
+              const isOverLimit = t.qF >= (o.targetCrates || 0);
+              const percent = o.targetCrates ? Math.min((t.qF / o.targetCrates) * 100, 100) : 0;
+
+              return (
               <div key={o.id} className="bg-white rounded-2xl shadow-lg border border-slate-200 hover:shadow-2xl hover:border-blue-400 transition-all duration-300 overflow-hidden flex flex-col h-full relative group">
                   <div className="bg-slate-900 p-4 flex justify-between items-start cursor-pointer" onClick={() => setActiveOrder(o)}>
                      <div className="flex items-center space-x-3">
@@ -320,27 +372,42 @@ const WeighingStation: React.FC = () => {
                   </div>
 
                   <div className="p-5 flex-1 flex flex-col justify-between cursor-pointer" onClick={() => setActiveOrder(o)}>
-                      <div className="grid grid-cols-2 gap-2 mb-4">
-                          <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-                              <p className="text-[8px] font-bold text-slate-400 uppercase">Bruto</p>
-                              <p className="font-black text-slate-800 text-sm leading-none">{getTotals(o).wF.toFixed(1)}</p>
+                      <div>
+                          {/* Progress */}
+                          {o.targetCrates > 0 && (
+                            <div className="mb-6">
+                                <div className="flex justify-between text-xs font-bold uppercase tracking-wider mb-2">
+                                    <span className="text-slate-500">Meta Jabas</span>
+                                    <span className={`${isOverLimit ? 'text-red-600' : 'text-blue-600'}`}>{t.qF} / {o.targetCrates}</span>
+                                </div>
+                                <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                                    <div className={`h-full rounded-full transition-all duration-500 ${isOverLimit ? 'bg-red-500' : 'bg-gradient-to-r from-blue-500 to-blue-400'}`} style={{ width: `${percent}%` }}></div>
+                                </div>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-2 mb-4">
+                              <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                  <p className="text-[8px] font-bold text-slate-400 uppercase">Bruto</p>
+                                  <p className="font-black text-slate-800 text-sm leading-none">{t.wF.toFixed(1)}</p>
+                              </div>
+                              <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                  <p className="text-[8px] font-bold text-slate-400 uppercase">Tara</p>
+                                  <p className="font-black text-slate-800 text-sm leading-none text-orange-600">-{t.wE.toFixed(1)}</p>
+                              </div>
+                              <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                  <p className="text-[8px] font-bold text-slate-400 uppercase">Merma</p>
+                                  <p className="font-black text-slate-800 text-sm leading-none text-red-600">-{t.wM.toFixed(1)}</p>
+                              </div>
+                              <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                  <p className="text-[8px] font-bold text-slate-400 uppercase">Pollos</p>
+                                  <p className="font-black text-slate-800 text-sm leading-none">{t.bF}</p>
+                              </div>
                           </div>
-                          <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-                              <p className="text-[8px] font-bold text-slate-400 uppercase">Tara</p>
-                              <p className="font-black text-slate-800 text-sm leading-none text-orange-600">-{getTotals(o).wE.toFixed(1)}</p>
+                          <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 text-center">
+                              <p className="text-[10px] font-bold text-emerald-600 uppercase">Peso Neto</p>
+                              <p className="font-black text-emerald-700 text-2xl leading-none">{t.net.toFixed(1)} kg</p>
                           </div>
-                          <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-                              <p className="text-[8px] font-bold text-slate-400 uppercase">Merma</p>
-                              <p className="font-black text-slate-800 text-sm leading-none text-red-600">-{getTotals(o).wM.toFixed(1)}</p>
-                          </div>
-                          <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-                              <p className="text-[8px] font-bold text-slate-400 uppercase">Pollos</p>
-                              <p className="font-black text-slate-800 text-sm leading-none">{getTotals(o).bF}</p>
-                          </div>
-                      </div>
-                      <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 text-center">
-                          <p className="text-[10px] font-bold text-emerald-600 uppercase">Peso Neto</p>
-                          <p className="font-black text-emerald-700 text-2xl leading-none">{getTotals(o).net.toFixed(1)} kg</p>
                       </div>
 
                       <div className="flex justify-end gap-2 mt-4">
@@ -350,8 +417,11 @@ const WeighingStation: React.FC = () => {
                       </div>
                   </div>
               </div>
-          ))}
+              );
+          })}
         </div>
+
+
 
         {showClientModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
@@ -402,58 +472,89 @@ const WeighingStation: React.FC = () => {
   const isLocked = activeOrder.status === 'CLOSED';
 
   return (
+    <>
     <div className="flex flex-col h-full space-y-4 max-w-7xl mx-auto animate-fade-in text-left pb-10">
       {/* Header HUD - Rediseñado para mostrar Ojo y Liquidar debajo de totales */}
-      <div className="bg-blue-950 p-6 rounded-[2.5rem] shadow-2xl text-white relative overflow-hidden">
+      <div className="bg-blue-950 p-4 md:p-6 rounded-[2rem] shadow-2xl text-white relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none">
             <Activity size={300} className="scale-150 transform -translate-x-1/4 -translate-y-1/4" />
         </div>
         
         <div className="relative z-10">
-          <div className="flex items-center gap-5 mb-6">
-            <button onClick={() => setActiveOrder(null)} className="p-4 bg-white/10 rounded-[1.5rem] hover:bg-white/20 transition-all border border-white/10">
-                <ArrowLeft size={24}/>
+          <div className="flex items-center gap-4 mb-6">
+            <button onClick={() => setActiveOrder(null)} className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-all border border-white/10 active:scale-95">
+                <ArrowLeft size={20}/>
             </button>
-            <div className="flex-1">
-              <h2 className="text-3xl font-black uppercase leading-none truncate tracking-tighter">{activeOrder.clientName}</h2>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xl md:text-3xl font-black uppercase leading-none truncate tracking-tighter">{activeOrder.clientName}</h2>
               <div className="flex items-center gap-2 mt-2">
-                <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${isLocked ? 'bg-red-500' : 'bg-emerald-500'}`}></div>
-                <p className="text-blue-300 text-[11px] font-black uppercase tracking-[0.2em]">{isLocked ? 'CONTROL CERRADO' : 'SISTEMA DE PESAJE ACTIVO'}</p>
+                <div className={`w-2 h-2 rounded-full animate-pulse ${isLocked ? 'bg-red-500' : 'bg-emerald-500'}`}></div>
+                <p className="text-blue-300 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] truncate">{isLocked ? 'CONTROL CERRADO' : 'SISTEMA ACTIVO'}</p>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
-            <div className="bg-blue-500/20 p-3 rounded-2xl border border-blue-400/30 backdrop-blur-sm">
-              <p className="text-[9px] font-black text-blue-200 uppercase tracking-widest mb-1">Bruto (Llenas)</p>
-              <p className="text-2xl font-black font-digital text-white">{totals.wF.toFixed(1)}</p>
+          {/* Counts Row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-2 md:mb-3">
+              <div className="bg-blue-500/10 p-2 md:p-3 rounded-xl border border-blue-400/20 backdrop-blur-sm">
+                  <p className="text-[8px] font-black text-blue-300 uppercase tracking-widest mb-1">Jabas Llenas</p>
+                  <p className="text-xl md:text-2xl font-black font-digital text-white">{totals.qF}</p>
+              </div>
+              <div className="bg-blue-400/10 p-2 md:p-3 rounded-xl border border-blue-400/20 backdrop-blur-sm">
+                  <p className="text-[8px] font-black text-blue-200 uppercase tracking-widest mb-1">Cant. Pollos</p>
+                  <p className="text-xl md:text-2xl font-black font-digital text-blue-100">{totals.bF}</p>
+              </div>
+              <div className="bg-orange-500/10 p-2 md:p-3 rounded-xl border border-orange-400/20 backdrop-blur-sm">
+                  <p className="text-[8px] font-black text-orange-300 uppercase tracking-widest mb-1">Jabas Vacías</p>
+                  <p className="text-xl md:text-2xl font-black font-digital text-orange-100">{totals.qE}</p>
+              </div>
+              <div className="bg-red-500/10 p-2 md:p-3 rounded-xl border border-red-400/20 backdrop-blur-sm">
+                  <p className="text-[8px] font-black text-red-300 uppercase tracking-widest mb-1">Merma (Pollos)</p>
+                  <p className="text-xl md:text-2xl font-black font-digital text-red-100">{totals.qM}</p>
+              </div>
+          </div>
+
+          {/* Weights Row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 text-center">
+            <div className="bg-blue-600/20 p-2 md:p-3 rounded-xl border border-blue-400/30 backdrop-blur-sm">
+              <p className="text-[8px] font-black text-blue-200 uppercase tracking-widest mb-1">Peso Bruto</p>
+              <p className="text-xl md:text-2xl font-black font-digital text-white">{totals.wF.toFixed(1)}</p>
             </div>
-            <div className="bg-orange-500/20 p-3 rounded-2xl border border-orange-400/30 backdrop-blur-sm">
-              <p className="text-[9px] font-black text-orange-200 uppercase tracking-widest mb-1">Tara (Vacías)</p>
-              <p className="text-2xl font-black font-digital text-orange-300">-{totals.wE.toFixed(1)}</p>
+            <div className="bg-orange-600/20 p-2 md:p-3 rounded-xl border border-orange-400/30 backdrop-blur-sm">
+              <p className="text-[8px] font-black text-orange-200 uppercase tracking-widest mb-1">Peso Tara</p>
+              <p className="text-xl md:text-2xl font-black font-digital text-orange-200">-{totals.wE.toFixed(1)}</p>
             </div>
-            <div className="bg-red-500/20 p-3 rounded-2xl border border-red-400/30 backdrop-blur-sm">
-              <p className="text-[9px] font-black text-red-200 uppercase tracking-widest mb-1">Merma</p>
-              <p className="text-2xl font-black font-digital text-red-300">-{totals.wM.toFixed(1)}</p>
+            <div className="bg-red-600/20 p-2 md:p-3 rounded-xl border border-red-400/30 backdrop-blur-sm">
+              <p className="text-[8px] font-black text-red-200 uppercase tracking-widest mb-1">Peso Merma</p>
+              <p className="text-xl md:text-2xl font-black font-digital text-red-200">-{totals.wM.toFixed(1)}</p>
             </div>
-            <div className="bg-emerald-500 p-3 rounded-2xl shadow-xl shadow-emerald-950/20 border border-emerald-400/50">
-              <p className="text-[9px] font-black text-emerald-100 uppercase tracking-widest mb-1">Peso Neto</p>
-              <p className="text-3xl font-black font-digital text-white">{totals.net.toFixed(1)} <span className="text-[10px]">KG</span></p>
+            <div className="bg-emerald-600 p-2 md:p-3 rounded-xl shadow-xl shadow-emerald-900/20 border border-emerald-400/50">
+              <p className="text-[8px] font-black text-emerald-100 uppercase tracking-widest mb-1">Peso Neto</p>
+              <p className="text-2xl md:text-3xl font-black font-digital text-white">{totals.net.toFixed(1)} <span className="text-[10px]">KG</span></p>
             </div>
           </div>
 
-          {/* Botones de acción debajo de los totales */}
+          {/* Action Buttons */}
           <div className="flex flex-row gap-3 mt-6 w-full">
+            <button 
+                type="button"
+                onClick={() => setShowDetailModal(true)}
+                className="flex-1 bg-blue-600 text-white p-4 md:p-5 rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-widest shadow-xl hover:bg-blue-500 active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+                <List size={20} /> <span className="hidden xs:inline">Ver</span> Detalle
+            </button>
             {!isLocked && (
                 <button 
+                  type="button"
                   onClick={() => setShowPaymentModal(true)} 
-                  className="flex-[2] bg-white text-blue-950 p-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-blue-50 active:scale-95 transition-all flex items-center justify-center gap-3"
+                  className="flex-[2] bg-white text-blue-950 p-4 md:p-5 rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-widest shadow-xl hover:bg-blue-50 active:scale-95 transition-all flex items-center justify-center gap-3"
                 >
-                    <Receipt size={22} /> Liquidar Operación
+                    <Receipt size={20} /> Liquidar <span className="hidden xs:inline">Operación</span>
                 </button>
             )}
              {isLocked && (
                <button 
+                  type="button"
                   onClick={() => generateSalesTicketPDF(activeOrder)}
                   className="flex-[2] bg-emerald-500 text-white p-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-emerald-400 active:scale-95 transition-all flex items-center justify-center gap-2"
                >
@@ -536,6 +637,7 @@ const WeighingStation: React.FC = () => {
           </div>
         ))}
       </div>
+    </div>
 
       {showPaymentModal && (
         <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-xl flex items-center justify-center p-4 z-50">
@@ -629,7 +731,148 @@ const WeighingStation: React.FC = () => {
             </div>
           </div>
         )}
-    </div>
+
+        {showDetailModal && activeOrder && (
+            <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm overflow-y-auto">
+                <div className="bg-white rounded-2xl p-8 w-full max-w-4xl shadow-2xl border border-gray-100 my-auto">
+                    <div className="flex justify-between items-start mb-6">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-blue-600 p-3 rounded-xl text-white shadow-lg">
+                                <Eye size={24}/>
+                            </div>
+                            <div>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Detalle de Carga</h3>
+                                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mt-1">{activeOrder.clientName}</p>
+                            </div>
+                        </div>
+                        <button onClick={() => setShowDetailModal(false)} className="p-2 bg-slate-100 text-slate-500 hover:text-slate-900 rounded-lg transition-all">
+                            <X size={20}/>
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Jabas</p>
+                            <p className="text-2xl font-black text-slate-900">{totals.qF}</p>
+                        </div>
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Pollos</p>
+                            <p className="text-2xl font-black text-blue-600">{totals.bF}</p>
+                        </div>
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Peso Bruto</p>
+                            <p className="text-2xl font-black text-slate-900">{totals.wF.toFixed(2)}</p>
+                        </div>
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Tara Total</p>
+                            <p className="text-2xl font-black text-orange-600">-{totals.wE.toFixed(2)}</p>
+                        </div>
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Merma</p>
+                            <p className="text-2xl font-black text-red-600">-{totals.wM.toFixed(2)}</p>
+                        </div>
+                        <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+                            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Peso Final</p>
+                            <p className="text-2xl font-black text-emerald-700">{totals.net.toFixed(2)}</p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-6">
+                        <div className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden flex flex-col shadow-sm">
+                            <div className="p-3 font-bold text-[10px] text-center uppercase tracking-widest text-white bg-slate-800">
+                                Desglose de Pesos
+                            </div>
+                            <div className="grid grid-cols-3 divide-x divide-slate-200">
+                                {/* Full Crates */}
+                                <div className="flex flex-col">
+                                    <div className="bg-blue-100 p-2 text-center text-[9px] font-black text-blue-800 uppercase tracking-wider">
+                                        Llenas
+                                    </div>
+                                    <div className="p-2 flex-1 max-h-60 overflow-y-auto space-y-1">
+                                        {activeOrder.records.filter(r => r.type === 'FULL').map((r, i) => (
+                                            <div key={r.id} className="flex justify-between items-center text-[9px] border-b border-slate-100 pb-1 group">
+                                                <span className="text-slate-400 w-6">#{activeOrder.records.filter(rt => rt.type === 'FULL').length - i}</span>
+                                                <span className="font-mono font-bold text-slate-700 flex-1 text-center">{r.weight.toFixed(1)}</span>
+                                                {!isLocked && (
+                                                    <button 
+                                                        onClick={() => deleteRecord(r.id)}
+                                                        className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 p-1"
+                                                        title="Eliminar"
+                                                    >
+                                                        <Trash2 size={12} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="bg-slate-50 p-2 border-t border-slate-200 text-center">
+                                        <p className="text-[8px] font-bold text-slate-400 uppercase">Total</p>
+                                        <p className="font-black text-slate-800 text-sm">{totals.wF.toFixed(1)}</p>
+                                    </div>
+                                </div>
+
+                                {/* Empty Crates */}
+                                <div className="flex flex-col">
+                                    <div className="bg-slate-200 p-2 text-center text-[9px] font-black text-slate-700 uppercase tracking-wider">
+                                        Vacías
+                                    </div>
+                                    <div className="p-2 flex-1 max-h-60 overflow-y-auto space-y-1">
+                                        {activeOrder.records.filter(r => r.type === 'EMPTY').map((r, i) => (
+                                            <div key={r.id} className="flex justify-between items-center text-[9px] border-b border-slate-100 pb-1 group">
+                                                <span className="text-slate-400 w-6">#{activeOrder.records.filter(rt => rt.type === 'EMPTY').length - i}</span>
+                                                <span className="font-mono font-bold text-slate-700 flex-1 text-center">{r.weight.toFixed(1)}</span>
+                                                {!isLocked && (
+                                                    <button 
+                                                        onClick={() => deleteRecord(r.id)}
+                                                        className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 p-1"
+                                                        title="Eliminar"
+                                                    >
+                                                        <Trash2 size={12} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="bg-slate-50 p-2 border-t border-slate-200 text-center">
+                                        <p className="text-[8px] font-bold text-slate-400 uppercase">Total</p>
+                                        <p className="font-black text-orange-600 text-sm">-{totals.wE.toFixed(1)}</p>
+                                    </div>
+                                </div>
+
+                                {/* Mortality */}
+                                <div className="flex flex-col">
+                                    <div className="bg-red-100 p-2 text-center text-[9px] font-black text-red-800 uppercase tracking-wider">
+                                        Merma
+                                    </div>
+                                    <div className="p-2 flex-1 max-h-60 overflow-y-auto space-y-1">
+                                        {activeOrder.records.filter(r => r.type === 'MORTALITY').map((r, i) => (
+                                            <div key={r.id} className="flex justify-between items-center text-[9px] border-b border-slate-100 pb-1 group">
+                                                <span className="text-slate-400 w-6">#{activeOrder.records.filter(rt => rt.type === 'MORTALITY').length - i}</span>
+                                                <span className="font-mono font-bold text-slate-700 flex-1 text-center">{r.weight.toFixed(1)}</span>
+                                                {!isLocked && (
+                                                    <button 
+                                                        onClick={() => deleteRecord(r.id)}
+                                                        className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 p-1"
+                                                        title="Eliminar"
+                                                    >
+                                                        <Trash2 size={12} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="bg-slate-50 p-2 border-t border-slate-200 text-center">
+                                        <p className="text-[8px] font-bold text-slate-400 uppercase">Total</p>
+                                        <p className="font-black text-red-600 text-sm">-{totals.wM.toFixed(1)}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+    </>
   );
 };
 
