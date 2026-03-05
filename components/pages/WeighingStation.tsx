@@ -208,88 +208,193 @@ const WeighingStation: React.FC = () => {
 
   const generateSalesTicketPDF = (order: ClientOrder) => {
     const t = getTotals(order);
-    const doc = new jsPDF({ unit: 'mm', format: [80, 150] });
+    
+    // Calculate dynamic height
+    // Base: ~100mm (Header + Summary + Financials + Footer)
+    // Records: ~8mm per record
+    const estimatedHeight = 150 + (order.records.length * 8) + (order.pricePerKg > 0 ? 30 : 0);
+    const doc = new jsPDF({ unit: 'mm', format: [80, estimatedHeight] });
     
     let y = 10;
-    doc.setFontSize(14).setFont("helvetica", "bold");
+    
+    // Header
+    doc.setFontSize(12).setFont("helvetica", "bold");
     doc.text(config.companyName.toUpperCase(), 40, y, { align: 'center' });
     y += 5;
+    
     doc.setFontSize(8).setFont("helvetica", "normal");
-    doc.text("TICKET DE VENTA", 40, y, { align: 'center' });
+    doc.text("TICKET DE PESAJE", 40, y, { align: 'center' });
     y += 5;
-    doc.text(new Date().toLocaleString(), 40, y, { align: 'center' });
+    
+    doc.text(`FECHA: ${new Date().toLocaleString()}`, 40, y, { align: 'center' });
     y += 5;
     doc.line(5, y, 75, y);
     y += 5;
 
-    doc.setFontSize(10).setFont("helvetica", "bold");
-    doc.text(`CLIENTE: ${order.clientName.toUpperCase()}`, 5, y);
-    y += 10;
-
-    // Main Totals Box
-    doc.rect(5, y, 70, 45);
-    y += 6;
-    
+    // Client Info
     doc.setFontSize(9).setFont("helvetica", "bold");
-    doc.text("RESUMEN DE PESO", 40, y, { align: 'center' });
+    doc.text(`CLIENTE:`, 5, y);
+    y += 4;
+    doc.setFontSize(10).setFont("helvetica", "normal");
+    doc.text(order.clientName.toUpperCase(), 5, y);
     y += 6;
+
+    // Summary Box
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.rect(5, y, 70, 55, 'FD');
     
-    doc.setFontSize(9).setFont("helvetica", "normal");
-    doc.text(`PESO BRUTO:`, 10, y); doc.text(`${t.wF.toFixed(2)} kg`, 70, y, { align: 'right' });
-    y += 5;
-    doc.text(`TARA TOTAL:`, 10, y); doc.text(`-${t.wE.toFixed(2)} kg`, 70, y, { align: 'right' });
-    y += 5;
-    doc.text(`MERMA:`, 10, y); doc.text(`-${t.wM.toFixed(2)} kg`, 70, y, { align: 'right' });
-    y += 6;
-    doc.line(10, y, 70, y);
-    y += 6;
+    let by = y + 6;
+    
+    const row = (label: string, value: string, bold = false) => {
+        doc.setFont("helvetica", bold ? "bold" : "normal");
+        doc.setFontSize(9);
+        doc.text(label, 8, by);
+        doc.text(value, 72, by, { align: 'right' });
+        by += 5;
+    };
+
+    row("Jabas Llenas:", `${t.qF}`);
+    row("Jabas Vacías:", `${t.qE}`);
+    row("Cant. Pollos:", `${t.bF}`);
+    row("Merma (Und):", `${t.qM}`);
+    
+    by += 2;
+    doc.setDrawColor(200);
+    doc.line(8, by-1, 72, by-1);
+    by += 4;
+    
+    row("Peso Bruto:", `${t.wF.toFixed(2)} kg`);
+    row("Tara Total:", `-${t.wE.toFixed(2)} kg`);
+    row("Merma Peso:", `-${t.wM.toFixed(2)} kg`);
+    
+    by += 2;
+    doc.line(8, by-1, 72, by-1);
+    by += 5;
     
     doc.setFontSize(12).setFont("helvetica", "bold");
-    doc.text(`PESO NETO:`, 10, y); doc.text(`${t.net.toFixed(2)} kg`, 70, y, { align: 'right' });
-    y += 15;
+    doc.text("PESO NETO:", 8, by);
+    doc.text(`${t.net.toFixed(2)} kg`, 72, by, { align: 'right' });
+    
+    y += 60;
+
+    // DETAILED RECORDS TABLE
+    doc.setFontSize(10).setFont("helvetica", "bold");
+    doc.text("DETALLE DE PESOS", 5, y);
+    y += 2;
+
+    const records = [...order.records].sort((a, b) => b.timestamp - a.timestamp);
+    const rows = records.map((r, i) => [
+        (records.length - i).toString(),
+        r.type === 'FULL' ? 'LLENA' : r.type === 'EMPTY' ? 'VACÍA' : 'MERMA',
+        r.quantity.toString(),
+        r.weight.toFixed(2),
+        new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    ]);
+
+    autoTable(doc, {
+        startY: y + 2,
+        head: [['#', 'TIPO', 'CANT', 'PESO', 'HORA']],
+        body: rows,
+        theme: 'plain',
+        styles: { fontSize: 7, cellPadding: 1, overflow: 'ellipsize' },
+        headStyles: { fillColor: [220, 220, 220], textColor: 0, fontStyle: 'bold' },
+        columnStyles: {
+            0: { cellWidth: 5 },
+            1: { cellWidth: 15 },
+            2: { cellWidth: 10, halign: 'center' },
+            3: { cellWidth: 15, halign: 'right' },
+            4: { cellWidth: 15, halign: 'right' }
+        },
+        margin: { left: 5, right: 5 },
+        tableWidth: 70
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 10;
 
     // Financials
-    doc.setFontSize(10).setFont("helvetica", "bold");
-    doc.text(`PRECIO X KG:`, 10, y); doc.text(`S/. ${order.pricePerKg.toFixed(2)}`, 70, y, { align: 'right' });
-    y += 8;
-    
-    doc.setFillColor(0, 0, 0);
-    doc.rect(5, y - 5, 70, 10, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(14);
-    doc.text(`TOTAL A PAGAR`, 10, y + 2); 
-    doc.text(`S/. ${(t.net * order.pricePerKg).toFixed(2)}`, 70, y + 2, { align: 'right' });
-    
-    doc.setTextColor(0, 0, 0);
-    y += 15;
-    
-    doc.setFontSize(8).setFont("helvetica", "italic");
-    doc.text("¡Gracias por su compra!", 40, y, { align: 'center' });
+    if (order.pricePerKg > 0) {
+        doc.setFontSize(9).setFont("helvetica", "bold");
+        doc.text(`PRECIO X KG: S/. ${order.pricePerKg.toFixed(2)}`, 5, y);
+        y += 6;
+        
+        doc.setFillColor(15, 23, 42); // Slate 900
+        doc.rect(5, y, 70, 14, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(10).setFont("helvetica", "bold");
+        doc.text("TOTAL A PAGAR", 40, y + 5, { align: 'center' });
+        doc.setFontSize(14);
+        doc.text(`S/. ${(t.net * order.pricePerKg).toFixed(2)}`, 40, y + 11, { align: 'center' });
+        doc.setTextColor(0, 0, 0);
+        y += 20;
+    }
 
-    handlePDFOutput(doc, `Ticket_Venta_${order.id}.pdf`);
+    doc.setFontSize(8).setFont("helvetica", "italic");
+    doc.text("¡Gracias por su preferencia!", 40, y, { align: 'center' });
+
+    handlePDFOutput(doc, `Ticket_${order.clientName}_${order.id.slice(-6)}.pdf`);
   };
 
   const generateDetailPDF = (order: ClientOrder) => {
     const t = getTotals(order);
     const doc = new jsPDF();
     
-    doc.setFontSize(18).text(config.companyName.toUpperCase(), 105, 20, { align: 'center' });
-    doc.setFontSize(12).text(`DETALLE DE PESAJE - ${order.clientName.toUpperCase()}`, 105, 30, { align: 'center' });
-    doc.setFontSize(10).text(`Fecha: ${new Date().toLocaleString()}`, 105, 36, { align: 'center' });
+    // Header Background
+    doc.setFillColor(30, 41, 59); // Slate 800
+    doc.rect(0, 0, 210, 40, 'F');
+    
+    // Header Text
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(20).setFont("helvetica", "bold");
+    doc.text(config.companyName.toUpperCase(), 105, 18, { align: 'center' });
+    
+    doc.setFontSize(10).setFont("helvetica", "normal");
+    doc.text("REPORTE DETALLADO DE PESAJE", 105, 28, { align: 'center' });
+    
+    doc.setTextColor(0, 0, 0);
+    
+    let y = 55;
+    
+    // Client Info
+    doc.setFontSize(10).setFont("helvetica", "bold");
+    doc.text(`CLIENTE:`, 14, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(order.clientName.toUpperCase(), 35, y);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text(`FECHA:`, 140, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(new Date().toLocaleString(), 155, y);
+    
+    y += 6;
+    doc.setFont("helvetica", "bold");
+    doc.text(`ID:`, 14, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(order.id, 35, y);
 
     // Summary Table
     autoTable(doc, {
-        startY: 45,
-        head: [['Concepto', 'Cantidad', 'Peso (kg)']],
+        startY: y + 10,
+        head: [['CONCEPTO', 'CANTIDAD', 'DETALLE', 'PESO (KG)']],
         body: [
-            ['Jabas Llenas (Bruto)', `${t.qF} Jabas / ${t.bF} Pollos`, t.wF.toFixed(2)],
-            ['Jabas Vacías (Tara)', `${t.qE} Jabas`, `-${t.wE.toFixed(2)}`],
-            ['Merma', `${t.qM} Pollos`, `-${t.wM.toFixed(2)}`],
-            [{ content: 'TOTAL NETO', styles: { fontStyle: 'bold' } }, '', { content: t.net.toFixed(2), styles: { fontStyle: 'bold' } }]
+            ['Jabas Llenas (Bruto)', t.qF, `${t.bF} Pollos`, t.wF.toFixed(2)],
+            ['Jabas Vacías (Tara)', t.qE, '-', `-${t.wE.toFixed(2)}`],
+            ['Merma', t.qM, '-', `-${t.wM.toFixed(2)}`],
+            [{ content: 'TOTAL NETO', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, { content: t.net.toFixed(2), styles: { fontStyle: 'bold', fillColor: [240, 253, 244] } }]
         ],
         theme: 'grid',
-        headStyles: { fillColor: [23, 37, 84] },
+        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 10, cellPadding: 3 },
+        columnStyles: {
+            0: { fontStyle: 'bold' },
+            3: { halign: 'right' }
+        }
     });
+
+    y = (doc as any).lastAutoTable.finalY + 15;
+    
+    doc.setFontSize(12).setFont("helvetica", "bold");
+    doc.text("DETALLE DE REGISTROS", 14, y);
 
     // Detailed Records
     const records = [...order.records].sort((a, b) => b.timestamp - a.timestamp);
@@ -303,14 +408,26 @@ const WeighingStation: React.FC = () => {
     ]);
 
     autoTable(doc, {
-        startY: (doc as any).lastAutoTable.finalY + 10,
-        head: [['#', 'Tipo', 'Cant.', 'Pollos', 'Peso', 'Hora']],
+        startY: y + 5,
+        head: [['#', 'TIPO', 'CANT.', 'POLLOS', 'PESO (KG)', 'HORA']],
         body: rows,
         theme: 'striped',
-        styles: { fontSize: 8 }
+        headStyles: { fillColor: [71, 85, 105] },
+        styles: { fontSize: 9, halign: 'center' },
+        columnStyles: {
+            4: { halign: 'right', fontStyle: 'bold' }
+        }
     });
+    
+    // Footer
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for(let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8).setTextColor(150);
+        doc.text(`Página ${i} de ${pageCount}`, 105, 290, { align: 'center' });
+    }
 
-    doc.save(`Detalle_${order.clientName}_${order.id}.pdf`);
+    handlePDFOutput(doc, `Reporte_${order.clientName}_${order.id}.pdf`);
   };
 
   const handlePayment = () => {
@@ -868,6 +985,21 @@ const WeighingStation: React.FC = () => {
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    <div className="mt-8 flex gap-4 justify-end border-t border-slate-100 pt-6">
+                        <button 
+                            onClick={() => generateSalesTicketPDF(activeOrder)}
+                            className="bg-slate-900 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg active:scale-95"
+                        >
+                            <Printer size={18} /> Ticket Cliente (80mm)
+                        </button>
+                        <button 
+                            onClick={() => generateDetailPDF(activeOrder)}
+                            className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-blue-500 transition-all shadow-lg shadow-blue-200 active:scale-95"
+                        >
+                            <Download size={18} /> Reporte Detallado (A4)
+                        </button>
                     </div>
                 </div>
             </div>
