@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AviControl Pro</title>
+    <!-- Tailwind via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Montserrat:wght@400;500;600;700;900&family=Poppins:wght@300;400;500;600;700;800;900&display=swap');
+      
+      body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; color: #111827; margin: 0; padding: 0; } 
+      
+      .font-corporate { font-family: 'Montserrat', sans-serif; }
+      .font-youthful { font-family: 'Poppins', sans-serif; }
+
+      input, select, textarea {
+        color: #000000 !important;
+        font-weight: 600;
+      }
+      .font-digital {
+        font-family: 'Courier New', Courier, monospace;
+        letter-spacing: -0.5px;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+    </style>
+    <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react-dom": "https://esm.sh/react-dom@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
+    "lucide-react": "https://esm.sh/lucide-react@0.460.0?external=react,react-dom",
+    "react-router-dom": "https://esm.sh/react-router-dom@6.22.3?external=react,react-dom",
+    "jspdf": "https://esm.sh/jspdf@2.5.2",
+    "jspdf-autotable": "https://esm.sh/jspdf-autotable@3.8.2",
+    "firebase/app": "https://esm.sh/firebase@11.1.0/app",
+    "firebase/firestore": "https://esm.sh/firebase@11.1.0/firestore",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "firebase/": "https://esm.sh/firebase@^12.7.0/",
+    "vite": "https://esm.sh/vite@^7.3.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
+  }
+}
+</script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
