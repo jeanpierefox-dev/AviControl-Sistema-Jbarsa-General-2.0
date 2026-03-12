@@ -224,7 +224,7 @@ const WeighingStation: React.FC = () => {
     return chunked;
   };
 
-  const generateSalesTicketPDF = (order: ClientOrder) => {
+  const generateWeighingTicketPDF = (order: ClientOrder) => {
     const t = getTotals(order);
     const batch = getBatches().find(b => b.id === order.batchId);
     const batchName = batch ? batch.name : 'Venta Directa';
@@ -366,7 +366,96 @@ const WeighingStation: React.FC = () => {
     doc.setFontSize(8).setFont("helvetica", "italic");
     doc.text("¡Gracias por su preferencia!", 40, y, { align: 'center' });
 
-    handlePDFOutput(doc, `Ticket_${order.clientName}_${order.id.slice(-6)}.pdf`);
+    handlePDFOutput(doc, `Pesaje_${order.clientName}_${order.id.slice(-6)}.pdf`);
+  };
+
+  const generateSalesTicketPDF = (order: ClientOrder) => {
+    const t = getTotals(order);
+    const batch = getBatches().find(b => b.id === order.batchId);
+    const batchName = batch ? batch.name : 'Venta Directa';
+    
+    // Calculate dynamic height for sales ticket (shorter, no details)
+    let estimatedHeight = 140;
+
+    const doc = new jsPDF({ unit: 'mm', format: [80, estimatedHeight] });
+    
+    let y = 10;
+    
+    // Header
+    if (config.logoUrl) {
+        doc.addImage(config.logoUrl, 'PNG', 25, y, 30, 30);
+        y += 35;
+    }
+
+    doc.setFontSize(14).setFont("helvetica", "bold");
+    doc.text(config.companyName.toUpperCase(), 40, y, { align: 'center' });
+    y += 5;
+    
+    doc.setFontSize(10).setFont("helvetica", "bold");
+    doc.text("TICKET DE VENTA", 40, y, { align: 'center' });
+    y += 5;
+    
+    doc.setFontSize(8).setFont("helvetica", "italic");
+    doc.text(`FECHA: ${new Date().toLocaleString()}`, 40, y, { align: 'center' });
+    y += 5;
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.5);
+    doc.line(5, y, 75, y);
+    y += 5;
+
+    // Batch & Client Info
+    doc.setFontSize(9).setFont("helvetica", "bold");
+    doc.text(`LOTE:`, 5, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(batchName.toUpperCase(), 20, y);
+    y += 5;
+    doc.setFont("helvetica", "bold");
+    doc.text(`CLIENTE:`, 5, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(order.clientName.toUpperCase(), 22, y);
+    y += 6;
+
+    // General Weights Box
+    autoTable(doc, {
+        startY: y,
+        head: [[{ content: 'RESUMEN DE PESOS', colSpan: 2, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
+        body: [
+            ['Peso Bruto:', `${t.wF.toFixed(2)} kg`],
+            ['Tara Total:', `-${t.wE.toFixed(2)} kg`],
+            ['Mortalidad:', `-${t.wM.toFixed(2)} kg`],
+            ['PESO NETO:', `${t.net.toFixed(2)} kg`]
+        ],
+        theme: 'grid',
+        styles: { fontSize: 9, cellPadding: 2 },
+        columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 35 },
+            1: { halign: 'right', cellWidth: 35 }
+        },
+        margin: { left: 5, right: 5 }
+    });
+    y = (doc as any).lastAutoTable.finalY + 8;
+
+    // Financials
+    if (order.pricePerKg > 0) {
+        doc.setFontSize(9).setFont("helvetica", "bold");
+        doc.text(`PRECIO X KG: S/. ${order.pricePerKg.toFixed(2)}`, 5, y);
+        y += 6;
+        
+        doc.setFillColor(15, 23, 42); // Slate 900
+        doc.rect(5, y, 70, 15, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(10).setFont("helvetica", "bold");
+        doc.text("TOTAL A PAGAR", 35, y + 9, { align: 'right' });
+        doc.setFontSize(14);
+        doc.text(`S/. ${(t.net * order.pricePerKg).toFixed(2)}`, 72, y + 10, { align: 'right' });
+        doc.setTextColor(0, 0, 0);
+        y += 22;
+    }
+
+    doc.setFontSize(8).setFont("helvetica", "italic");
+    doc.text("¡Gracias por su compra!", 40, y, { align: 'center' });
+
+    handlePDFOutput(doc, `Venta_${order.clientName}_${order.id.slice(-6)}.pdf`);
   };
 
   const generateDetailPDF = (order: ClientOrder) => {
@@ -826,50 +915,75 @@ const WeighingStation: React.FC = () => {
     </div>
 
       {showPaymentModal && (
-        <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-xl flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-[4rem] p-10 w-full max-w-md animate-scale-up shadow-2xl border-8 border-white">
-            <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
-                <Receipt size={36}/>
+        <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-xl flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-[2rem] p-8 w-full max-w-lg animate-scale-up shadow-2xl border border-slate-100 my-auto">
+            <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center">
+                        <Receipt size={28}/>
+                    </div>
+                    <div>
+                        <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Liquidar Carga</h3>
+                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">Generación de Ticket Final</p>
+                    </div>
+                </div>
+                <button onClick={() => setShowPaymentModal(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
+                    <X size={24}/>
+                </button>
             </div>
-            <h3 className="text-3xl font-black mb-2 text-slate-900 uppercase text-center tracking-tighter">Liquidar Carga</h3>
-            <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] text-center mb-10">Generación de Ticket Final</p>
             
             <div className="space-y-6">
-                        <div className="bg-slate-50 p-8 rounded-[3rem] border-2 border-slate-100 shadow-inner text-center">
-                            <div className="grid grid-cols-2 gap-2 mb-4 text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                                <div>Bruto: {totals.wF.toFixed(1)}</div>
-                                <div>Tara: {totals.wE.toFixed(1)}</div>
-                                <div>Merma: {totals.wM.toFixed(1)}</div>
-                                <div>Neto: {totals.net.toFixed(1)}</div>
-                            </div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Monto Estimado</p>
-                            <p className="text-4xl font-digital font-black text-slate-950">S/. {(totals.net * (parseFloat(pricePerKg.toString()) || 0)).toFixed(2)}</p>
-                            <p className="text-[9px] text-emerald-600 font-bold uppercase mt-2">{totals.net.toFixed(2)} KG TOTALES</p>
+                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 shadow-inner">
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 text-center">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Bruto</p>
+                            <p className="font-black text-slate-800 text-xl">{totals.wF.toFixed(1)} kg</p>
                         </div>
-                        
-                        <div className="flex gap-4">
-                            <button 
-                                onClick={() => setPaymentMethod('CASH')}
-                                className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest border-2 transition-all ${paymentMethod === 'CASH' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-100 bg-slate-50 text-slate-400'}`}
-                            >
-                                Contado
-                            </button>
-                            <button 
-                                onClick={() => setPaymentMethod('CREDIT')}
-                                className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest border-2 transition-all ${paymentMethod === 'CREDIT' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-100 bg-slate-50 text-slate-400'}`}
-                            >
-                                Crédito
-                            </button>
+                        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 text-center">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Tara</p>
+                            <p className="font-black text-orange-600 text-xl">-{totals.wE.toFixed(1)} kg</p>
                         </div>
+                        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 text-center">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Merma</p>
+                            <p className="font-black text-red-600 text-xl">-{totals.wM.toFixed(1)} kg</p>
+                        </div>
+                        <div className="bg-emerald-50 p-4 rounded-xl shadow-sm border border-emerald-200 text-center">
+                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Peso Neto</p>
+                            <p className="font-black text-emerald-700 text-2xl">{totals.net.toFixed(1)} kg</p>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
+                        <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">Monto Total a Pagar</p>
+                        <p className="text-5xl font-digital font-black text-slate-900">S/. {(totals.net * (parseFloat(pricePerKg.toString()) || 0)).toFixed(2)}</p>
+                    </div>
+                </div>
+                
+                <div className="flex gap-4">
+                    <button 
+                        onClick={() => setPaymentMethod('CASH')}
+                        className={`flex-1 py-4 rounded-xl font-black text-[11px] uppercase tracking-widest border-2 transition-all ${paymentMethod === 'CASH' ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-md' : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
+                    >
+                        Contado
+                    </button>
+                    <button 
+                        onClick={() => setPaymentMethod('CREDIT')}
+                        className={`flex-1 py-4 rounded-xl font-black text-[11px] uppercase tracking-widest border-2 transition-all ${paymentMethod === 'CREDIT' ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md' : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
+                    >
+                        Crédito
+                    </button>
+                </div>
 
-                        <div>
-                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest block mb-2 ml-2">Precio por Kilogramo (S/.)</label>
-                            <input type="number" value={pricePerKg} onChange={e => setPricePerKg(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 font-black text-2xl outline-none focus:border-emerald-500 focus:bg-white transition-all text-center" placeholder="0.00" step="0.01" autoFocus />
-                        </div>
+                <div>
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block mb-2 ml-1">Precio por Kilogramo (S/.)</label>
+                    <input type="number" value={pricePerKg} onChange={e => setPricePerKg(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-6 py-4 font-black text-2xl outline-none focus:border-emerald-500 focus:bg-white transition-all text-center shadow-inner" placeholder="0.00" step="0.01" autoFocus />
+                </div>
             </div>
-            <div className="mt-12 flex flex-col gap-3">
-              <button onClick={handlePayment} className="w-full bg-emerald-600 text-white py-6 rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl shadow-emerald-200 hover:bg-emerald-500 active:scale-95 transition-all">Confirmar e Imprimir Ticket Venta</button>
-              <button onClick={() => setShowPaymentModal(false)} className="w-full py-4 text-slate-400 font-black text-[11px] uppercase tracking-widest hover:text-slate-600 transition-colors">Volver</button>
+            <div className="mt-8 flex flex-col gap-3">
+              <button onClick={handlePayment} className="w-full bg-emerald-600 text-white py-5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-200 hover:bg-emerald-500 active:scale-95 transition-all flex items-center justify-center gap-2">
+                  <Printer size={18} /> Confirmar e Imprimir Ticket Venta
+              </button>
+              <button onClick={() => setShowPaymentModal(false)} className="w-full py-4 text-slate-500 font-black text-[11px] uppercase tracking-widest hover:text-slate-800 hover:bg-slate-50 rounded-xl transition-colors">Cancelar</button>
             </div>
           </div>
         </div>
@@ -1067,7 +1181,7 @@ const WeighingStation: React.FC = () => {
                             onClick={() => generateSalesTicketPDF(activeOrder)}
                             className="bg-slate-900 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg active:scale-95"
                         >
-                            <Printer size={18} /> Ticket Cliente (80mm)
+                            <Printer size={18} /> Ticket Venta (80mm)
                         </button>
                         <button 
                             onClick={() => generateDetailPDF(activeOrder)}

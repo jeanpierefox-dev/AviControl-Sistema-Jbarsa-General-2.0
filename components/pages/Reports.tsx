@@ -252,10 +252,17 @@ const Reports: React.FC = () => {
 
   const generateSalesTicketPDF = (order: ClientOrder, preview: boolean = false) => {
     const t = getTotals(order);
-    const doc = new jsPDF({ unit: 'mm', format: [80, 150] });
+    const batch = getBatches().find(b => b.id === order.batchId);
+    const batchName = batch ? batch.name : 'Venta Directa';
+    
+    // Calculate dynamic height for sales ticket (shorter, no details)
+    let estimatedHeight = 140;
+
+    const doc = new jsPDF({ unit: 'mm', format: [80, estimatedHeight] });
     
     let y = 10;
     
+    // Header
     if (config.logoUrl) {
         doc.addImage(config.logoUrl, 'PNG', 25, y, 30, 30);
         y += 35;
@@ -264,48 +271,72 @@ const Reports: React.FC = () => {
     doc.setFontSize(14).setFont("helvetica", "bold");
     doc.text(config.companyName.toUpperCase(), 40, y, { align: 'center' });
     y += 5;
-    doc.setFontSize(8).setFont("helvetica", "normal");
+    
+    doc.setFontSize(10).setFont("helvetica", "bold");
     doc.text("TICKET DE VENTA", 40, y, { align: 'center' });
     y += 5;
-    doc.text(new Date().toLocaleString(), 40, y, { align: 'center' });
+    
+    doc.setFontSize(8).setFont("helvetica", "italic");
+    doc.text(`FECHA: ${new Date().toLocaleString()}`, 40, y, { align: 'center' });
     y += 5;
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.5);
     doc.line(5, y, 75, y);
     y += 5;
 
-    doc.setFontSize(10).setFont("helvetica", "bold");
-    doc.text(`CLIENTE: ${order.clientName.toUpperCase()}`, 5, y);
-    y += 10;
-
-    // Main Totals Box
-    doc.rect(5, y, 70, 45);
-    y += 6;
-    
+    // Batch & Client Info
     doc.setFontSize(9).setFont("helvetica", "bold");
-    doc.text(`PESO BRUTO:`, 8, y); doc.text(`${t.wF.toFixed(2)} kg`, 72, y, { align: 'right' });
+    doc.text(`LOTE:`, 5, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(batchName.toUpperCase(), 20, y);
+    y += 5;
+    doc.setFont("helvetica", "bold");
+    doc.text(`CLIENTE:`, 5, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(order.clientName.toUpperCase(), 22, y);
     y += 6;
-    doc.text(`TARA:`, 8, y); doc.text(`-${t.wE.toFixed(2)} kg`, 72, y, { align: 'right' });
-    y += 6;
-    doc.text(`MORTALIDAD:`, 8, y); doc.text(`-${t.wM.toFixed(2)} kg`, 72, y, { align: 'right' });
-    y += 6;
-    doc.setFontSize(12).text(`PESO NETO:`, 8, y); doc.text(`${t.net.toFixed(2)} kg`, 72, y, { align: 'right' });
-    y += 10;
-    
-    doc.setFontSize(10).text(`PRECIO / KG:`, 8, y); doc.text(`S/. ${order.pricePerKg.toFixed(2)}`, 72, y, { align: 'right' });
-    y += 8;
-    
-    // Total Payment
-    doc.setFillColor(15, 23, 42); // Slate 900
-    doc.rect(5, y - 5, 70, 12, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(14).text(`TOTAL A PAGAR:`, 8, y + 2); 
-    doc.text(`S/. ${(t.net * order.pricePerKg).toFixed(2)}`, 72, y + 2, { align: 'right' });
-    
-    doc.setTextColor(0, 0, 0);
-    y += 15;
-    doc.setFontSize(8).setFont("helvetica", "italic");
-    doc.text("¡Gracias por su preferencia!", 40, y, { align: 'center' });
 
-    handlePDFOutput(doc, `Ticket_Venta_${order.id}.pdf`, preview);
+    // General Weights Box
+    autoTable(doc, {
+        startY: y,
+        head: [[{ content: 'RESUMEN DE PESOS', colSpan: 2, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
+        body: [
+            ['Peso Bruto:', `${t.wF.toFixed(2)} kg`],
+            ['Tara Total:', `-${t.wE.toFixed(2)} kg`],
+            ['Mortalidad:', `-${t.wM.toFixed(2)} kg`],
+            ['PESO NETO:', `${t.net.toFixed(2)} kg`]
+        ],
+        theme: 'grid',
+        styles: { fontSize: 9, cellPadding: 2 },
+        columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 35 },
+            1: { halign: 'right', cellWidth: 35 }
+        },
+        margin: { left: 5, right: 5 }
+    });
+    y = (doc as any).lastAutoTable.finalY + 8;
+
+    // Financials
+    if (order.pricePerKg > 0) {
+        doc.setFontSize(9).setFont("helvetica", "bold");
+        doc.text(`PRECIO X KG: S/. ${order.pricePerKg.toFixed(2)}`, 5, y);
+        y += 6;
+        
+        doc.setFillColor(15, 23, 42); // Slate 900
+        doc.rect(5, y, 70, 15, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(10).setFont("helvetica", "bold");
+        doc.text("TOTAL A PAGAR", 35, y + 9, { align: 'right' });
+        doc.setFontSize(14);
+        doc.text(`S/. ${(t.net * order.pricePerKg).toFixed(2)}`, 72, y + 10, { align: 'right' });
+        doc.setTextColor(0, 0, 0);
+        y += 22;
+    }
+
+    doc.setFontSize(8).setFont("helvetica", "italic");
+    doc.text("¡Gracias por su compra!", 40, y, { align: 'center' });
+
+    handlePDFOutput(doc, `Venta_${order.clientName}_${order.id.slice(-6)}.pdf`, preview);
   };
 
   const generateA4ClientPDF = (order: ClientOrder) => {
