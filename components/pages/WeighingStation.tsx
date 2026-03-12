@@ -206,109 +206,130 @@ const WeighingStation: React.FC = () => {
     doc.save(filename);
   };
 
+  const chunkArray = (array: any[], size: number) => {
+    const chunked = [];
+    for (let i = 0; i < array.length; i += size) {
+      chunked.push(array.slice(i, i + size));
+    }
+    return chunked;
+  };
+
   const generateSalesTicketPDF = (order: ClientOrder) => {
     const t = getTotals(order);
+    const batch = getBatches().find(b => b.id === order.batchId);
+    const batchName = batch ? batch.name : 'Venta Directa';
     
     const fullRecords = order.records.filter(r => r.type === 'FULL').sort((a, b) => b.timestamp - a.timestamp);
     const emptyRecords = order.records.filter(r => r.type === 'EMPTY').sort((a, b) => b.timestamp - a.timestamp);
     const mortRecords = order.records.filter(r => r.type === 'MORTALITY').sort((a, b) => b.timestamp - a.timestamp);
-    const maxRows = Math.max(fullRecords.length, emptyRecords.length, mortRecords.length);
+    
+    const fullRows = Math.ceil(fullRecords.length / 3);
+    const emptyRows = Math.ceil(emptyRecords.length / 3);
+    const mortRows = Math.ceil(mortRecords.length / 3);
 
     // Calculate dynamic height
-    // Base: ~100mm (Header + Summary + Financials + Footer)
-    // Records: ~5mm per row
-    const estimatedHeight = 150 + (maxRows * 5) + (order.pricePerKg > 0 ? 30 : 0);
+    let estimatedHeight = 160 + ((fullRows + emptyRows + mortRows) * 5) + (order.pricePerKg > 0 ? 30 : 0);
+
     const doc = new jsPDF({ unit: 'mm', format: [80, estimatedHeight] });
     
     let y = 10;
     
     // Header
-    doc.setFontSize(12).setFont("helvetica", "bold");
+    doc.setFontSize(14).setFont("helvetica", "bold");
     doc.text(config.companyName.toUpperCase(), 40, y, { align: 'center' });
     y += 5;
     
-    doc.setFontSize(8).setFont("helvetica", "normal");
+    doc.setFontSize(9).setFont("helvetica", "normal");
     doc.text("TICKET DE PESAJE", 40, y, { align: 'center' });
     y += 5;
     
+    doc.setFontSize(8).setFont("helvetica", "italic");
     doc.text(`FECHA: ${new Date().toLocaleString()}`, 40, y, { align: 'center' });
     y += 5;
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.5);
     doc.line(5, y, 75, y);
     y += 5;
 
-    // Client Info
+    // Batch & Client Info
     doc.setFontSize(9).setFont("helvetica", "bold");
+    doc.text(`LOTE:`, 5, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(batchName.toUpperCase(), 20, y);
+    y += 5;
+    doc.setFont("helvetica", "bold");
     doc.text(`CLIENTE:`, 5, y);
-    y += 4;
-    doc.setFontSize(10).setFont("helvetica", "normal");
-    doc.text(order.clientName.toUpperCase(), 5, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(order.clientName.toUpperCase(), 22, y);
     y += 6;
 
-    // Summary Box
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(226, 232, 240);
-    doc.rect(5, y, 70, 55, 'FD');
-    
-    let by = y + 6;
-    
-    const row = (label: string, value: string, bold = false) => {
-        doc.setFont("helvetica", bold ? "bold" : "normal");
-        doc.setFontSize(9);
-        doc.text(label, 8, by);
-        doc.text(value, 72, by, { align: 'right' });
-        by += 5;
-    };
+    // Quantities Box
+    autoTable(doc, {
+        startY: y,
+        head: [[{ content: 'RESUMEN DE CANTIDADES', colSpan: 2, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
+        body: [
+            ['Jabas Llenas:', t.qF.toString()],
+            ['Total Pollos:', t.bF.toString()],
+            ['Jabas Vacías:', t.qE.toString()],
+            ['Pollos Muertos:', t.qM.toString()]
+        ],
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 1.5 },
+        columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 40 },
+            1: { halign: 'right', cellWidth: 30 }
+        },
+        margin: { left: 5, right: 5 }
+    });
+    y = (doc as any).lastAutoTable.finalY + 5;
 
-    row("Jabas Llenas:", `${t.qF}`);
-    row("Jabas Vacías:", `${t.qE}`);
-    row("Cant. Pollos:", `${t.bF}`);
-    row("Merma (Und):", `${t.qM}`);
-    
-    by += 2;
-    doc.setDrawColor(200);
-    doc.line(8, by-1, 72, by-1);
-    by += 4;
-    
-    row("Peso Bruto:", `${t.wF.toFixed(2)} kg`);
-    row("Tara Total:", `-${t.wE.toFixed(2)} kg`);
-    row("Merma Peso:", `-${t.wM.toFixed(2)} kg`);
-    
-    by += 2;
-    doc.line(8, by-1, 72, by-1);
-    by += 5;
-    
-    doc.setFontSize(12).setFont("helvetica", "bold");
-    doc.text("PESO NETO:", 8, by);
-    doc.text(`${t.net.toFixed(2)} kg`, 72, by, { align: 'right' });
-    
-    y += 60;
-
-    // DETAILED RECORDS TABLE (3 Columns)
+    // DETAILED RECORDS TABLE
     doc.setFontSize(10).setFont("helvetica", "bold");
-    doc.text("DETALLE DE PESOS", 5, y);
+    doc.text("DETALLE DE PESOS", 40, y, { align: 'center' });
     y += 2;
 
-    const rows = [];
-    for (let i = 0; i < maxRows; i++) {
-        rows.push([
-            fullRecords[i] ? fullRecords[i].weight.toFixed(2) : '',
-            emptyRecords[i] ? emptyRecords[i].weight.toFixed(2) : '',
-            mortRecords[i] ? mortRecords[i].weight.toFixed(2) : ''
-        ]);
-    }
+    const renderCategory = (title: string, records: any[], totalWeight: number, qty?: number) => {
+        if (records.length === 0) return;
+        
+        const headerText = qty !== undefined ? `${title} (Cant: ${qty})` : title;
+        
+        autoTable(doc, {
+            startY: y,
+            head: [[{ content: headerText, colSpan: 3, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
+            body: chunkArray(records.map(r => r.weight.toFixed(2)), 3),
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 1, halign: 'center' },
+            margin: { left: 5, right: 5 },
+            tableWidth: 70
+        });
+        y = (doc as any).lastAutoTable.finalY + 1;
+        
+        doc.setFontSize(8).setFont("helvetica", "bold");
+        doc.text(`TOTAL ${title}:`, 40, y + 3, { align: 'right' });
+        doc.text(`${totalWeight.toFixed(2)} kg`, 72, y + 3, { align: 'right' });
+        y += 7;
+    };
 
-    autoTable(doc, {
-        startY: y + 2,
-        head: [['LLENAS', 'VACÍAS', 'MERMA']],
-        body: rows,
-        theme: 'grid',
-        styles: { fontSize: 8, cellPadding: 1, halign: 'center' },
-        headStyles: { fillColor: [220, 220, 220], textColor: 0, fontStyle: 'bold', halign: 'center' },
-        margin: { left: 5, right: 5 },
-        tableWidth: 70
-    });
+    renderCategory("LLENAS", fullRecords, t.wF, t.qF);
+    renderCategory("VACÍAS", emptyRecords, t.wE, t.qE);
+    renderCategory("MORTALIDAD", mortRecords, t.wM, t.qM);
 
-    y = (doc as any).lastAutoTable.finalY + 10;
+    y += 2;
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.5);
+    doc.line(5, y, 75, y);
+    y += 6;
+
+    // Final Totals
+    doc.setFontSize(9).setFont("helvetica", "normal");
+    doc.text("Peso Bruto:", 8, y); doc.text(`${t.wF.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+    doc.text("Tara Total:", 8, y); doc.text(`-${t.wE.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+    doc.text("Mortalidad:", 8, y); doc.text(`-${t.wM.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+    
+    doc.setFontSize(11).setFont("helvetica", "bold");
+    doc.text("PESO NETO:", 8, y + 2);
+    doc.text(`${t.net.toFixed(2)} kg`, 72, y + 2, { align: 'right' });
+    y += 10;
 
     // Financials
     if (order.pricePerKg > 0) {
@@ -317,14 +338,14 @@ const WeighingStation: React.FC = () => {
         y += 6;
         
         doc.setFillColor(15, 23, 42); // Slate 900
-        doc.rect(5, y, 70, 14, 'F');
+        doc.rect(5, y, 70, 12, 'F');
         doc.setTextColor(255, 255, 255);
-        doc.setFontSize(10).setFont("helvetica", "bold");
-        doc.text("TOTAL A PAGAR", 40, y + 5, { align: 'center' });
-        doc.setFontSize(14);
-        doc.text(`S/. ${(t.net * order.pricePerKg).toFixed(2)}`, 40, y + 11, { align: 'center' });
+        doc.setFontSize(9).setFont("helvetica", "bold");
+        doc.text("TOTAL A PAGAR", 35, y + 7, { align: 'right' });
+        doc.setFontSize(12);
+        doc.text(`S/. ${(t.net * order.pricePerKg).toFixed(2)}`, 72, y + 8, { align: 'right' });
         doc.setTextColor(0, 0, 0);
-        y += 20;
+        y += 18;
     }
 
     doc.setFontSize(8).setFont("helvetica", "italic");
@@ -335,19 +356,21 @@ const WeighingStation: React.FC = () => {
 
   const generateDetailPDF = (order: ClientOrder) => {
     const t = getTotals(order);
+    const batch = getBatches().find(b => b.id === order.batchId);
+    const batchName = batch ? batch.name : 'Venta Directa';
     const doc = new jsPDF();
     
     // Header Background
-    doc.setFillColor(30, 41, 59); // Slate 800
-    doc.rect(0, 0, 210, 40, 'F');
+    doc.setFillColor(15, 23, 42); // Slate 900
+    doc.rect(0, 0, 210, 45, 'F');
     
     // Header Text
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(20).setFont("helvetica", "bold");
-    doc.text(config.companyName.toUpperCase(), 105, 18, { align: 'center' });
+    doc.setFontSize(22).setFont("helvetica", "bold");
+    doc.text(config.companyName.toUpperCase(), 105, 20, { align: 'center' });
     
-    doc.setFontSize(10).setFont("helvetica", "normal");
-    doc.text("REPORTE DETALLADO DE PESAJE", 105, 28, { align: 'center' });
+    doc.setFontSize(12).setFont("helvetica", "normal");
+    doc.text("REPORTE DETALLADO DE PESAJE", 105, 30, { align: 'center' });
     
     doc.setTextColor(0, 0, 0);
     
@@ -355,79 +378,87 @@ const WeighingStation: React.FC = () => {
     
     // Client Info
     doc.setFontSize(10).setFont("helvetica", "bold");
-    doc.text(`CLIENTE:`, 14, y);
+    doc.text(`LOTE:`, 14, y);
     doc.setFont("helvetica", "normal");
-    doc.text(order.clientName.toUpperCase(), 35, y);
+    doc.text(batchName.toUpperCase(), 35, y);
     
     doc.setFont("helvetica", "bold");
     doc.text(`FECHA:`, 140, y);
     doc.setFont("helvetica", "normal");
     doc.text(new Date().toLocaleString(), 155, y);
     
-    y += 6;
+    y += 7;
     doc.setFont("helvetica", "bold");
-    doc.text(`ID:`, 14, y);
+    doc.text(`CLIENTE:`, 14, y);
     doc.setFont("helvetica", "normal");
-    doc.text(order.id, 35, y);
+    doc.text(order.clientName.toUpperCase(), 35, y);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text(`TICKET ID:`, 140, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(order.id, 160, y);
 
     // Summary Table
     autoTable(doc, {
         startY: y + 10,
-        head: [['CONCEPTO', 'CANTIDAD', 'DETALLE', 'PESO (KG)']],
+        head: [['CONCEPTO', 'CANTIDAD', 'DETALLE', 'PESO TOTAL (KG)']],
         body: [
             ['Jabas Llenas (Bruto)', t.qF, `${t.bF} Pollos`, t.wF.toFixed(2)],
             ['Jabas Vacías (Tara)', t.qE, '-', `-${t.wE.toFixed(2)}`],
-            ['Merma', t.qM, '-', `-${t.wM.toFixed(2)}`],
-            [{ content: 'TOTAL NETO', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, { content: t.net.toFixed(2), styles: { fontStyle: 'bold', fillColor: [240, 253, 244] } }]
+            ['Mortalidad (Pollos Muertos)', t.qM, '-', `-${t.wM.toFixed(2)}`],
+            [{ content: 'PESO NETO FINAL', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold', fontSize: 11 } }, { content: t.net.toFixed(2), styles: { fontStyle: 'bold', fontSize: 11, fillColor: [240, 253, 244], textColor: [21, 128, 61] } }]
         ],
         theme: 'grid',
         headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
-        styles: { fontSize: 10, cellPadding: 3 },
+        styles: { fontSize: 10, cellPadding: 4 },
         columnStyles: {
             0: { fontStyle: 'bold' },
-            3: { halign: 'right' }
+            3: { halign: 'right', fontStyle: 'bold' }
         }
     });
 
-    y = (doc as any).lastAutoTable.finalY + 15;
+    y = (doc as any).lastAutoTable.finalY + 10;
     
-    doc.setFontSize(12).setFont("helvetica", "bold");
-    doc.text("DETALLE DE REGISTROS", 14, y);
+    doc.setFontSize(11).setFont("helvetica", "bold");
+    doc.text("DESGLOSE DE PESADAS", 14, y);
+    y += 2;
 
-    // Detailed Records (3 Columns)
     const fullRecords = order.records.filter(r => r.type === 'FULL').sort((a, b) => b.timestamp - a.timestamp);
     const emptyRecords = order.records.filter(r => r.type === 'EMPTY').sort((a, b) => b.timestamp - a.timestamp);
     const mortRecords = order.records.filter(r => r.type === 'MORTALITY').sort((a, b) => b.timestamp - a.timestamp);
-    const maxRows = Math.max(fullRecords.length, emptyRecords.length, mortRecords.length);
 
-    const rows = [];
-    for (let i = 0; i < maxRows; i++) {
-        rows.push([
-            fullRecords[i] ? fullRecords[i].weight.toFixed(2) : '',
-            emptyRecords[i] ? emptyRecords[i].weight.toFixed(2) : '',
-            mortRecords[i] ? mortRecords[i].weight.toFixed(2) : ''
-        ]);
-    }
+    const renderCategoryGridA4 = (title: string, records: any[], totalWeight: number, qty?: number) => {
+        if (records.length === 0) return;
+        y = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY + 8 : y + 5;
+        if (y > 250) { doc.addPage(); y = 20; }
+        
+        const headerText = qty !== undefined 
+            ? `${title} - CANTIDAD: ${qty} | TOTAL: ${totalWeight.toFixed(2)} KG`
+            : `${title} - TOTAL: ${totalWeight.toFixed(2)} KG`;
 
-    autoTable(doc, {
-        startY: y + 5,
-        head: [['LLENAS (KG)', 'VACÍAS (KG)', 'MERMA (KG)']],
-        body: rows,
-        theme: 'grid',
-        headStyles: { fillColor: [71, 85, 105], halign: 'center' },
-        styles: { fontSize: 9, halign: 'center', cellPadding: 2 },
-        margin: { left: 14, right: 14 }
-    });
+        autoTable(doc, {
+            startY: y,
+            head: [[{ content: headerText, colSpan: 6, styles: { halign: 'left', fillColor: [241, 245, 249], textColor: 0, fontStyle: 'bold' } }]],
+            body: chunkArray(records.map(r => r.weight.toFixed(2)), 6),
+            theme: 'grid',
+            styles: { fontSize: 9, halign: 'center', cellPadding: 2 },
+            margin: { left: 14, right: 14 }
+        });
+    };
+
+    renderCategoryGridA4("JABAS LLENAS", fullRecords, t.wF, t.qF);
+    renderCategoryGridA4("JABAS VACÍAS", emptyRecords, t.wE, t.qE);
+    renderCategoryGridA4("MORTALIDAD", mortRecords, t.wM, t.qM);
     
     // Footer
     const pageCount = (doc as any).internal.getNumberOfPages();
     for(let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
         doc.setFontSize(8).setTextColor(150);
-        doc.text(`Página ${i} de ${pageCount}`, 105, 290, { align: 'center' });
+        doc.text(`Generado por AviControl Pro - Página ${i} de ${pageCount}`, 105, 290, { align: 'center' });
     }
 
-    handlePDFOutput(doc, `Reporte_${order.clientName}_${order.id}.pdf`);
+    handlePDFOutput(doc, `Reporte_A4_${order.clientName}_${order.id}.pdf`);
   };
 
   const handlePayment = () => {
@@ -592,90 +623,90 @@ const WeighingStation: React.FC = () => {
     <>
     <div className="flex flex-col h-full space-y-4 max-w-full mx-auto animate-fade-in text-left pb-10">
       {/* Header HUD - Rediseñado para mostrar Ojo y Liquidar debajo de totales */}
-      <div className="bg-blue-950 p-4 md:p-6 rounded-[2rem] shadow-2xl text-white relative overflow-hidden">
+      <div className="bg-blue-950 p-3 md:p-4 rounded-[1.5rem] shadow-2xl text-white relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none">
-            <Activity size={300} className="scale-150 transform -translate-x-1/4 -translate-y-1/4" />
+            <Activity size={200} className="scale-150 transform -translate-x-1/4 -translate-y-1/4" />
         </div>
         
         <div className="relative z-10">
-          <div className="flex items-center gap-4 mb-6">
-            <button onClick={() => setActiveOrder(null)} className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-all border border-white/10 active:scale-95">
-                <ArrowLeft size={20}/>
+          <div className="flex items-center gap-3 mb-4">
+            <button onClick={() => setActiveOrder(null)} className="p-2 bg-white/10 rounded-xl hover:bg-white/20 transition-all border border-white/10 active:scale-95">
+                <ArrowLeft size={18}/>
             </button>
             <div className="flex-1 min-w-0">
-              <h2 className="text-xl md:text-3xl font-black uppercase leading-none truncate tracking-tighter">{activeOrder.clientName}</h2>
-              <div className="flex items-center gap-2 mt-2">
-                <div className={`w-2 h-2 rounded-full animate-pulse ${isLocked ? 'bg-red-500' : 'bg-emerald-500'}`}></div>
-                <p className="text-blue-300 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] truncate">{isLocked ? 'CONTROL CERRADO' : 'SISTEMA ACTIVO'}</p>
+              <h2 className="text-lg md:text-2xl font-black uppercase leading-none truncate tracking-tighter">{activeOrder.clientName}</h2>
+              <div className="flex items-center gap-2 mt-1">
+                <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${isLocked ? 'bg-red-500' : 'bg-emerald-500'}`}></div>
+                <p className="text-blue-300 text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em] truncate">{isLocked ? 'CONTROL CERRADO' : 'SISTEMA ACTIVO'}</p>
               </div>
             </div>
           </div>
 
           {/* Counts Row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-2 md:mb-3">
-              <div className="bg-blue-500/10 p-2 md:p-3 rounded-xl border border-blue-400/20 backdrop-blur-sm">
-                  <p className="text-[8px] font-black text-blue-300 uppercase tracking-widest mb-1">Jabas Llenas</p>
-                  <p className="text-xl md:text-2xl font-black font-digital text-white">{totals.qF}</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 md:gap-2 mb-1.5 md:mb-2">
+              <div className="bg-blue-500/10 p-1.5 md:p-2 rounded-lg border border-blue-400/20 backdrop-blur-sm">
+                  <p className="text-[7px] font-black text-blue-300 uppercase tracking-widest mb-0.5">Jabas Llenas</p>
+                  <p className="text-lg md:text-xl font-black font-digital text-white">{totals.qF}</p>
               </div>
-              <div className="bg-blue-400/10 p-2 md:p-3 rounded-xl border border-blue-400/20 backdrop-blur-sm">
-                  <p className="text-[8px] font-black text-blue-200 uppercase tracking-widest mb-1">Cant. Pollos</p>
-                  <p className="text-xl md:text-2xl font-black font-digital text-blue-100">{totals.bF}</p>
+              <div className="bg-blue-400/10 p-1.5 md:p-2 rounded-lg border border-blue-400/20 backdrop-blur-sm">
+                  <p className="text-[7px] font-black text-blue-200 uppercase tracking-widest mb-0.5">Cant. Pollos</p>
+                  <p className="text-lg md:text-xl font-black font-digital text-blue-100">{totals.bF}</p>
               </div>
-              <div className="bg-orange-500/10 p-2 md:p-3 rounded-xl border border-orange-400/20 backdrop-blur-sm">
-                  <p className="text-[8px] font-black text-orange-300 uppercase tracking-widest mb-1">Jabas Vacías</p>
-                  <p className="text-xl md:text-2xl font-black font-digital text-orange-100">{totals.qE}</p>
+              <div className="bg-orange-500/10 p-1.5 md:p-2 rounded-lg border border-orange-400/20 backdrop-blur-sm">
+                  <p className="text-[7px] font-black text-orange-300 uppercase tracking-widest mb-0.5">Jabas Vacías</p>
+                  <p className="text-lg md:text-xl font-black font-digital text-orange-100">{totals.qE}</p>
               </div>
-              <div className="bg-red-500/10 p-2 md:p-3 rounded-xl border border-red-400/20 backdrop-blur-sm">
-                  <p className="text-[8px] font-black text-red-300 uppercase tracking-widest mb-1">Merma (Pollos)</p>
-                  <p className="text-xl md:text-2xl font-black font-digital text-red-100">{totals.qM}</p>
+              <div className="bg-red-500/10 p-1.5 md:p-2 rounded-lg border border-red-400/20 backdrop-blur-sm">
+                  <p className="text-[7px] font-black text-red-300 uppercase tracking-widest mb-0.5">Merma (Pollos)</p>
+                  <p className="text-lg md:text-xl font-black font-digital text-red-100">{totals.qM}</p>
               </div>
           </div>
 
           {/* Weights Row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 text-center">
-            <div className="bg-blue-600/20 p-2 md:p-3 rounded-xl border border-blue-400/30 backdrop-blur-sm">
-              <p className="text-[8px] font-black text-blue-200 uppercase tracking-widest mb-1">Peso Bruto</p>
-              <p className="text-xl md:text-2xl font-black font-digital text-white">{totals.wF.toFixed(1)}</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 md:gap-2 text-center">
+            <div className="bg-blue-600/20 p-1.5 md:p-2 rounded-lg border border-blue-400/30 backdrop-blur-sm">
+              <p className="text-[7px] font-black text-blue-200 uppercase tracking-widest mb-0.5">Peso Bruto</p>
+              <p className="text-lg md:text-xl font-black font-digital text-white">{totals.wF.toFixed(1)}</p>
             </div>
-            <div className="bg-orange-600/20 p-2 md:p-3 rounded-xl border border-orange-400/30 backdrop-blur-sm">
-              <p className="text-[8px] font-black text-orange-200 uppercase tracking-widest mb-1">Peso Tara</p>
-              <p className="text-xl md:text-2xl font-black font-digital text-orange-200">-{totals.wE.toFixed(1)}</p>
+            <div className="bg-orange-600/20 p-1.5 md:p-2 rounded-lg border border-orange-400/30 backdrop-blur-sm">
+              <p className="text-[7px] font-black text-orange-200 uppercase tracking-widest mb-0.5">Peso Tara</p>
+              <p className="text-lg md:text-xl font-black font-digital text-orange-200">-{totals.wE.toFixed(1)}</p>
             </div>
-            <div className="bg-red-600/20 p-2 md:p-3 rounded-xl border border-red-400/30 backdrop-blur-sm">
-              <p className="text-[8px] font-black text-red-200 uppercase tracking-widest mb-1">Peso Merma</p>
-              <p className="text-xl md:text-2xl font-black font-digital text-red-200">-{totals.wM.toFixed(1)}</p>
+            <div className="bg-red-600/20 p-1.5 md:p-2 rounded-lg border border-red-400/30 backdrop-blur-sm">
+              <p className="text-[7px] font-black text-red-200 uppercase tracking-widest mb-0.5">Peso Merma</p>
+              <p className="text-lg md:text-xl font-black font-digital text-red-200">-{totals.wM.toFixed(1)}</p>
             </div>
-            <div className="bg-emerald-600 p-2 md:p-3 rounded-xl shadow-xl shadow-emerald-900/20 border border-emerald-400/50">
-              <p className="text-[8px] font-black text-emerald-100 uppercase tracking-widest mb-1">Peso Neto</p>
-              <p className="text-2xl md:text-3xl font-black font-digital text-white">{totals.net.toFixed(1)} <span className="text-[10px]">KG</span></p>
+            <div className="bg-emerald-600 p-1.5 md:p-2 rounded-lg shadow-xl shadow-emerald-900/20 border border-emerald-400/50">
+              <p className="text-[7px] font-black text-emerald-100 uppercase tracking-widest mb-0.5">Peso Neto</p>
+              <p className="text-xl md:text-2xl font-black font-digital text-white">{totals.net.toFixed(1)} <span className="text-[8px]">KG</span></p>
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex flex-row gap-3 mt-6 w-full">
+          <div className="flex flex-row gap-2 mt-4 w-full">
             <button 
                 type="button"
                 onClick={() => setShowDetailModal(true)}
-                className="flex-1 bg-blue-600 text-white p-4 md:p-5 rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-widest shadow-xl hover:bg-blue-500 active:scale-95 transition-all flex items-center justify-center gap-2"
+                className="flex-1 bg-blue-600 text-white p-3 md:p-4 rounded-xl font-black text-[9px] md:text-xs uppercase tracking-widest shadow-xl hover:bg-blue-500 active:scale-95 transition-all flex items-center justify-center gap-2"
             >
-                <List size={20} /> <span className="hidden xs:inline">Ver</span> Detalle
+                <List size={16} /> <span className="hidden xs:inline">Ver</span> Detalle
             </button>
             {!isLocked && (
                 <button 
                   type="button"
                   onClick={() => setShowPaymentModal(true)} 
-                  className="flex-[2] bg-white text-blue-950 p-4 md:p-5 rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-widest shadow-xl hover:bg-blue-50 active:scale-95 transition-all flex items-center justify-center gap-3"
+                  className="flex-[2] bg-white text-blue-950 p-3 md:p-4 rounded-xl font-black text-[9px] md:text-xs uppercase tracking-widest shadow-xl hover:bg-blue-50 active:scale-95 transition-all flex items-center justify-center gap-3"
                 >
-                    <Receipt size={20} /> Liquidar <span className="hidden xs:inline">Operación</span>
+                    <Receipt size={16} /> Liquidar <span className="hidden xs:inline">Operación</span>
                 </button>
             )}
              {isLocked && (
                <button 
                   type="button"
                   onClick={() => generateSalesTicketPDF(activeOrder)}
-                  className="flex-[2] bg-emerald-500 text-white p-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-emerald-400 active:scale-95 transition-all flex items-center justify-center gap-2"
+                  className="flex-[2] bg-emerald-500 text-white p-3 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-xl hover:bg-emerald-400 active:scale-95 transition-all flex items-center justify-center gap-2"
                >
-                  <Receipt size={18} /> Ticket Venta
+                  <Receipt size={16} /> Ticket Venta
                </button>
             )}
           </div>
@@ -683,48 +714,48 @@ const WeighingStation: React.FC = () => {
       </div>
 
       {!isLocked && (
-        <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100">
-          <div className="flex flex-col md:flex-row gap-6 items-center">
-            <div className="flex bg-slate-100 p-2 rounded-[2rem] gap-2 w-full md:w-auto border border-slate-200">
-              <button onClick={() => setActiveTab('FULL')} className={`flex-1 md:w-28 h-20 rounded-2xl flex flex-col items-center justify-center gap-2 transition-all ${activeTab === 'FULL' ? 'bg-blue-900 text-white shadow-xl' : 'text-slate-400'}`}>
-                <Package size={24}/><span className="text-[9px] font-black uppercase">Llenas</span>
+        <div className="bg-white p-4 md:p-5 rounded-[2rem] shadow-xl border border-slate-100">
+          <div className="flex flex-col md:flex-row gap-4 items-center">
+            <div className="flex bg-slate-100 p-1.5 rounded-2xl gap-1.5 w-full md:w-auto border border-slate-200">
+              <button onClick={() => setActiveTab('FULL')} className={`flex-1 md:w-24 h-16 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all ${activeTab === 'FULL' ? 'bg-blue-900 text-white shadow-xl' : 'text-slate-400'}`}>
+                <Package size={20}/><span className="text-[8px] font-black uppercase">Llenas</span>
               </button>
-              <button onClick={() => setActiveTab('EMPTY')} className={`flex-1 md:w-28 h-20 rounded-2xl flex flex-col items-center justify-center gap-2 transition-all ${activeTab === 'EMPTY' ? 'bg-slate-600 text-white shadow-xl' : 'text-slate-400'}`}>
-                <PackageOpen size={24}/><span className="text-[9px] font-black uppercase">Vacías</span>
+              <button onClick={() => setActiveTab('EMPTY')} className={`flex-1 md:w-24 h-16 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all ${activeTab === 'EMPTY' ? 'bg-slate-600 text-white shadow-xl' : 'text-slate-400'}`}>
+                <PackageOpen size={20}/><span className="text-[8px] font-black uppercase">Vacías</span>
               </button>
-              <button onClick={() => setActiveTab('MORTALITY')} className={`flex-1 md:w-28 h-20 rounded-2xl flex flex-col items-center justify-center gap-2 transition-all ${activeTab === 'MORTALITY' ? 'bg-red-600 text-white shadow-xl' : 'text-slate-400'}`}>
-                <Bird size={24}/><span className="text-[9px] font-black uppercase">Merma</span>
+              <button onClick={() => setActiveTab('MORTALITY')} className={`flex-1 md:w-24 h-16 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all ${activeTab === 'MORTALITY' ? 'bg-red-600 text-white shadow-xl' : 'text-slate-400'}`}>
+                <Bird size={20}/><span className="text-[8px] font-black uppercase">Merma</span>
               </button>
             </div>
-            <div className="flex-1 flex gap-4 h-20 w-full">
-              <div className="w-24 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] flex flex-col items-center justify-center shadow-inner">
-                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 leading-none">
-                    {activeTab === 'MORTALITY' ? 'CANT. POLLOS' : 'CANT. JABAS'}
+            <div className="flex-1 flex gap-3 h-16 w-full">
+              <div className="w-20 bg-slate-50 border-2 border-slate-100 rounded-xl flex flex-col items-center justify-center shadow-inner">
+                  <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5 leading-none">
+                    {activeTab === 'MORTALITY' ? 'POLLOS' : 'JABAS'}
                   </span>
                   <input 
                     type="number" 
                     value={qtyInput} 
                     onChange={e => setQtyInput(e.target.value)} 
-                    className="w-full text-center bg-transparent font-black text-2xl outline-none" 
+                    className="w-full text-center bg-transparent font-black text-xl outline-none" 
                     placeholder="0" 
                   />
               </div>
 
-              <div className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] flex flex-col items-center justify-center shadow-inner">
-                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 leading-none">PESO CAPTURADO (KG)</span>
+              <div className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl flex flex-col items-center justify-center shadow-inner">
+                  <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5 leading-none">PESO (KG)</span>
                   <input 
                     ref={weightInputRef} 
                     type="number" 
                     value={weightInput} 
                     onChange={e => setWeightInput(e.target.value)} 
                     onKeyDown={e => e.key === 'Enter' && addWeight()} 
-                    className="w-full text-center bg-transparent font-black text-4xl outline-none" 
+                    className="w-full text-center bg-transparent font-black text-3xl outline-none" 
                     placeholder="0.00" 
                     step="0.01"
                   />
               </div>
-              <button onClick={addWeight} className="w-24 md:w-40 bg-blue-950 text-white rounded-[1.5rem] shadow-xl hover:bg-blue-900 transition-all flex items-center justify-center border-b-4 border-blue-800 active:scale-95">
-                  <Save size={32}/>
+              <button onClick={addWeight} className="w-20 md:w-32 bg-blue-950 text-white rounded-xl shadow-xl hover:bg-blue-900 transition-all flex items-center justify-center border-b-4 border-blue-800 active:scale-95">
+                  <Save size={24}/>
               </button>
             </div>
           </div>

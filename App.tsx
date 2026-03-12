@@ -45,39 +45,39 @@ const Container: React.FC<{ children: React.ReactNode; title?: string; showBack?
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      <header className="bg-blue-950 text-white shadow-lg p-4 sticky top-0 z-50 border-b border-blue-900">
+      <header className="bg-blue-950 text-white shadow-lg p-2 md:p-3 sticky top-0 z-50 border-b border-blue-900">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
             {showBack && (
-              <button onClick={() => navigate(-1)} className="p-2 hover:bg-blue-900 rounded-xl transition-all active:scale-90">
-                <ArrowLeft size={22} />
+              <button onClick={() => navigate(-1)} className="p-1.5 hover:bg-blue-900 rounded-xl transition-all active:scale-90">
+                <ArrowLeft size={18} />
               </button>
             )}
-            <h1 className="text-lg font-black tracking-tighter uppercase truncate max-w-[180px] sm:max-w-none">
+            <h1 className="text-sm md:text-base font-black tracking-tighter uppercase truncate max-w-[150px] sm:max-w-none">
                 {title ? `${appName} | ${title}` : appName}
             </h1>
           </div>
-          <div className="flex items-center space-x-4">
-            <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${isCloudConnected ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' : 'border-slate-700 bg-slate-800 text-slate-500'}`}>
-                {isCloudConnected ? <Wifi size={14} className="animate-pulse"/> : <WifiOff size={14}/>}
-                <span className="text-[10px] font-black uppercase tracking-widest hidden xs:inline">{isCloudConnected ? 'Cloud' : 'Local'}</span>
+          <div className="flex items-center space-x-3">
+            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border ${isCloudConnected ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' : 'border-slate-700 bg-slate-800 text-slate-500'}`}>
+                {isCloudConnected ? <Wifi size={12} className="animate-pulse"/> : <WifiOff size={12}/>}
+                <span className="text-[9px] font-black uppercase tracking-widest hidden xs:inline">{isCloudConnected ? 'Cloud' : 'Local'}</span>
             </div>
 
             <div className="text-right hidden sm:block">
-              <p className="text-xs font-black text-blue-100 uppercase">{user.name}</p>
-              <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">{user.role}</p>
+              <p className="text-[10px] font-black text-blue-100 uppercase leading-none">{user.name}</p>
+              <p className="text-[8px] text-blue-400 font-bold uppercase tracking-widest leading-none mt-0.5">{user.role}</p>
             </div>
             <button
               onClick={logout}
-              className="bg-red-600 hover:bg-red-700 p-2 rounded-xl transition-all shadow-lg active:scale-95"
+              className="bg-red-600 hover:bg-red-700 p-1.5 rounded-lg transition-all shadow-lg active:scale-95"
               title="Cerrar Sesión"
             >
-              <LogOut size={18} />
+              <LogOut size={16} />
             </button>
           </div>
         </div>
       </header>
-      <main className="flex-1 max-w-[95%] mx-auto w-full p-4">
+      <main className="flex-1 max-w-[98%] mx-auto w-full p-2 md:p-4">
         {children}
       </main>
     </div>
