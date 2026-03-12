@@ -6,7 +6,7 @@ import { getOrders, saveOrder, getConfig, deleteOrder, getBatches } from '../../
 import { 
   ArrowLeft, Save, X, Eye, Package, PackageOpen, 
   User, Trash2, Box, UserPlus, Bird, Printer, Receipt, 
-  Activity, Download, List, ChevronRight, Scale
+  Activity, Download, List, ChevronRight, Scale, ChevronDown
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -98,6 +98,16 @@ const WeighingStation: React.FC = () => {
     if (!newClientName || !targetCrates) return;
     const target = parseInt(targetCrates);
     const birds = parseInt(newClientBirdsPerCrate) || 10;
+
+    // Check if there's already an open order for this client
+    if (!editingOrderId) {
+        const existingOpenOrder = getOrders().find(o => o.clientName.toLowerCase() === newClientName.toLowerCase() && o.status === 'OPEN' && o.weighingMode === mode && o.batchId === batchId);
+        if (existingOpenOrder) {
+            setActiveOrder(existingOpenOrder);
+            setShowClientModal(false);
+            return;
+        }
+    }
 
     // Check Batch Limit
     if (mode === WeighingType.BATCH && batchId) {
@@ -235,6 +245,11 @@ const WeighingStation: React.FC = () => {
     let y = 10;
     
     // Header
+    if (config.logoUrl) {
+        doc.addImage(config.logoUrl, 'PNG', 25, y, 30, 30);
+        y += 35;
+    }
+
     doc.setFontSize(14).setFont("helvetica", "bold");
     doc.text(config.companyName.toUpperCase(), 40, y, { align: 'center' });
     y += 5;
@@ -365,6 +380,10 @@ const WeighingStation: React.FC = () => {
     doc.rect(0, 0, 210, 45, 'F');
     
     // Header Text
+    if (config.logoUrl) {
+        doc.addImage(config.logoUrl, 'PNG', 14, 10, 25, 25);
+    }
+
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(22).setFont("helvetica", "bold");
     doc.text(config.companyName.toUpperCase(), 105, 20, { align: 'center' });
@@ -417,11 +436,11 @@ const WeighingStation: React.FC = () => {
         }
     });
 
-    y = (doc as any).lastAutoTable.finalY + 10;
+    y = (doc as any).lastAutoTable.finalY + 15;
     
-    doc.setFontSize(11).setFont("helvetica", "bold");
+    doc.setFontSize(14).setFont("helvetica", "bold");
     doc.text("DESGLOSE DE PESADAS", 14, y);
-    y += 2;
+    y += 5;
 
     const fullRecords = order.records.filter(r => r.type === 'FULL').sort((a, b) => b.timestamp - a.timestamp);
     const emptyRecords = order.records.filter(r => r.type === 'EMPTY').sort((a, b) => b.timestamp - a.timestamp);
@@ -481,95 +500,95 @@ const WeighingStation: React.FC = () => {
 
   if (!activeOrder) {
     return (
-      <div className="p-4 max-w-7xl mx-auto animate-fade-in text-left">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-slate-200 pb-6">
-          <div>
-            <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Estación de Pesaje</h2>
-            <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1 flex items-center gap-2">
-                <Activity size={12} className="text-blue-600"/> Modo: {mode}
-            </p>
+      <>
+        <div className="p-4 max-w-7xl mx-auto animate-fade-in text-left">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-slate-200 pb-6">
+            <div>
+              <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Estación de Pesaje</h2>
+              <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1 flex items-center gap-2">
+                  <Activity size={12} className="text-blue-600"/> Modo: {mode}
+              </p>
+            </div>
+            <button onClick={() => handleOpenClientModal()} className="bg-blue-950 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-blue-900 transition-all flex items-center gap-3 active:scale-95">
+              <UserPlus size={18} /> Registrar Nuevo Cliente
+            </button>
           </div>
-          <button onClick={() => handleOpenClientModal()} className="bg-blue-950 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-blue-900 transition-all flex items-center gap-3 active:scale-95">
-            <UserPlus size={18} /> Registrar Nuevo Cliente
-          </button>
-        </div>
-        
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {orders.map(o => {
-              const t = getTotals(o);
-              const isOverLimit = t.qF >= (o.targetCrates || 0);
-              const percent = o.targetCrates ? Math.min((t.qF / o.targetCrates) * 100, 100) : 0;
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {orders.map(o => {
+                const t = getTotals(o);
+                const isOverLimit = t.qF >= (o.targetCrates || 0);
+                const percent = o.targetCrates ? Math.min((t.qF / o.targetCrates) * 100, 100) : 0;
 
-              return (
-              <div key={o.id} className="bg-white rounded-2xl shadow-lg border border-slate-200 hover:shadow-2xl hover:border-blue-400 transition-all duration-300 overflow-hidden flex flex-col h-full relative group">
-                  <div className="bg-slate-900 p-4 flex justify-between items-start cursor-pointer" onClick={() => setActiveOrder(o)}>
-                     <div className="flex items-center space-x-3">
-                         <div className="bg-blue-600 p-2 rounded-lg text-white shadow-lg">
-                             <User size={24} />
-                         </div>
-                         <div>
-                             <h3 className="font-black text-white text-lg leading-tight truncate max-w-[150px]">{o.clientName}</h3>
-                             <p className="text-slate-400 text-xs font-medium flex items-center mt-1">
-                                 ID: {o.id.slice(-6)}
-                             </p>
-                         </div>
-                     </div>
-                     <span className={`text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider ${o.status === 'CLOSED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                        {o.status === 'CLOSED' ? 'Cerrado' : 'Abierto'}
-                     </span>
-                  </div>
+                return (
+                <div key={o.id} className="bg-white rounded-2xl shadow-lg border border-slate-200 hover:shadow-2xl hover:border-blue-400 transition-all duration-300 overflow-hidden flex flex-col h-full relative group">
+                    <div className="bg-slate-900 p-4 flex justify-between items-start cursor-pointer" onClick={() => setActiveOrder(o)}>
+                       <div className="flex items-center space-x-3">
+                           <div className="bg-blue-600 p-2 rounded-lg text-white shadow-lg">
+                               <User size={24} />
+                           </div>
+                           <div>
+                               <h3 className="font-black text-white text-lg leading-tight truncate max-w-[150px]">{o.clientName}</h3>
+                               <p className="text-slate-400 text-xs font-medium flex items-center mt-1">
+                                   ID: {o.id.slice(-6)}
+                               </p>
+                           </div>
+                       </div>
+                       <span className={`text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider ${o.status === 'CLOSED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                          {o.status === 'CLOSED' ? 'Cerrado' : 'Abierto'}
+                       </span>
+                    </div>
 
-                  <div className="p-5 flex-1 flex flex-col justify-between cursor-pointer" onClick={() => setActiveOrder(o)}>
-                      <div>
-                          {/* Progress */}
-                          {o.targetCrates > 0 && (
-                            <div className="mb-6">
-                                <div className="flex justify-between text-xs font-bold uppercase tracking-wider mb-2">
-                                    <span className="text-slate-500">Meta Jabas</span>
-                                    <span className={`${isOverLimit ? 'text-red-600' : 'text-blue-600'}`}>{t.qF} / {o.targetCrates}</span>
+                    <div className="p-5 flex-1 flex flex-col justify-between cursor-pointer" onClick={() => setActiveOrder(o)}>
+                        <div>
+                            {/* Progress */}
+                            {o.targetCrates > 0 && (
+                              <div className="mb-6">
+                                  <div className="flex justify-between text-xs font-bold uppercase tracking-wider mb-2">
+                                      <span className="text-slate-500">Meta Jabas</span>
+                                      <span className={`${isOverLimit ? 'text-red-600' : 'text-blue-600'}`}>{t.qF} / {o.targetCrates}</span>
+                                  </div>
+                                  <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                                      <div className={`h-full rounded-full transition-all duration-500 ${isOverLimit ? 'bg-red-500' : 'bg-gradient-to-r from-blue-500 to-blue-400'}`} style={{ width: `${percent}%` }}></div>
+                                  </div>
+                              </div>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-2 mb-4">
+                                <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                    <p className="text-[8px] font-bold text-slate-400 uppercase">Bruto</p>
+                                    <p className="font-black text-slate-800 text-sm leading-none">{t.wF.toFixed(1)}</p>
                                 </div>
-                                <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-                                    <div className={`h-full rounded-full transition-all duration-500 ${isOverLimit ? 'bg-red-500' : 'bg-gradient-to-r from-blue-500 to-blue-400'}`} style={{ width: `${percent}%` }}></div>
+                                <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                    <p className="text-[8px] font-bold text-slate-400 uppercase">Tara</p>
+                                    <p className="font-black text-slate-800 text-sm leading-none text-orange-600">-{t.wE.toFixed(1)}</p>
+                                </div>
+                                <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                    <p className="text-[8px] font-bold text-slate-400 uppercase">Merma</p>
+                                    <p className="font-black text-slate-800 text-sm leading-none text-red-600">-{t.wM.toFixed(1)}</p>
+                                </div>
+                                <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                    <p className="text-[8px] font-bold text-slate-400 uppercase">Pollos</p>
+                                    <p className="font-black text-slate-800 text-sm leading-none">{t.bF}</p>
                                 </div>
                             </div>
-                          )}
-
-                          <div className="grid grid-cols-2 gap-2 mb-4">
-                              <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-                                  <p className="text-[8px] font-bold text-slate-400 uppercase">Bruto</p>
-                                  <p className="font-black text-slate-800 text-sm leading-none">{t.wF.toFixed(1)}</p>
-                              </div>
-                              <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-                                  <p className="text-[8px] font-bold text-slate-400 uppercase">Tara</p>
-                                  <p className="font-black text-slate-800 text-sm leading-none text-orange-600">-{t.wE.toFixed(1)}</p>
-                              </div>
-                              <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-                                  <p className="text-[8px] font-bold text-slate-400 uppercase">Merma</p>
-                                  <p className="font-black text-slate-800 text-sm leading-none text-red-600">-{t.wM.toFixed(1)}</p>
-                              </div>
-                              <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-                                  <p className="text-[8px] font-bold text-slate-400 uppercase">Pollos</p>
-                                  <p className="font-black text-slate-800 text-sm leading-none">{t.bF}</p>
-                              </div>
-                          </div>
-                          <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 text-center">
-                              <p className="text-[10px] font-bold text-emerald-600 uppercase">Peso Neto</p>
-                              <p className="font-black text-emerald-700 text-2xl leading-none">{t.net.toFixed(1)} kg</p>
-                          </div>
-                      </div>
-
-                      <div className="flex justify-end gap-2 mt-4">
-                        <div className="bg-blue-50 p-2 rounded-lg text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                            <ChevronRight size={18} />
+                            <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 text-center">
+                                <p className="text-[10px] font-bold text-emerald-600 uppercase">Peso Neto</p>
+                                <p className="font-black text-emerald-700 text-2xl leading-none">{t.net.toFixed(1)} kg</p>
+                            </div>
                         </div>
-                      </div>
-                  </div>
-              </div>
-              );
-          })}
+
+                        <div className="flex justify-end gap-2 mt-4">
+                          <div className="bg-blue-50 p-2 rounded-lg text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                              <ChevronRight size={18} />
+                          </div>
+                        </div>
+                    </div>
+                </div>
+                );
+            })}
+          </div>
         </div>
-
-
 
         {showClientModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
@@ -579,11 +598,17 @@ const WeighingStation: React.FC = () => {
                 <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Nombre del Cliente</label>
                     <input 
+                        list="client-names"
                         className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all" 
                         value={newClientName} 
                         onChange={e => setNewClientName(e.target.value)} 
                         placeholder="Ej. Juan Perez" 
                     />
+                    <datalist id="client-names">
+                        {Array.from(new Set(getOrders().map(o => o.clientName))).map(name => (
+                            <option key={name} value={name} />
+                        ))}
+                    </datalist>
                 </div>
                 <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Meta de Jabas</label>
@@ -613,7 +638,7 @@ const WeighingStation: React.FC = () => {
             </div>
           </div>
         )}
-      </div>
+      </>
     );
   }
 
@@ -633,13 +658,26 @@ const WeighingStation: React.FC = () => {
             <button onClick={() => setActiveOrder(null)} className="p-2 bg-white/10 rounded-xl hover:bg-white/20 transition-all border border-white/10 active:scale-95">
                 <ArrowLeft size={18}/>
             </button>
-            <div className="flex-1 min-w-0">
-              <h2 className="text-lg md:text-2xl font-black uppercase leading-none truncate tracking-tighter">{activeOrder.clientName}</h2>
-              <div className="flex items-center gap-2 mt-1">
-                <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${isLocked ? 'bg-red-500' : 'bg-emerald-500'}`}></div>
-                <p className="text-blue-300 text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em] truncate">{isLocked ? 'CONTROL CERRADO' : 'SISTEMA ACTIVO'}</p>
-              </div>
+            <div className="flex-1 min-w-0 flex items-center gap-2">
+              <select 
+                  value={activeOrder.id}
+                  onChange={(e) => {
+                      const order = orders.find(o => o.id === e.target.value);
+                      if (order) setActiveOrder(order);
+                  }}
+                  className="bg-transparent text-lg md:text-2xl font-black uppercase leading-none truncate tracking-tighter outline-none cursor-pointer hover:bg-white/10 rounded px-1 -ml-1 transition-colors"
+                  style={{ WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none' }}
+              >
+                  {orders.map(o => (
+                      <option key={o.id} value={o.id} className="text-slate-900 text-base font-bold">{o.clientName}</option>
+                  ))}
+              </select>
+              <ChevronDown size={16} className="text-blue-300 opacity-50 pointer-events-none -ml-1" />
             </div>
+          </div>
+          <div className="flex items-center gap-2 mt-1 mb-4">
+            <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${isLocked ? 'bg-red-500' : 'bg-emerald-500'}`}></div>
+            <p className="text-blue-300 text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em] truncate">{isLocked ? 'CONTROL CERRADO' : 'SISTEMA ACTIVO'}</p>
           </div>
 
           {/* Counts Row */}
@@ -845,11 +883,17 @@ const WeighingStation: React.FC = () => {
                 <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Nombre del Cliente</label>
                     <input 
+                        list="client-names-2"
                         className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all" 
                         value={newClientName} 
                         onChange={e => setNewClientName(e.target.value)} 
                         placeholder="Ej. Juan Perez" 
                     />
+                    <datalist id="client-names-2">
+                        {Array.from(new Set(getOrders().map(o => o.clientName))).map(name => (
+                            <option key={name} value={name} />
+                        ))}
+                    </datalist>
                 </div>
                 <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Meta de Jabas</label>

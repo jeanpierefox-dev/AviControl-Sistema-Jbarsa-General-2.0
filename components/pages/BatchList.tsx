@@ -157,6 +157,12 @@ const BatchList: React.FC = () => {
             <p className="text-slate-500 font-medium text-xs">Administre sus campañas de producción</p>
         </div>
         <div className="flex items-center gap-3">
+            <button 
+                onClick={() => navigate('/')}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl flex items-center transition-colors shadow-sm font-bold text-xs"
+            >
+                Volver al Menú
+            </button>
             <div className="relative">
                 <Calendar size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
                 <input 
