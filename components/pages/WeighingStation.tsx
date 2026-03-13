@@ -1178,10 +1178,16 @@ const WeighingStation: React.FC = () => {
 
                     <div className="mt-8 flex gap-4 justify-end border-t border-slate-100 pt-6">
                         <button 
+                            onClick={() => generateWeighingTicketPDF(activeOrder)}
+                            className="bg-white text-slate-900 border-2 border-slate-200 px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm active:scale-95"
+                        >
+                            <Printer size={18} /> Ticket Detalle Carga (80mm)
+                        </button>
+                        <button 
                             onClick={() => generateSalesTicketPDF(activeOrder)}
                             className="bg-slate-900 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg active:scale-95"
                         >
-                            <Printer size={18} /> Ticket Venta (80mm)
+                            <Receipt size={18} /> Ticket Venta (80mm)
                         </button>
                         <button 
                             onClick={() => generateDetailPDF(activeOrder)}

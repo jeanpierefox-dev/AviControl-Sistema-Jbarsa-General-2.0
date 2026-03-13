@@ -7,7 +7,10 @@ import { AuthContext } from '../../App';
 
 const BatchList: React.FC = () => {
   const [batches, setBatches] = useState<Batch[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
   const [showModal, setShowModal] = useState(false);
   const [currentBatch, setCurrentBatch] = useState<Partial<Batch>>({});
   const navigate = useNavigate();
@@ -21,7 +24,11 @@ const BatchList: React.FC = () => {
       const all = getBatches();
       // Filter by selected date
       const filteredByDate = all.filter(b => {
-          const batchDate = new Date(b.createdAt).toISOString().split('T')[0];
+          const dateObj = new Date(b.createdAt);
+          const year = dateObj.getFullYear();
+          const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+          const day = String(dateObj.getDate()).padStart(2, '0');
+          const batchDate = `${year}-${month}-${day}`;
           return batchDate === selectedDate;
       });
 
@@ -174,7 +181,12 @@ const BatchList: React.FC = () => {
             </div>
             {canEdit && (
                 <button 
-                onClick={() => { setCurrentBatch({}); setShowModal(true); }}
+                onClick={() => { 
+                  const [year, month, day] = selectedDate.split('-');
+                  const date = new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0);
+                  setCurrentBatch({ createdAt: date.getTime() }); 
+                  setShowModal(true); 
+                }}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl flex items-center transition-colors shadow-lg shadow-emerald-200 font-bold text-xs"
                 >
                 <Plus size={16} className="mr-2" />
@@ -212,6 +224,22 @@ const BatchList: React.FC = () => {
                   placeholder="Ej. 5000"
                 />
                 <p className="text-xs text-slate-400 mt-2 flex items-center"><Activity size={12} className="mr-1"/> Se bloqueará la creación de clientes si se supera.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Fecha del Lote</label>
+                <input 
+                  type="date"
+                  className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all"
+                  value={currentBatch.createdAt ? (() => {
+                    const d = new Date(currentBatch.createdAt);
+                    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                  })() : selectedDate}
+                  onChange={e => {
+                    const [year, month, day] = e.target.value.split('-');
+                    const date = new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0);
+                    setCurrentBatch({...currentBatch, createdAt: date.getTime()});
+                  }}
+                />
               </div>
             </div>
             <div className="mt-8 flex justify-end space-x-3">

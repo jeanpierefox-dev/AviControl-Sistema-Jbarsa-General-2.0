@@ -18,7 +18,10 @@ const Reports: React.FC = () => {
   const [showDetailModal, setShowDetailModal] = useState<ClientOrder | null>(null);
   const [previewData, setPreviewData] = useState<{ url: string, filename: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
   const { user } = useContext(AuthContext);
   const config = getConfig();
 
@@ -40,9 +43,15 @@ const Reports: React.FC = () => {
       // Filter orders by selected date
       const filteredOrdersByDate = allOrders.filter(o => {
           // Check if any record in the order matches the selected date
-          // If the order has no records, check if the order itself was created on that date (if we had a createdAt, but we don't, so we use the first record or just show it if it's open)
           if (o.records.length > 0) {
-              return o.records.some(r => new Date(r.timestamp).toISOString().split('T')[0] === selectedDate);
+              return o.records.some(r => {
+                  const dateObj = new Date(r.timestamp);
+                  const year = dateObj.getFullYear();
+                  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                  const day = String(dateObj.getDate()).padStart(2, '0');
+                  const recordDate = `${year}-${month}-${day}`;
+                  return recordDate === selectedDate;
+              });
           }
           return true; // Keep empty orders for now
       });
