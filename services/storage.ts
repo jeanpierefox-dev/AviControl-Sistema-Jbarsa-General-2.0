@@ -40,7 +40,13 @@ export const getConfig = (): AppConfig => {
     printerConnected: false,
     scaleConnected: false,
     defaultFullCrateBatch: 5,
-    defaultEmptyCrateBatch: 10
+    defaultEmptyCrateBatch: 10,
+    firebaseConfig: {
+      apiKey: "AIzaSyBiy7mYT9Jxnm96jaRP8-i57rxnIti-S_4",
+      projectId: "avicontrol-40517",
+      databaseURL: "https://avicontrol-40517-default-rtdb.firebaseio.com",
+      authDomain: "avicontrol-40517.firebaseapp.com"
+    }
   });
 };
 
@@ -51,7 +57,7 @@ export const saveConfig = (config: AppConfig) => {
 
 export const isFirebaseConfigured = (): boolean => {
     const config = getConfig();
-    return !!(config.firebaseConfig?.apiKey && config.firebaseConfig?.projectId && config.firebaseConfig?.databaseURL);
+    return !!(config.firebaseConfig?.apiKey && config.firebaseConfig?.projectId);
 };
 
 export const resetApp = () => {
@@ -68,8 +74,8 @@ export const validateConfig = async (firebaseConfig: any): Promise<{ valid: bool
     const validatorName = `validator_${Date.now()}`;
 
     try {
-        if (!firebaseConfig.apiKey || !firebaseConfig.projectId || !firebaseConfig.databaseURL) {
-            return { valid: false, error: "⚠️ Campos incompletos: API Key, Project ID y Database URL son obligatorios." };
+        if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+            return { valid: false, error: "⚠️ Campos incompletos: API Key y Project ID son obligatorios." };
         }
         
         const apps = getApps();

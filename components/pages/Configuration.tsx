@@ -3,9 +3,10 @@ import React, { useState, useContext, useEffect, useRef } from 'react';
 import { AppConfig } from '../../types';
 import { getConfig, saveConfig, resetApp, isFirebaseConfigured, validateConfig, uploadLocalToCloud } from '../../services/storage';
 import { 
-  Save, Check, Cloud, X, Loader2, Database, Key, Layout, 
-  Upload, Image as ImageIcon, Trash2, Printer, Scale, Bluetooth, AlertCircle,
-  Apple, ExternalLink, Info, Smartphone, Wifi, BluetoothOff, Globe
+  Save, Check, X, Layout, 
+  Image as ImageIcon, Trash2, Printer, Scale, Bluetooth, AlertCircle,
+  Apple, ExternalLink, Info, Smartphone, Wifi, BluetoothOff, Globe,
+  Cloud, Database, Key, Upload, Loader2
 } from 'lucide-react';
 import { AuthContext } from '../../App';
 
@@ -13,18 +14,19 @@ const Configuration: React.FC = () => {
   const [config, setConfig] = useState<AppConfig>(getConfig());
   const [saved, setSaved] = useState(false);
   const { user } = useContext(AuthContext);
+  
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [testError, setTestError] = useState('');
   const [isTested, setIsTested] = useState(false);
-  
+
   const [browserSupport, setBrowserSupport] = useState({ 
     bluetooth: false, 
     secure: window.isSecureContext,
     isIOS: /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
   });
-  
+
   const [manualForm, setManualForm] = useState({
       apiKey: '', 
       projectId: '', 
@@ -71,8 +73,8 @@ const Configuration: React.FC = () => {
       setIsTested(false);
       setIsConnecting(true);
       try {
-          if (!manualForm.apiKey || !manualForm.projectId || !manualForm.databaseURL) {
-              setTestError("⚠️ Datos incompletos.");
+          if (!manualForm.apiKey || !manualForm.projectId) {
+              setTestError("⚠️ Datos incompletos. API Key y Project ID son requeridos.");
               setIsConnecting(false);
               return;
           }
@@ -252,6 +254,113 @@ const Configuration: React.FC = () => {
                       <button onClick={() => setConfig({...config, scaleConnected: false})} className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><X size={20}/></button>
                   ) : (
                       <button onClick={() => startNativeConnect('SCALE_BT')} className="bg-blue-900 text-white px-5 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-800 transition-all">Enlazar</button>
+                  )}
+              </div>
+          </div>
+      </div>
+
+      {/* Cloud Sync */}
+      <div className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-sm">
+          <div className="flex items-center gap-4 mb-8">
+              <div className="bg-blue-900 p-3 rounded-2xl text-white shadow-lg">
+                  <Cloud size={24} />
+              </div>
+              <div>
+                  <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Cloud Sync</h2>
+                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Sincronización en la Nube</p>
+              </div>
+          </div>
+
+          <div className="space-y-6">
+              <div className="space-y-2">
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">ID Organización</label>
+                  <input 
+                      type="text" 
+                      value={manualForm.projectId} 
+                      onChange={e => setManualForm({...manualForm, projectId: e.target.value})}
+                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-lg text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
+                      placeholder="mi-liga-voley"
+                  />
+                  <p className="text-[10px] text-slate-500 font-mono ml-1">Unique League Identifier</p>
+              </div>
+
+              <div className="flex gap-4 border-b border-slate-200">
+                  <button className="px-4 py-3 text-xs font-black text-slate-400 uppercase tracking-widest">Import Code</button>
+                  <button className="px-4 py-3 text-xs font-black text-blue-700 uppercase tracking-widest border-b-2 border-blue-600 bg-blue-50">Manual Input</button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <input 
+                      type="text" 
+                      value={manualForm.apiKey} 
+                      onChange={e => setManualForm({...manualForm, apiKey: e.target.value})}
+                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-mono text-sm text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
+                      placeholder="API Key"
+                  />
+                  <input 
+                      type="text" 
+                      value={manualForm.authDomain} 
+                      onChange={e => setManualForm({...manualForm, authDomain: e.target.value})}
+                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-mono text-sm text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
+                      placeholder="Auth Domain"
+                  />
+                  <input 
+                      type="text" 
+                      value={manualForm.databaseURL} 
+                      onChange={e => setManualForm({...manualForm, databaseURL: e.target.value})}
+                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-mono text-sm text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all md:col-span-2"
+                      placeholder="Database URL"
+                  />
+                  <input 
+                      type="text" 
+                      value={manualForm.projectId} 
+                      onChange={e => setManualForm({...manualForm, projectId: e.target.value})}
+                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-mono text-sm text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
+                      placeholder="Project ID"
+                  />
+                  <input 
+                      type="text" 
+                      value={manualForm.appId} 
+                      onChange={e => setManualForm({...manualForm, appId: e.target.value})}
+                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-mono text-sm text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
+                      placeholder="App ID"
+                  />
+              </div>
+
+              {testError && (
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-600 text-xs font-bold">
+                      {testError}
+                  </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-4 mt-4">
+                  <button 
+                      onClick={handleTestConnection}
+                      disabled={isConnecting}
+                      className="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                      {isConnecting ? <Loader2 size={16} className="animate-spin"/> : <Database size={16}/>}
+                      Probar Conexión
+                  </button>
+                  
+                  <button 
+                      onClick={handleLinkCloud}
+                      disabled={!isTested}
+                      className="flex-[2] bg-blue-900 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-800 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:bg-slate-100 disabled:text-slate-400"
+                  >
+                      <Key size={16}/>
+                      Vincular Servidor
+                  </button>
+
+                  {isConnected && (
+                      <button 
+                          onClick={handleUploadData}
+                          disabled={isUploading}
+                          className="flex-1 bg-emerald-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                          {isUploading ? <Loader2 size={16} className="animate-spin"/> : <Upload size={16}/>}
+                          Subir Datos
+                      </button>
                   )}
               </div>
           </div>

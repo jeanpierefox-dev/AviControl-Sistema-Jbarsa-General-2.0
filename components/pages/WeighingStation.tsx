@@ -224,23 +224,10 @@ const WeighingStation: React.FC = () => {
     return chunked;
   };
 
-  const generateWeighingTicketPDF = (order: ClientOrder) => {
+  const renderTicketContent = (doc: jsPDF, order: ClientOrder, isSalesTicket: boolean) => {
     const t = getTotals(order);
     const batch = getBatches().find(b => b.id === order.batchId);
     const batchName = batch ? batch.name : 'Venta Directa';
-    
-    const fullRecords = order.records.filter(r => r.type === 'FULL').sort((a, b) => b.timestamp - a.timestamp);
-    const emptyRecords = order.records.filter(r => r.type === 'EMPTY').sort((a, b) => b.timestamp - a.timestamp);
-    const mortRecords = order.records.filter(r => r.type === 'MORTALITY').sort((a, b) => b.timestamp - a.timestamp);
-    
-    const fullRows = Math.ceil(fullRecords.length / 3);
-    const emptyRows = Math.ceil(emptyRecords.length / 3);
-    const mortRows = Math.ceil(mortRecords.length / 3);
-
-    // Calculate dynamic height
-    let estimatedHeight = 160 + ((fullRows + emptyRows + mortRows) * 5) + (order.pricePerKg > 0 ? 30 : 0);
-
-    const doc = new jsPDF({ unit: 'mm', format: [80, estimatedHeight] });
     
     let y = 10;
     
@@ -255,7 +242,7 @@ const WeighingStation: React.FC = () => {
     y += 5;
     
     doc.setFontSize(9).setFont("helvetica", "normal");
-    doc.text("TICKET DE PESAJE", 40, y, { align: 'center' });
+    doc.text(isSalesTicket ? "TICKET DE VENTA" : "TICKET DE PESAJE", 40, y, { align: 'center' });
     y += 5;
     
     doc.setFontSize(8).setFont("helvetica", "italic");
@@ -278,56 +265,62 @@ const WeighingStation: React.FC = () => {
     doc.text(order.clientName.toUpperCase(), 22, y);
     y += 6;
 
-    // Quantities Box
-    autoTable(doc, {
-        startY: y,
-        head: [[{ content: 'RESUMEN DE CANTIDADES', colSpan: 2, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
-        body: [
-            ['Jabas Llenas:', t.qF.toString()],
-            ['Total Pollos:', t.bF.toString()],
-            ['Jabas Vacías:', t.qE.toString()],
-            ['Pollos Muertos:', t.qM.toString()]
-        ],
-        theme: 'grid',
-        styles: { fontSize: 8, cellPadding: 1.5 },
-        columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: 40 },
-            1: { halign: 'right', cellWidth: 30 }
-        },
-        margin: { left: 5, right: 5 }
-    });
-    y = (doc as any).lastAutoTable.finalY + 5;
-
-    // DETAILED RECORDS TABLE
-    doc.setFontSize(10).setFont("helvetica", "bold");
-    doc.text("DETALLE DE PESOS", 40, y, { align: 'center' });
-    y += 2;
-
-    const renderCategory = (title: string, records: any[], totalWeight: number, qty?: number) => {
-        if (records.length === 0) return;
-        
-        const headerText = qty !== undefined ? `${title} (Cant: ${qty})` : title;
-        
+    if (!isSalesTicket) {
+        // Quantities Box
         autoTable(doc, {
             startY: y,
-            head: [[{ content: headerText, colSpan: 3, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
-            body: chunkArray(records.map(r => r.weight.toFixed(2)), 3),
+            head: [[{ content: 'RESUMEN DE CANTIDADES', colSpan: 2, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
+            body: [
+                ['Jabas Llenas:', t.qF.toString()],
+                ['Total Pollos:', t.bF.toString()],
+                ['Jabas Vacías:', t.qE.toString()],
+                ['Pollos Muertos:', t.qM.toString()]
+            ],
             theme: 'grid',
-            styles: { fontSize: 8, cellPadding: 1, halign: 'center' },
-            margin: { left: 5, right: 5 },
-            tableWidth: 70
+            styles: { fontSize: 8, cellPadding: 1.5 },
+            columnStyles: {
+                0: { fontStyle: 'bold', cellWidth: 40 },
+                1: { halign: 'right', cellWidth: 30 }
+            },
+            margin: { left: 5, right: 5 }
         });
-        y = (doc as any).lastAutoTable.finalY + 1;
-        
-        doc.setFontSize(8).setFont("helvetica", "bold");
-        doc.text(`TOTAL ${title}:`, 40, y + 3, { align: 'right' });
-        doc.text(`${totalWeight.toFixed(2)} kg`, 72, y + 3, { align: 'right' });
-        y += 7;
-    };
+        y = (doc as any).lastAutoTable.finalY + 5;
 
-    renderCategory("LLENAS", fullRecords, t.wF, t.qF);
-    renderCategory("VACÍAS", emptyRecords, t.wE, t.qE);
-    renderCategory("MORTALIDAD", mortRecords, t.wM, t.qM);
+        // DETAILED RECORDS TABLE
+        doc.setFontSize(10).setFont("helvetica", "bold");
+        doc.text("DETALLE DE PESOS", 40, y, { align: 'center' });
+        y += 2;
+
+        const fullRecords = order.records.filter(r => r.type === 'FULL').sort((a, b) => b.timestamp - a.timestamp);
+        const emptyRecords = order.records.filter(r => r.type === 'EMPTY').sort((a, b) => b.timestamp - a.timestamp);
+        const mortRecords = order.records.filter(r => r.type === 'MORTALITY').sort((a, b) => b.timestamp - a.timestamp);
+
+        const renderCategory = (title: string, records: any[], totalWeight: number, qty?: number) => {
+            if (records.length === 0) return;
+            
+            const headerText = qty !== undefined ? `${title} (Cant: ${qty})` : title;
+            
+            autoTable(doc, {
+                startY: y,
+                head: [[{ content: headerText, colSpan: 3, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
+                body: chunkArray(records.map(r => r.weight.toFixed(2)), 3),
+                theme: 'grid',
+                styles: { fontSize: 8, cellPadding: 1, halign: 'center' },
+                margin: { left: 5, right: 5 },
+                tableWidth: 70
+            });
+            y = (doc as any).lastAutoTable.finalY + 1;
+            
+            doc.setFontSize(8).setFont("helvetica", "bold");
+            doc.text(`TOTAL ${title}:`, 40, y + 3, { align: 'right' });
+            doc.text(`${totalWeight.toFixed(2)} kg`, 72, y + 3, { align: 'right' });
+            y += 7;
+        };
+
+        renderCategory("LLENAS", fullRecords, t.wF, t.qF);
+        renderCategory("VACÍAS", emptyRecords, t.wE, t.qE);
+        renderCategory("MORTALIDAD", mortRecords, t.wM, t.qM);
+    }
 
     y += 2;
     doc.setDrawColor(0);
@@ -365,19 +358,25 @@ const WeighingStation: React.FC = () => {
 
     doc.setFontSize(8).setFont("helvetica", "italic");
     doc.text("¡Gracias por su preferencia!", 40, y, { align: 'center' });
+    
+    return y + 10;
+  };
 
+  const generateWeighingTicketPDF = (order: ClientOrder) => {
+    // Pass 1: Calculate height
+    const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 1000] });
+    const finalY = renderTicketContent(dummyDoc, order, false);
+    
+    // Pass 2: Render with exact height
+    const doc = new jsPDF({ unit: 'mm', format: [80, finalY] });
+    renderTicketContent(doc, order, false);
     handlePDFOutput(doc, `Pesaje_${order.clientName}_${order.id.slice(-6)}.pdf`);
   };
 
-  const generateSalesTicketPDF = (order: ClientOrder) => {
+  const renderSalesTicketContent = (doc: jsPDF, order: ClientOrder) => {
     const t = getTotals(order);
     const batch = getBatches().find(b => b.id === order.batchId);
     const batchName = batch ? batch.name : 'Venta Directa';
-    
-    // Calculate dynamic height for sales ticket (shorter, no details)
-    let estimatedHeight = 140;
-
-    const doc = new jsPDF({ unit: 'mm', format: [80, estimatedHeight] });
     
     let y = 10;
     
@@ -455,6 +454,17 @@ const WeighingStation: React.FC = () => {
     doc.setFontSize(8).setFont("helvetica", "italic");
     doc.text("¡Gracias por su compra!", 40, y, { align: 'center' });
 
+    return y + 10;
+  };
+
+  const generateSalesTicketPDF = (order: ClientOrder) => {
+    // Pass 1: Calculate height
+    const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 1000] });
+    const finalY = renderSalesTicketContent(dummyDoc, order);
+    
+    // Pass 2: Render with exact height
+    const doc = new jsPDF({ unit: 'mm', format: [80, finalY] });
+    renderSalesTicketContent(doc, order);
     handlePDFOutput(doc, `Venta_${order.clientName}_${order.id.slice(-6)}.pdf`);
   };
 

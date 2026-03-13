@@ -40,6 +40,16 @@ const Reports: React.FC = () => {
       const allBatches = getBatches();
       const allOrders = getOrders();
       
+      // Filter batches by selected date
+      const filteredBatchesByDate = allBatches.filter(b => {
+          const dateObj = new Date(b.createdAt);
+          const year = dateObj.getFullYear();
+          const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+          const day = String(dateObj.getDate()).padStart(2, '0');
+          const batchDate = `${year}-${month}-${day}`;
+          return batchDate === selectedDate;
+      });
+
       // Filter orders by selected date
       const filteredOrdersByDate = allOrders.filter(o => {
           // Check if any record in the order matches the selected date
@@ -53,14 +63,18 @@ const Reports: React.FC = () => {
                   return recordDate === selectedDate;
               });
           }
-          return true; // Keep empty orders for now
+          // If no records, check if it belongs to a batch from today
+          if (o.batchId) {
+              return filteredBatchesByDate.some(b => b.id === o.batchId);
+          }
+          return false;
       });
 
       if (user?.role === UserRole.ADMIN) {
-          setBatches(allBatches);
+          setBatches(filteredBatchesByDate);
           setOrders(filteredOrdersByDate);
       } else {
-          setBatches(allBatches.filter(b => !b.createdBy || b.createdBy === user?.id));
+          setBatches(filteredBatchesByDate.filter(b => !b.createdBy || b.createdBy === user?.id));
           setOrders(filteredOrdersByDate.filter(o => !o.createdBy || o.createdBy === user?.id));
       }
   }
@@ -114,23 +128,10 @@ const Reports: React.FC = () => {
     return { wF, wE, wM, qF, qE, qM, bF, net };
   };
 
-  const generateTicketPDF = (order: ClientOrder, preview: boolean = false) => {
+  const renderTicketContent = (doc: jsPDF, order: ClientOrder, isSalesTicket: boolean) => {
     const t = getTotals(order);
     const batch = getBatches().find(b => b.id === order.batchId);
     const batchName = batch ? batch.name : 'Venta Directa';
-    
-    const fullRecords = order.records.filter(r => r.type === 'FULL').sort((a, b) => b.timestamp - a.timestamp);
-    const emptyRecords = order.records.filter(r => r.type === 'EMPTY').sort((a, b) => b.timestamp - a.timestamp);
-    const mortRecords = order.records.filter(r => r.type === 'MORTALITY').sort((a, b) => b.timestamp - a.timestamp);
-    
-    const fullRows = Math.ceil(fullRecords.length / 3);
-    const emptyRows = Math.ceil(emptyRecords.length / 3);
-    const mortRows = Math.ceil(mortRecords.length / 3);
-
-    // Calculate dynamic height
-    let estimatedHeight = 160 + ((fullRows + emptyRows + mortRows) * 5) + (order.pricePerKg > 0 ? 30 : 0);
-
-    const doc = new jsPDF({ unit: 'mm', format: [80, estimatedHeight] });
     
     let y = 10;
     
@@ -145,7 +146,7 @@ const Reports: React.FC = () => {
     y += 5;
     
     doc.setFontSize(9).setFont("helvetica", "normal");
-    doc.text("TICKET DE PESAJE", 40, y, { align: 'center' });
+    doc.text(isSalesTicket ? "TICKET DE VENTA" : "TICKET DE PESAJE", 40, y, { align: 'center' });
     y += 5;
     
     doc.setFontSize(8).setFont("helvetica", "italic");
@@ -168,56 +169,82 @@ const Reports: React.FC = () => {
     doc.text(order.clientName.toUpperCase(), 22, y);
     y += 6;
 
-    // Quantities Box
-    autoTable(doc, {
-        startY: y,
-        head: [[{ content: 'RESUMEN DE CANTIDADES', colSpan: 2, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
-        body: [
-            ['Jabas Llenas:', t.qF.toString()],
-            ['Total Pollos:', t.bF.toString()],
-            ['Jabas Vacías:', t.qE.toString()],
-            ['Pollos Muertos:', t.qM.toString()]
-        ],
-        theme: 'grid',
-        styles: { fontSize: 8, cellPadding: 1.5 },
-        columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: 40 },
-            1: { halign: 'right', cellWidth: 30 }
-        },
-        margin: { left: 5, right: 5 }
-    });
-    y = (doc as any).lastAutoTable.finalY + 5;
-
-    // DETAILED RECORDS TABLE
-    doc.setFontSize(10).setFont("helvetica", "bold");
-    doc.text("DETALLE DE PESOS", 40, y, { align: 'center' });
-    y += 2;
-
-    const renderCategory = (title: string, records: any[], totalWeight: number, qty?: number) => {
-        if (records.length === 0) return;
-        
-        const headerText = qty !== undefined ? `${title} (Cant: ${qty})` : title;
-        
+    if (!isSalesTicket) {
+        // Quantities Box
         autoTable(doc, {
             startY: y,
-            head: [[{ content: headerText, colSpan: 3, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
-            body: chunkArray(records.map(r => r.weight.toFixed(2)), 3),
+            head: [[{ content: 'RESUMEN DE CANTIDADES', colSpan: 2, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
+            body: [
+                ['Jabas Llenas:', t.qF.toString()],
+                ['Total Pollos:', t.bF.toString()],
+                ['Jabas Vacías:', t.qE.toString()],
+                ['Pollos Muertos:', t.qM.toString()]
+            ],
             theme: 'grid',
-            styles: { fontSize: 8, cellPadding: 1, halign: 'center' },
-            margin: { left: 5, right: 5 },
-            tableWidth: 70
+            styles: { fontSize: 8, cellPadding: 1.5 },
+            columnStyles: {
+                0: { fontStyle: 'bold', cellWidth: 40 },
+                1: { halign: 'right', cellWidth: 30 }
+            },
+            margin: { left: 5, right: 5 }
         });
-        y = (doc as any).lastAutoTable.finalY + 1;
-        
-        doc.setFontSize(8).setFont("helvetica", "bold");
-        doc.text(`TOTAL ${title}:`, 40, y + 3, { align: 'right' });
-        doc.text(`${totalWeight.toFixed(2)} kg`, 72, y + 3, { align: 'right' });
-        y += 7;
-    };
+        y = (doc as any).lastAutoTable.finalY + 5;
 
-    renderCategory("LLENAS", fullRecords, t.wF, t.qF);
-    renderCategory("VACÍAS", emptyRecords, t.wE, t.qE);
-    renderCategory("MORTALIDAD", mortRecords, t.wM, t.qM);
+        // DETAILED RECORDS TABLE
+        doc.setFontSize(10).setFont("helvetica", "bold");
+        doc.text("DETALLE DE PESOS", 40, y, { align: 'center' });
+        y += 2;
+
+        const fullRecords = order.records.filter(r => r.type === 'FULL').sort((a, b) => b.timestamp - a.timestamp);
+        const emptyRecords = order.records.filter(r => r.type === 'EMPTY').sort((a, b) => b.timestamp - a.timestamp);
+        const mortRecords = order.records.filter(r => r.type === 'MORTALITY').sort((a, b) => b.timestamp - a.timestamp);
+
+        const renderCategory = (title: string, records: any[], totalWeight: number, qty?: number) => {
+            if (records.length === 0) return;
+            
+            const headerText = qty !== undefined ? `${title} (Cant: ${qty})` : title;
+            
+            autoTable(doc, {
+                startY: y,
+                head: [[{ content: headerText, colSpan: 3, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
+                body: chunkArray(records.map(r => r.weight.toFixed(2)), 3),
+                theme: 'grid',
+                styles: { fontSize: 8, cellPadding: 1, halign: 'center' },
+                margin: { left: 5, right: 5 },
+                tableWidth: 70
+            });
+            y = (doc as any).lastAutoTable.finalY + 1;
+            
+            doc.setFontSize(8).setFont("helvetica", "bold");
+            doc.text(`TOTAL ${title}:`, 40, y + 3, { align: 'right' });
+            doc.text(`${totalWeight.toFixed(2)} kg`, 72, y + 3, { align: 'right' });
+            y += 7;
+        };
+
+        renderCategory("LLENAS", fullRecords, t.wF, t.qF);
+        renderCategory("VACÍAS", emptyRecords, t.wE, t.qE);
+        renderCategory("MORTALIDAD", mortRecords, t.wM, t.qM);
+    } else {
+        // General Weights Box
+        autoTable(doc, {
+            startY: y,
+            head: [[{ content: 'RESUMEN DE PESOS', colSpan: 2, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
+            body: [
+                ['Peso Bruto:', `${t.wF.toFixed(2)} kg`],
+                ['Tara Total:', `-${t.wE.toFixed(2)} kg`],
+                ['Mortalidad:', `-${t.wM.toFixed(2)} kg`],
+                ['PESO NETO:', `${t.net.toFixed(2)} kg`]
+            ],
+            theme: 'grid',
+            styles: { fontSize: 9, cellPadding: 2 },
+            columnStyles: {
+                0: { fontStyle: 'bold', cellWidth: 35 },
+                1: { halign: 'right', cellWidth: 35 }
+            },
+            margin: { left: 5, right: 5 }
+        });
+        y = (doc as any).lastAutoTable.finalY + 8;
+    }
 
     y += 2;
     doc.setDrawColor(0);
@@ -243,95 +270,6 @@ const Reports: React.FC = () => {
         y += 6;
         
         doc.setFillColor(15, 23, 42); // Slate 900
-        doc.rect(5, y, 70, 12, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(9).setFont("helvetica", "bold");
-        doc.text("TOTAL A PAGAR", 35, y + 7, { align: 'right' });
-        doc.setFontSize(12);
-        doc.text(`S/. ${(t.net * order.pricePerKg).toFixed(2)}`, 72, y + 8, { align: 'right' });
-        doc.setTextColor(0, 0, 0);
-        y += 18;
-    }
-
-    doc.setFontSize(8).setFont("helvetica", "italic");
-    doc.text("¡Gracias por su preferencia!", 40, y, { align: 'center' });
-
-    handlePDFOutput(doc, `Ticket_Detallado_${order.id}.pdf`, preview);
-  };
-
-  const generateSalesTicketPDF = (order: ClientOrder, preview: boolean = false) => {
-    const t = getTotals(order);
-    const batch = getBatches().find(b => b.id === order.batchId);
-    const batchName = batch ? batch.name : 'Venta Directa';
-    
-    // Calculate dynamic height for sales ticket (shorter, no details)
-    let estimatedHeight = 140;
-
-    const doc = new jsPDF({ unit: 'mm', format: [80, estimatedHeight] });
-    
-    let y = 10;
-    
-    // Header
-    if (config.logoUrl) {
-        doc.addImage(config.logoUrl, 'PNG', 25, y, 30, 30);
-        y += 35;
-    }
-
-    doc.setFontSize(14).setFont("helvetica", "bold");
-    doc.text(config.companyName.toUpperCase(), 40, y, { align: 'center' });
-    y += 5;
-    
-    doc.setFontSize(10).setFont("helvetica", "bold");
-    doc.text("TICKET DE VENTA", 40, y, { align: 'center' });
-    y += 5;
-    
-    doc.setFontSize(8).setFont("helvetica", "italic");
-    doc.text(`FECHA: ${new Date().toLocaleString()}`, 40, y, { align: 'center' });
-    y += 5;
-    doc.setDrawColor(0);
-    doc.setLineWidth(0.5);
-    doc.line(5, y, 75, y);
-    y += 5;
-
-    // Batch & Client Info
-    doc.setFontSize(9).setFont("helvetica", "bold");
-    doc.text(`LOTE:`, 5, y);
-    doc.setFont("helvetica", "normal");
-    doc.text(batchName.toUpperCase(), 20, y);
-    y += 5;
-    doc.setFont("helvetica", "bold");
-    doc.text(`CLIENTE:`, 5, y);
-    doc.setFont("helvetica", "normal");
-    doc.text(order.clientName.toUpperCase(), 22, y);
-    y += 6;
-
-    // General Weights Box
-    autoTable(doc, {
-        startY: y,
-        head: [[{ content: 'RESUMEN DE PESOS', colSpan: 2, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
-        body: [
-            ['Peso Bruto:', `${t.wF.toFixed(2)} kg`],
-            ['Tara Total:', `-${t.wE.toFixed(2)} kg`],
-            ['Mortalidad:', `-${t.wM.toFixed(2)} kg`],
-            ['PESO NETO:', `${t.net.toFixed(2)} kg`]
-        ],
-        theme: 'grid',
-        styles: { fontSize: 9, cellPadding: 2 },
-        columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: 35 },
-            1: { halign: 'right', cellWidth: 35 }
-        },
-        margin: { left: 5, right: 5 }
-    });
-    y = (doc as any).lastAutoTable.finalY + 8;
-
-    // Financials
-    if (order.pricePerKg > 0) {
-        doc.setFontSize(9).setFont("helvetica", "bold");
-        doc.text(`PRECIO X KG: S/. ${order.pricePerKg.toFixed(2)}`, 5, y);
-        y += 6;
-        
-        doc.setFillColor(15, 23, 42); // Slate 900
         doc.rect(5, y, 70, 15, 'F');
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(10).setFont("helvetica", "bold");
@@ -343,8 +281,30 @@ const Reports: React.FC = () => {
     }
 
     doc.setFontSize(8).setFont("helvetica", "italic");
-    doc.text("¡Gracias por su compra!", 40, y, { align: 'center' });
+    doc.text("¡Gracias por su preferencia!", 40, y, { align: 'center' });
+    
+    return y + 10;
+  };
 
+  const generateTicketPDF = (order: ClientOrder, preview: boolean = false) => {
+    // Pass 1: Calculate height
+    const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 1000] });
+    const finalY = renderTicketContent(dummyDoc, order, false);
+    
+    // Pass 2: Render with exact height
+    const doc = new jsPDF({ unit: 'mm', format: [80, finalY] });
+    renderTicketContent(doc, order, false);
+    handlePDFOutput(doc, `Ticket_Detallado_${order.id}.pdf`, preview);
+  };
+
+  const generateSalesTicketPDF = (order: ClientOrder, preview: boolean = false) => {
+    // Pass 1: Calculate height
+    const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 1000] });
+    const finalY = renderTicketContent(dummyDoc, order, true);
+    
+    // Pass 2: Render with exact height
+    const doc = new jsPDF({ unit: 'mm', format: [80, finalY] });
+    renderTicketContent(doc, order, true);
     handlePDFOutput(doc, `Venta_${order.clientName}_${order.id.slice(-6)}.pdf`, preview);
   };
 
@@ -480,6 +440,118 @@ Gracias por su preferencia!`;
     window.open(url, '_blank');
   };
 
+  const generateBatchReportPDF = (batchName: string, stats: any) => {
+    const doc = new jsPDF('landscape');
+    
+    // Header Background
+    doc.setFillColor(15, 23, 42); // Slate 900
+    doc.rect(0, 0, 297, 40, 'F');
+    
+    // Header Text
+    if (config.logoUrl) {
+        doc.addImage(config.logoUrl, 'PNG', 14, 8, 24, 24);
+    }
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(20).setFont("helvetica", "bold");
+    doc.text(config.companyName.toUpperCase(), 148.5, 18, { align: 'center' });
+    
+    doc.setFontSize(12).setFont("helvetica", "normal");
+    doc.text("ESTADO DE CUENTA GENERAL DEL LOTE", 148.5, 28, { align: 'center' });
+    
+    doc.setTextColor(0, 0, 0);
+    
+    let y = 50;
+    
+    // Batch Info
+    doc.setFontSize(10).setFont("helvetica", "bold");
+    doc.text(`LOTE:`, 14, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(batchName.toUpperCase(), 30, y);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text(`FECHA DE REPORTE:`, 220, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(new Date().toLocaleString(), 260, y);
+    
+    y += 10;
+
+    // Table Data Preparation
+    const tableData = stats.batchOrders.map((order: ClientOrder) => {
+        const t = getTotals(order);
+        const price = order.pricePerKg || 0;
+        const totalAmount = t.net * price;
+        const totalPaid = order.payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
+        const balance = totalAmount - totalPaid;
+
+        return [
+            order.clientName.toUpperCase(),
+            t.qF.toString(),
+            t.bF.toString(),
+            t.wF.toFixed(2),
+            t.wE.toFixed(2),
+            t.wM.toFixed(2),
+            t.net.toFixed(2),
+            `S/ ${price.toFixed(2)}`,
+            `S/ ${totalAmount.toFixed(2)}`,
+            `S/ ${totalPaid.toFixed(2)}`,
+            `S/ ${balance.toFixed(2)}`
+        ];
+    });
+
+    // Calculate totals for footer
+    let sumNet = 0, sumAmount = 0, sumPaid = 0, sumBalance = 0;
+    stats.batchOrders.forEach((order: ClientOrder) => {
+        const t = getTotals(order);
+        const price = order.pricePerKg || 0;
+        const totalAmount = t.net * price;
+        const totalPaid = order.payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
+        sumNet += t.net;
+        sumAmount += totalAmount;
+        sumPaid += totalPaid;
+        sumBalance += totalAmount - totalPaid;
+    });
+
+    tableData.push([
+        { content: 'TOTALES', styles: { fontStyle: 'bold', halign: 'right' } },
+        '-',
+        '-',
+        stats.totalFull.toFixed(2),
+        stats.totalEmpty.toFixed(2),
+        stats.totalMort.toFixed(2),
+        { content: sumNet.toFixed(2), styles: { fontStyle: 'bold' } },
+        '-',
+        { content: `S/ ${sumAmount.toFixed(2)}`, styles: { fontStyle: 'bold' } },
+        { content: `S/ ${sumPaid.toFixed(2)}`, styles: { fontStyle: 'bold' } },
+        { content: `S/ ${sumBalance.toFixed(2)}`, styles: { fontStyle: 'bold' } }
+    ]);
+
+    autoTable(doc, {
+        startY: y,
+        head: [['CLIENTE', 'JABAS', 'POLLOS', 'BRUTO (KG)', 'TARA (KG)', 'MERMA (KG)', 'NETO (KG)', 'PRECIO/KG', 'MONTO TOTAL', 'ABONADO', 'SALDO']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold', fontSize: 8, halign: 'center' },
+        styles: { fontSize: 8, cellPadding: 3, halign: 'center' },
+        columnStyles: {
+            0: { halign: 'left', fontStyle: 'bold', cellWidth: 40 },
+            6: { fontStyle: 'bold', textColor: [21, 128, 61] }, // Neto
+            8: { fontStyle: 'bold' }, // Monto Total
+            10: { fontStyle: 'bold', textColor: [185, 28, 28] } // Saldo
+        }
+    });
+
+    // Footer
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for(let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8).setTextColor(150);
+        doc.text(`Generado por AviControl Pro - Página ${i} de ${pageCount}`, 148.5, 200, { align: 'center' });
+    }
+
+    handlePDFOutput(doc, `Reporte_Lote_${batchName.replace(/\s+/g, '_')}.pdf`, false);
+  };
+
   const getStats = (filterFn: (o: ClientOrder) => boolean) => {
     const filteredOrders = orders.filter(filterFn);
     let totalFull = 0, totalEmpty = 0, totalNet = 0, totalMort = 0;
@@ -538,6 +610,12 @@ Gracias por su preferencia!`;
             <div className="bg-slate-50 border-t border-slate-100 p-6 animate-fade-in">
                 <div className="flex justify-between items-center mb-6">
                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Clientes en este grupo</h4>
+                    <button 
+                        onClick={() => generateBatchReportPDF(title, stats)}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-900 text-white rounded-xl hover:bg-blue-800 transition-colors shadow-sm text-xs font-bold uppercase tracking-widest"
+                    >
+                        <Download size={14} /> Reporte General
+                    </button>
                 </div>
 
                 <div className="space-y-4">
