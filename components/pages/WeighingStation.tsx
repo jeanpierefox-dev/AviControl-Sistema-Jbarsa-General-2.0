@@ -6,7 +6,7 @@ import { getOrders, saveOrder, getConfig, deleteOrder, getBatches } from '../../
 import { 
   ArrowLeft, Save, X, Eye, Package, PackageOpen, 
   User, Trash2, Box, UserPlus, Bird, Printer, Receipt, 
-  Activity, Download, List, ChevronRight, Scale, ChevronDown
+  Activity, Download, List, ChevronRight, Scale, ChevronDown, FileText
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -302,10 +302,16 @@ const WeighingStation: React.FC = () => {
             
             autoTable(doc, {
                 startY: y,
-                head: [[{ content: headerText, colSpan: 3, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
-                body: chunkArray(records.map(r => r.weight.toFixed(2)), 3),
+                head: [[{ content: headerText, colSpan: 4, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
+                body: chunkArray(records.flatMap(r => {
+                    let suffix = '';
+                    if (r.type === 'FULL') suffix = `${r.quantity}j, ${r.birds}p`;
+                    else if (r.type === 'EMPTY') suffix = `${r.quantity}j`;
+                    else if (r.type === 'MORTALITY') suffix = `${r.quantity}p`;
+                    return [r.weight.toFixed(2), suffix];
+                }), 4),
                 theme: 'grid',
-                styles: { fontSize: 8, cellPadding: 1, halign: 'center' },
+                styles: { fontSize: 7, cellPadding: 1, halign: 'center', minCellHeight: 6 },
                 margin: { left: 5, right: 5 },
                 tableWidth: 70
             });
@@ -556,10 +562,16 @@ const WeighingStation: React.FC = () => {
 
         autoTable(doc, {
             startY: y,
-            head: [[{ content: headerText, colSpan: 6, styles: { halign: 'left', fillColor: [241, 245, 249], textColor: 0, fontStyle: 'bold' } }]],
-            body: chunkArray(records.map(r => r.weight.toFixed(2)), 6),
+            head: [[{ content: headerText, colSpan: 8, styles: { halign: 'left', fillColor: [241, 245, 249], textColor: 0, fontStyle: 'bold' } }]],
+            body: chunkArray(records.flatMap(r => {
+                let suffix = '';
+                if (r.type === 'FULL') suffix = `${r.quantity}j, ${r.birds}p`;
+                else if (r.type === 'EMPTY') suffix = `${r.quantity}j`;
+                else if (r.type === 'MORTALITY') suffix = `${r.quantity}p`;
+                return [r.weight.toFixed(2), suffix];
+            }), 8),
             theme: 'grid',
-            styles: { fontSize: 9, halign: 'center', cellPadding: 2 },
+            styles: { fontSize: 8, halign: 'center', cellPadding: 2, minCellHeight: 8 },
             margin: { left: 14, right: 14 }
         });
     };
@@ -577,6 +589,132 @@ const WeighingStation: React.FC = () => {
     }
 
     handlePDFOutput(doc, `Reporte_A4_${order.clientName}_${order.id}.pdf`);
+  };
+
+  const generateBatchReportPDF = () => {
+    const batchOrders = orders;
+    let totalFull = 0, totalEmpty = 0, totalNet = 0, totalMort = 0;
+    
+    batchOrders.forEach(o => {
+      const stats = getTotals(o);
+      totalFull += stats.wF;
+      totalEmpty += stats.wE;
+      totalMort += stats.wM;
+      totalNet += stats.net;
+    });
+
+    const doc = new jsPDF('landscape');
+    
+    // Header Background
+    doc.setFillColor(15, 23, 42); // Slate 900
+    doc.rect(0, 0, 297, 40, 'F');
+    
+    // Header Text
+    if (config.logoUrl) {
+        doc.addImage(config.logoUrl, 'PNG', 14, 8, 24, 24);
+    }
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(20).setFont("helvetica", "bold");
+    doc.text(config.companyName.toUpperCase(), 148.5, 18, { align: 'center' });
+    
+    doc.setFontSize(12).setFont("helvetica", "normal");
+    doc.text("ESTADO DE CUENTA GENERAL DEL LOTE", 148.5, 28, { align: 'center' });
+    
+    doc.setTextColor(0, 0, 0);
+    
+    let y = 50;
+    
+    // Batch Info
+    const batch = getBatches().find(b => b.id === batchId);
+    const batchName = batch ? batch.name : 'Venta Directa';
+
+    doc.setFontSize(10).setFont("helvetica", "bold");
+    doc.text(`LOTE:`, 14, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(batchName.toUpperCase(), 30, y);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text(`FECHA DE REPORTE:`, 220, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(new Date().toLocaleString(), 260, y);
+    
+    y += 10;
+
+    // Table Data Preparation
+    const tableData = batchOrders.map((order: ClientOrder) => {
+        const t = getTotals(order);
+        const price = order.pricePerKg || 0;
+        const totalAmount = t.net * price;
+        const totalPaid = order.payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
+        const balance = totalAmount - totalPaid;
+
+        return [
+            order.clientName.toUpperCase(),
+            t.qF.toString(),
+            t.bF.toString(),
+            t.wF.toFixed(2),
+            t.wE.toFixed(2),
+            t.wM.toFixed(2),
+            t.net.toFixed(2),
+            `S/ ${price.toFixed(2)}`,
+            `S/ ${totalAmount.toFixed(2)}`,
+            `S/ ${totalPaid.toFixed(2)}`,
+            `S/ ${balance.toFixed(2)}`
+        ];
+    });
+
+    // Calculate totals for footer
+    let sumNet = 0, sumAmount = 0, sumPaid = 0, sumBalance = 0;
+    batchOrders.forEach((order: ClientOrder) => {
+        const t = getTotals(order);
+        const price = order.pricePerKg || 0;
+        const totalAmount = t.net * price;
+        const totalPaid = order.payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
+        sumNet += t.net;
+        sumAmount += totalAmount;
+        sumPaid += totalPaid;
+        sumBalance += totalAmount - totalPaid;
+    });
+
+    tableData.push([
+        { content: 'TOTALES', styles: { fontStyle: 'bold', halign: 'right' } },
+        '-',
+        '-',
+        totalFull.toFixed(2),
+        totalEmpty.toFixed(2),
+        totalMort.toFixed(2),
+        { content: sumNet.toFixed(2), styles: { fontStyle: 'bold' } },
+        '-',
+        { content: `S/ ${sumAmount.toFixed(2)}`, styles: { fontStyle: 'bold' } },
+        { content: `S/ ${sumPaid.toFixed(2)}`, styles: { fontStyle: 'bold' } },
+        { content: `S/ ${sumBalance.toFixed(2)}`, styles: { fontStyle: 'bold' } }
+    ]);
+
+    autoTable(doc, {
+        startY: y,
+        head: [['CLIENTE', 'JABAS', 'POLLOS', 'BRUTO (KG)', 'TARA (KG)', 'MERMA (KG)', 'NETO (KG)', 'PRECIO/KG', 'MONTO TOTAL', 'ABONADO', 'SALDO']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold', fontSize: 8, halign: 'center' },
+        styles: { fontSize: 8, cellPadding: 3, halign: 'center' },
+        columnStyles: {
+            0: { halign: 'left', fontStyle: 'bold', cellWidth: 40 },
+            6: { fontStyle: 'bold', textColor: [21, 128, 61] }, // Neto
+            8: { fontStyle: 'bold' }, // Monto Total
+            10: { fontStyle: 'bold', textColor: [185, 28, 28] } // Saldo
+        }
+    });
+
+    // Footer
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for(let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8).setTextColor(150);
+        doc.text(`Generado por AviControl Pro - Página ${i} de ${pageCount}`, 148.5, 200, { align: 'center' });
+    }
+
+    handlePDFOutput(doc, `Reporte_Lote_${batchName.replace(/\s+/g, '_')}.pdf`);
   };
 
   const handlePayment = () => {
@@ -608,9 +746,14 @@ const WeighingStation: React.FC = () => {
                   <Activity size={12} className="text-blue-600"/> Modo: {mode}
               </p>
             </div>
-            <button onClick={() => handleOpenClientModal()} className="bg-blue-950 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-blue-900 transition-all flex items-center gap-3 active:scale-95">
-              <UserPlus size={18} /> Registrar Nuevo Cliente
-            </button>
+            <div className="flex gap-3">
+              <button onClick={() => generateBatchReportPDF()} className="bg-slate-100 text-slate-700 px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-sm hover:bg-slate-200 transition-all flex items-center gap-3 active:scale-95 border border-slate-200">
+                <FileText size={18} /> Reporte General
+              </button>
+              <button onClick={() => handleOpenClientModal()} className="bg-blue-950 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-blue-900 transition-all flex items-center gap-3 active:scale-95">
+                <UserPlus size={18} /> Registrar Nuevo Cliente
+              </button>
+            </div>
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

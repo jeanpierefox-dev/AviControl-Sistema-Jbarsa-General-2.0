@@ -206,10 +206,16 @@ const Reports: React.FC = () => {
             
             autoTable(doc, {
                 startY: y,
-                head: [[{ content: headerText, colSpan: 3, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
-                body: chunkArray(records.map(r => r.weight.toFixed(2)), 3),
+                head: [[{ content: headerText, colSpan: 4, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
+                body: chunkArray(records.flatMap(r => {
+                    let suffix = '';
+                    if (r.type === 'FULL') suffix = `${r.quantity}j, ${r.birds}p`;
+                    else if (r.type === 'EMPTY') suffix = `${r.quantity}j`;
+                    else if (r.type === 'MORTALITY') suffix = `${r.quantity}p`;
+                    return [r.weight.toFixed(2), suffix];
+                }), 4),
                 theme: 'grid',
-                styles: { fontSize: 8, cellPadding: 1, halign: 'center' },
+                styles: { fontSize: 7, cellPadding: 1, halign: 'center', minCellHeight: 6 },
                 margin: { left: 5, right: 5 },
                 tableWidth: 70
             });
@@ -396,10 +402,16 @@ const Reports: React.FC = () => {
 
         autoTable(doc, {
             startY: y,
-            head: [[{ content: headerText, colSpan: 6, styles: { halign: 'left', fillColor: [241, 245, 249], textColor: 0, fontStyle: 'bold' } }]],
-            body: chunkArray(records.map(r => r.weight.toFixed(2)), 6),
+            head: [[{ content: headerText, colSpan: 8, styles: { halign: 'left', fillColor: [241, 245, 249], textColor: 0, fontStyle: 'bold' } }]],
+            body: chunkArray(records.flatMap(r => {
+                let suffix = '';
+                if (r.type === 'FULL') suffix = `${r.quantity}j, ${r.birds}p`;
+                else if (r.type === 'EMPTY') suffix = `${r.quantity}j`;
+                else if (r.type === 'MORTALITY') suffix = `${r.quantity}p`;
+                return [r.weight.toFixed(2), suffix];
+            }), 8),
             theme: 'grid',
-            styles: { fontSize: 9, halign: 'center', cellPadding: 2 },
+            styles: { fontSize: 8, halign: 'center', cellPadding: 2, minCellHeight: 8 },
             margin: { left: 14, right: 14 }
         });
     };
@@ -672,37 +684,43 @@ Gracias por su preferencia!`;
                                             {/* Full Crates */}
                                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                                 <h5 className="text-[10px] font-black text-blue-800 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">Jabas Llenas</h5>
-                                                <div className="max-h-40 overflow-y-auto space-y-1">
-                                                    {order.records.filter(r => r.type === 'FULL').map((r, i) => (
-                                                        <div key={r.id} className="flex justify-between text-xs border-b border-slate-50 pb-1">
-                                                            <span className="text-slate-400">#{order.records.filter(rt => rt.type === 'FULL').length - i}</span>
-                                                            <span className="font-mono font-bold text-slate-700">{r.weight.toFixed(1)} kg</span>
-                                                        </div>
-                                                    ))}
+                                                <div className="max-h-48 overflow-y-auto pr-1">
+                                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                                                        {order.records.filter(r => r.type === 'FULL').map((r, i) => (
+                                                            <div key={r.id} className="bg-blue-50 border border-blue-100 p-2 rounded-lg text-center flex flex-col justify-center">
+                                                                <span className="text-[9px] font-black text-blue-400 uppercase">#{order.records.filter(rt => rt.type === 'FULL').length - i}</span>
+                                                                <span className="font-digital font-bold text-blue-900 text-sm">{r.weight.toFixed(1)}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             </div>
                                             {/* Empty Crates */}
                                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                                 <h5 className="text-[10px] font-black text-slate-700 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">Jabas Vacías</h5>
-                                                <div className="max-h-40 overflow-y-auto space-y-1">
-                                                    {order.records.filter(r => r.type === 'EMPTY').map((r, i) => (
-                                                        <div key={r.id} className="flex justify-between text-xs border-b border-slate-50 pb-1">
-                                                            <span className="text-slate-400">#{order.records.filter(rt => rt.type === 'EMPTY').length - i}</span>
-                                                            <span className="font-mono font-bold text-slate-700">{r.weight.toFixed(1)} kg</span>
-                                                        </div>
-                                                    ))}
+                                                <div className="max-h-48 overflow-y-auto pr-1">
+                                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                                                        {order.records.filter(r => r.type === 'EMPTY').map((r, i) => (
+                                                            <div key={r.id} className="bg-orange-50 border border-orange-100 p-2 rounded-lg text-center flex flex-col justify-center">
+                                                                <span className="text-[9px] font-black text-orange-400 uppercase">#{order.records.filter(rt => rt.type === 'EMPTY').length - i}</span>
+                                                                <span className="font-digital font-bold text-orange-900 text-sm">{r.weight.toFixed(1)}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             </div>
                                             {/* Mortality */}
                                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                                 <h5 className="text-[10px] font-black text-red-800 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">Mortalidad</h5>
-                                                <div className="max-h-40 overflow-y-auto space-y-1">
-                                                    {order.records.filter(r => r.type === 'MORTALITY').map((r, i) => (
-                                                        <div key={r.id} className="flex justify-between text-xs border-b border-slate-50 pb-1">
-                                                            <span className="text-slate-400">#{order.records.filter(rt => rt.type === 'MORTALITY').length - i}</span>
-                                                            <span className="font-mono font-bold text-slate-700">{r.weight.toFixed(1)} kg</span>
-                                                        </div>
-                                                    ))}
+                                                <div className="max-h-48 overflow-y-auto pr-1">
+                                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                                                        {order.records.filter(r => r.type === 'MORTALITY').map((r, i) => (
+                                                            <div key={r.id} className="bg-red-50 border border-red-100 p-2 rounded-lg text-center flex flex-col justify-center">
+                                                                <span className="text-[9px] font-black text-red-400 uppercase">#{order.records.filter(rt => rt.type === 'MORTALITY').length - i}</span>
+                                                                <span className="font-digital font-bold text-red-900 text-sm">{r.weight.toFixed(1)}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

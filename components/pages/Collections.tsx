@@ -150,66 +150,71 @@ const Collections: React.FC = () => {
           </div>
       </div>
 
-      <div className="bg-white rounded-[2rem] shadow-sm overflow-hidden border border-slate-200">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[1000px]">
-            <thead className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.2em] border-b border-slate-800">
-              <tr>
-                <th className="p-6">Razón Social / Cliente</th>
-                <th className="p-6 text-right">Importe Total</th>
-                <th className="p-6 text-right">Total Abonado</th>
-                <th className="p-6 text-right">Saldo Pendiente</th>
-                <th className="p-6 text-center">Estado Pago</th>
-                <th className="p-6 text-center">Gestión</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredOrders.map(order => {
-                const { totalDue, totalPaid, balance } = calculateBalance(order);
-                const isPaid = balance <= 0.1 || order.paymentStatus === 'PAID';
-                return (
-                  <tr key={order.id} className="hover:bg-blue-50/30 transition-colors group">
-                    <td className="p-6">
-                        <p className="font-black text-slate-900 uppercase text-sm tracking-tight">{order.clientName}</p>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">{order.weighingMode === WeighingType.BATCH ? 'Venta por Lote' : 'Venta Directa'}</p>
-                    </td>
-                    <td className="p-6 text-right font-digital font-bold text-slate-600 text-base whitespace-nowrap">S/. {totalDue.toFixed(2)}</td>
-                    <td className="p-6 text-right font-digital font-bold text-emerald-600 text-base whitespace-nowrap">S/. {totalPaid.toFixed(2)}</td>
-                    <td className="p-6 text-right font-digital font-black text-red-600 text-lg whitespace-nowrap">S/. {balance.toFixed(2)}</td>
-                    <td className="p-6 text-center">
-                      <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest inline-flex items-center gap-1.5 ${isPaid ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
-                        <div className={`w-1.5 h-1.5 rounded-full ${isPaid ? 'bg-emerald-600' : 'bg-red-600'}`}></div>
-                        {isPaid ? 'Totalmente Pagado' : 'Deuda Pendiente'}
-                      </span>
-                    </td>
-                    <td className="p-6 text-center">
-                        <div className="flex justify-center gap-2">
-                            <button onClick={() => setViewHistoryOrder(order)} className="p-3 bg-slate-100 text-slate-600 rounded-2xl hover:bg-slate-200 hover:text-blue-600 transition-all shadow-sm" title="Ver Historial de Pagos">
-                                <History size={18}/>
-                            </button>
-                            {!isPaid && (
-                                <button onClick={() => { setSelectedOrder(order); setPayAmount(balance.toFixed(2)); }} className="bg-emerald-600 text-white px-6 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-500 shadow-lg active:scale-95 transition-all flex items-center gap-2">
-                                    <DollarSign size={14}/> Cobrar
-                                </button>
-                            )}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {filteredOrders.map(order => {
+          const { totalDue, totalPaid, balance } = calculateBalance(order);
+          const isPaid = balance <= 0.1 || order.paymentStatus === 'PAID';
+          return (
+            <div key={order.id} className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden hover:shadow-lg hover:border-blue-300 transition-all duration-300 flex flex-col group">
+                <div className="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50/50">
+                    <div>
+                        <h3 className="font-black text-slate-900 uppercase text-lg tracking-tight">{order.clientName}</h3>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-1 tracking-widest">{order.weighingMode === WeighingType.BATCH ? 'Venta por Lote' : 'Venta Directa'}</p>
+                    </div>
+                    <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest inline-flex items-center gap-1.5 shadow-sm ${isPaid ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                        <div className={`w-1.5 h-1.5 rounded-full ${isPaid ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'}`}></div>
+                        {isPaid ? 'Pagado' : 'Pendiente'}
+                    </span>
+                </div>
+                
+                <div className="p-6 flex-1">
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Importe Total</span>
+                            <span className="font-digital font-bold text-slate-700 text-xl">S/. {totalDue.toFixed(2)}</span>
                         </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filteredOrders.length === 0 && (
-                  <tr>
-                      <td colSpan={6} className="p-24 text-center">
-                          <div className="flex flex-col items-center">
-                              <FileText size={56} className="text-slate-200 mb-4"/>
-                              <p className="text-slate-400 font-black uppercase tracking-[0.2em] text-xs">No se encontraron movimientos financieros</p>
-                          </div>
-                      </td>
-                  </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Abonado</span>
+                            <span className="font-digital font-bold text-emerald-600 text-xl">S/. {totalPaid.toFixed(2)}</span>
+                        </div>
+                        <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
+                            <span className="text-xs font-black text-slate-900 uppercase tracking-widest">Saldo Actual</span>
+                            <span className={`font-digital font-black text-3xl ${isPaid ? 'text-emerald-600' : 'text-red-600'}`}>S/. {balance.toFixed(2)}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="p-4 bg-slate-900 flex gap-3">
+                    <button 
+                        onClick={() => setViewHistoryOrder(order)} 
+                        className="flex-1 py-3.5 bg-slate-800 text-white rounded-xl hover:bg-slate-700 transition-all text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 border border-slate-700"
+                    >
+                        <History size={16} className="text-blue-400"/> Historial
+                    </button>
+                    {!isPaid && (
+                        <button 
+                            onClick={() => { setSelectedOrder(order); setPayAmount(balance.toFixed(2)); }} 
+                            className="flex-1 py-3.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 transition-all text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20 border border-emerald-500"
+                        >
+                            <DollarSign size={16}/> Cobrar en S/.
+                        </button>
+                    )}
+                </div>
+            </div>
+          );
+        })}
+        
+        {filteredOrders.length === 0 && (
+            <div className="col-span-full bg-white rounded-[2rem] border border-slate-200 p-24 text-center shadow-sm">
+                <div className="flex flex-col items-center">
+                    <div className="bg-slate-50 p-6 rounded-full mb-4">
+                        <FileText size={48} className="text-slate-300"/>
+                    </div>
+                    <p className="text-slate-400 font-black uppercase tracking-[0.2em] text-sm">No se encontraron movimientos financieros</p>
+                    <p className="text-slate-400 text-xs mt-2">Intenta cambiar los filtros o el término de búsqueda</p>
+                </div>
+            </div>
+        )}
       </div>
 
       {/* MODAL DE HISTORIAL DE PAGOS */}

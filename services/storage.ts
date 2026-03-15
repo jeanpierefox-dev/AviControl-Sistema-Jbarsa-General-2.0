@@ -42,10 +42,10 @@ export const getConfig = (): AppConfig => {
     defaultFullCrateBatch: 5,
     defaultEmptyCrateBatch: 10,
     firebaseConfig: {
-      apiKey: "AIzaSyBiy7mYT9Jxnm96jaRP8-i57rxnIti-S_4",
-      projectId: "avicontrol-40517",
-      databaseURL: "https://avicontrol-40517-default-rtdb.firebaseio.com",
-      authDomain: "avicontrol-40517.firebaseapp.com"
+      apiKey: "",
+      projectId: "",
+      databaseURL: "",
+      authDomain: ""
     }
   });
 };
