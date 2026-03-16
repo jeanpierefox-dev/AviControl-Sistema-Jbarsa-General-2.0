@@ -6,7 +6,7 @@ import { getOrders, saveOrder, getConfig, deleteOrder, getBatches } from '../../
 import { 
   ArrowLeft, Save, X, Eye, Package, PackageOpen, 
   User, Trash2, Box, UserPlus, Bird, Printer, Receipt, 
-  Activity, Download, List, ChevronRight, Scale, ChevronDown, FileText
+  Activity, Download, List, ChevronRight, Scale, ChevronDown, FileText, Edit2
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -22,6 +22,7 @@ const WeighingStation: React.FC = () => {
   const [orders, setOrders] = useState<ClientOrder[]>([]);
   
   const [showClientModal, setShowClientModal] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<ClientOrder | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   
@@ -77,6 +78,20 @@ const WeighingStation: React.FC = () => {
       if (activeTab === 'EMPTY') { setQtyInput('10'); setBirdsPerCrate('0'); }
       if (activeTab === 'MORTALITY') { setQtyInput('1'); setBirdsPerCrate('1'); }
     }
+  };
+
+  const handleDeleteClient = (order: ClientOrder) => {
+    setOrderToDelete(order);
+  };
+
+  const confirmDeleteClient = () => {
+    if (!orderToDelete) return;
+    deleteOrder(orderToDelete.id);
+    if (activeOrder?.id === orderToDelete.id) {
+      setActiveOrder(null);
+    }
+    loadOrders();
+    setOrderToDelete(null);
   };
 
   const handleOpenClientModal = (order?: ClientOrder) => {
@@ -776,9 +791,21 @@ const WeighingStation: React.FC = () => {
                                </p>
                            </div>
                        </div>
-                       <span className={`text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider ${o.status === 'CLOSED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                          {o.status === 'CLOSED' ? 'Cerrado' : 'Abierto'}
-                       </span>
+                       <div className="flex flex-col items-end gap-2">
+                           <span className={`text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider ${o.status === 'CLOSED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                              {o.status === 'CLOSED' ? 'Cerrado' : 'Abierto'}
+                           </span>
+                           <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                               <button onClick={() => handleOpenClientModal(o)} className="p-1.5 bg-slate-800 text-blue-400 rounded hover:bg-slate-700 transition-colors" title="Editar Cliente">
+                                   <Edit2 size={14} />
+                               </button>
+                               {o.records.length === 0 && (
+                                   <button onClick={() => handleDeleteClient(o)} className="p-1.5 bg-slate-800 text-red-400 rounded hover:bg-slate-700 transition-colors" title="Eliminar Cliente">
+                                       <Trash2 size={14} />
+                                   </button>
+                               )}
+                           </div>
+                       </div>
                     </div>
 
                     <div className="p-5 flex-1 flex flex-col justify-between cursor-pointer" onClick={() => setActiveOrder(o)}>
@@ -1137,6 +1164,37 @@ const WeighingStation: React.FC = () => {
                   <Printer size={18} /> Confirmar e Imprimir Ticket Venta
               </button>
               <button onClick={() => setShowPaymentModal(false)} className="w-full py-4 text-slate-500 font-black text-[11px] uppercase tracking-widest hover:text-slate-800 hover:bg-slate-50 rounded-xl transition-colors">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {orderToDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm border border-gray-100 relative">
+            <div className="flex justify-center mb-6">
+                <div className="bg-red-100 p-4 rounded-full text-red-600">
+                    <Trash2 size={32} />
+                </div>
+            </div>
+            <h3 className="text-2xl font-black mb-2 text-slate-900 text-center">Eliminar Cliente</h3>
+            <p className="text-slate-500 text-center text-sm font-medium mb-8">
+                ¿Estás seguro que deseas eliminar a <span className="font-bold text-slate-800">{orderToDelete.clientName}</span>? Esta acción no se puede deshacer.
+            </p>
+            
+            <div className="flex gap-3">
+                <button 
+                    onClick={() => setOrderToDelete(null)} 
+                    className="flex-1 py-4 text-slate-500 font-black text-[11px] uppercase tracking-widest hover:text-slate-800 hover:bg-slate-50 rounded-xl transition-colors border border-slate-200"
+                >
+                    Cancelar
+                </button>
+                <button 
+                    onClick={confirmDeleteClient} 
+                    className="flex-1 bg-red-600 text-white py-4 rounded-xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-red-200 hover:bg-red-500 active:scale-95 transition-all"
+                >
+                    Eliminar
+                </button>
             </div>
           </div>
         </div>
