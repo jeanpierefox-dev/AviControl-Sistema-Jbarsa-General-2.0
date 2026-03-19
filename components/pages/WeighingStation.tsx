@@ -756,7 +756,7 @@ const WeighingStation: React.FC = () => {
         <div className="p-4 max-w-7xl mx-auto animate-fade-in text-left">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-slate-200 pb-6">
             <div>
-              <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Estación de Pesaje</h2>
+              <h2 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tighter">Estación de Pesaje</h2>
               <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1 flex items-center gap-2">
                   <Activity size={12} className="text-blue-600"/> Modo: {mode}
               </p>
@@ -795,15 +795,21 @@ const WeighingStation: React.FC = () => {
                            <span className={`text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider ${o.status === 'CLOSED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
                               {o.status === 'CLOSED' ? 'Cerrado' : 'Abierto'}
                            </span>
-                           <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                               <button onClick={() => handleOpenClientModal(o)} className="p-1.5 bg-slate-800 text-blue-400 rounded hover:bg-slate-700 transition-colors" title="Editar Cliente">
+                           <div className="flex gap-1">
+                               <button 
+                                   onClick={(e) => { e.stopPropagation(); handleOpenClientModal(o); }} 
+                                   className="p-1.5 bg-slate-800 text-blue-400 rounded hover:bg-slate-700 transition-colors" 
+                                   title="Editar Cliente"
+                               >
                                    <Edit2 size={14} />
                                </button>
-                               {o.records.length === 0 && (
-                                   <button onClick={() => handleDeleteClient(o)} className="p-1.5 bg-slate-800 text-red-400 rounded hover:bg-slate-700 transition-colors" title="Eliminar Cliente">
-                                       <Trash2 size={14} />
-                                   </button>
-                               )}
+                               <button 
+                                   onClick={(e) => { e.stopPropagation(); handleDeleteClient(o); }} 
+                                   className="p-1.5 bg-slate-800 text-red-400 rounded hover:bg-slate-700 transition-colors" 
+                                   title="Eliminar Cliente"
+                               >
+                                   <Trash2 size={14} />
+                               </button>
                            </div>
                        </div>
                     </div>
@@ -1056,7 +1062,7 @@ const WeighingStation: React.FC = () => {
                     value={weightInput} 
                     onChange={e => setWeightInput(e.target.value)} 
                     onKeyDown={e => e.key === 'Enter' && addWeight()} 
-                    className="w-full text-center bg-transparent font-black text-3xl outline-none" 
+                    className="w-full text-center bg-transparent font-black text-2xl md:text-3xl outline-none" 
                     placeholder="0.00" 
                     step="0.01"
                   />
@@ -1080,7 +1086,7 @@ const WeighingStation: React.FC = () => {
                 <div key={r.id} className="flex justify-between items-center bg-white p-5 rounded-2xl border border-slate-100 shadow-sm transition-all group hover:border-blue-200">
                   <div className="flex items-center gap-4">
                     <span className="text-[10px] font-black text-slate-300">#{activeOrder.records.filter(rt => rt.type === type).length - idx}</span>
-                    <p className="font-digital font-black text-slate-800 text-xl">{r.weight.toFixed(2)}</p>
+                    <p className="font-digital font-black text-slate-800 text-lg md:text-xl">{r.weight.toFixed(2)}</p>
                   </div>
                   {!isLocked && <button onClick={() => deleteRecord(r.id)} className="p-2 text-slate-300 hover:text-red-600 transition-all"><Trash2 size={16}/></button>}
                 </div>
@@ -1129,13 +1135,13 @@ const WeighingStation: React.FC = () => {
                         </div>
                         <div className="bg-emerald-50 p-4 rounded-xl shadow-sm border border-emerald-200 text-center">
                             <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Peso Neto</p>
-                            <p className="font-black text-emerald-700 text-2xl">{totals.net.toFixed(1)} kg</p>
+                            <p className="font-black text-emerald-700 text-xl md:text-2xl">{totals.net.toFixed(1)} kg</p>
                         </div>
                     </div>
                     
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
                         <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">Monto Total a Pagar</p>
-                        <p className="text-5xl font-digital font-black text-slate-900">S/. {(totals.net * (parseFloat(pricePerKg.toString()) || 0)).toFixed(2)}</p>
+                        <p className="text-4xl md:text-5xl font-digital font-black text-slate-900">S/. {(totals.net * (parseFloat(pricePerKg.toString()) || 0)).toFixed(2)}</p>
                     </div>
                 </div>
                 
@@ -1156,12 +1162,12 @@ const WeighingStation: React.FC = () => {
 
                 <div>
                     <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block mb-2 ml-1">Precio por Kilogramo (S/.)</label>
-                    <input type="number" value={pricePerKg} onChange={e => setPricePerKg(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-6 py-4 font-black text-2xl outline-none focus:border-emerald-500 focus:bg-white transition-all text-center shadow-inner" placeholder="0.00" step="0.01" autoFocus />
+                    <input type="number" value={pricePerKg} onChange={e => setPricePerKg(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-6 py-4 font-black text-xl md:text-2xl outline-none focus:border-emerald-500 focus:bg-white transition-all text-center shadow-inner" placeholder="0.00" step="0.01" autoFocus />
                 </div>
             </div>
             <div className="mt-8 flex flex-col gap-3">
-              <button onClick={handlePayment} className="w-full bg-emerald-600 text-white py-5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-200 hover:bg-emerald-500 active:scale-95 transition-all flex items-center justify-center gap-2">
-                  <Printer size={18} /> Confirmar e Imprimir Ticket Venta
+              <button onClick={handlePayment} className="w-full bg-emerald-600 text-white py-4 md:py-5 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-widest shadow-lg shadow-emerald-200 hover:bg-emerald-500 active:scale-95 transition-all flex items-center justify-center gap-2">
+                  <Printer size={16} className="md:w-[18px] md:h-[18px]" /> Confirmar Ticket Venta
               </button>
               <button onClick={() => setShowPaymentModal(false)} className="w-full py-4 text-slate-500 font-black text-[11px] uppercase tracking-widest hover:text-slate-800 hover:bg-slate-50 rounded-xl transition-colors">Cancelar</button>
             </div>
@@ -1270,27 +1276,27 @@ const WeighingStation: React.FC = () => {
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Jabas</p>
-                            <p className="text-2xl font-black text-slate-900">{totals.qF}</p>
+                            <p className="text-xl md:text-2xl font-black text-slate-900">{totals.qF}</p>
                         </div>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Pollos</p>
-                            <p className="text-2xl font-black text-blue-600">{totals.bF}</p>
+                            <p className="text-xl md:text-2xl font-black text-blue-600">{totals.bF}</p>
                         </div>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Peso Bruto</p>
-                            <p className="text-2xl font-black text-slate-900">{totals.wF.toFixed(2)}</p>
+                            <p className="text-xl md:text-2xl font-black text-slate-900">{totals.wF.toFixed(2)}</p>
                         </div>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Tara Total</p>
-                            <p className="text-2xl font-black text-orange-600">-{totals.wE.toFixed(2)}</p>
+                            <p className="text-xl md:text-2xl font-black text-orange-600">-{totals.wE.toFixed(2)}</p>
                         </div>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Merma</p>
-                            <p className="text-2xl font-black text-red-600">-{totals.wM.toFixed(2)}</p>
+                            <p className="text-xl md:text-2xl font-black text-red-600">-{totals.wM.toFixed(2)}</p>
                         </div>
                         <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
                             <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Peso Final</p>
-                            <p className="text-2xl font-black text-emerald-700">{totals.net.toFixed(2)}</p>
+                            <p className="text-xl md:text-2xl font-black text-emerald-700">{totals.net.toFixed(2)}</p>
                         </div>
                     </div>
 
@@ -1313,7 +1319,7 @@ const WeighingStation: React.FC = () => {
                                                 {!isLocked && (
                                                     <button 
                                                         onClick={() => deleteRecord(r.id)}
-                                                        className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 p-1"
+                                                        className="text-slate-300 hover:text-red-500 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1"
                                                         title="Eliminar"
                                                     >
                                                         <Trash2 size={12} />
@@ -1341,7 +1347,7 @@ const WeighingStation: React.FC = () => {
                                                 {!isLocked && (
                                                     <button 
                                                         onClick={() => deleteRecord(r.id)}
-                                                        className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 p-1"
+                                                        className="text-slate-300 hover:text-red-500 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1"
                                                         title="Eliminar"
                                                     >
                                                         <Trash2 size={12} />
@@ -1369,7 +1375,7 @@ const WeighingStation: React.FC = () => {
                                                 {!isLocked && (
                                                     <button 
                                                         onClick={() => deleteRecord(r.id)}
-                                                        className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 p-1"
+                                                        className="text-slate-300 hover:text-red-500 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1"
                                                         title="Eliminar"
                                                     >
                                                         <Trash2 size={12} />
@@ -1387,24 +1393,24 @@ const WeighingStation: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="mt-8 flex gap-4 justify-end border-t border-slate-100 pt-6">
+                    <div className="mt-8 flex flex-col md:flex-row gap-4 justify-end border-t border-slate-100 pt-6">
                         <button 
                             onClick={() => generateWeighingTicketPDF(activeOrder)}
-                            className="bg-white text-slate-900 border-2 border-slate-200 px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm active:scale-95"
+                            className="w-full md:w-auto bg-white text-slate-900 border-2 border-slate-200 px-4 md:px-6 py-3 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-widest flex justify-center items-center gap-2 hover:bg-slate-50 transition-all shadow-sm active:scale-95"
                         >
-                            <Printer size={18} /> Ticket Detalle Carga (80mm)
+                            <Printer size={16} className="md:w-[18px] md:h-[18px]" /> Ticket Carga
                         </button>
                         <button 
                             onClick={() => generateSalesTicketPDF(activeOrder)}
-                            className="bg-slate-900 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg active:scale-95"
+                            className="w-full md:w-auto bg-slate-900 text-white px-4 md:px-6 py-3 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-widest flex justify-center items-center gap-2 hover:bg-slate-800 transition-all shadow-lg active:scale-95"
                         >
-                            <Receipt size={18} /> Ticket Venta (80mm)
+                            <Receipt size={16} className="md:w-[18px] md:h-[18px]" /> Ticket Venta
                         </button>
                         <button 
                             onClick={() => generateDetailPDF(activeOrder)}
-                            className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-blue-500 transition-all shadow-lg shadow-blue-200 active:scale-95"
+                            className="w-full md:w-auto bg-blue-600 text-white px-4 md:px-6 py-3 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-widest flex justify-center items-center gap-2 hover:bg-blue-500 transition-all shadow-lg shadow-blue-200 active:scale-95"
                         >
-                            <Download size={18} /> Reporte Detallado (A4)
+                            <Download size={16} className="md:w-[18px] md:h-[18px]" /> Reporte A4
                         </button>
                     </div>
                 </div>
