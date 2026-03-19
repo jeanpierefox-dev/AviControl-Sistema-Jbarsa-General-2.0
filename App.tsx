@@ -30,9 +30,21 @@ const Container: React.FC<{ children: React.ReactNode; title?: string; showBack?
   
   useEffect(() => {
     const check = () => {
+        const config = getConfig();
         setIsCloudConnected(isFirebaseConfigured());
-        setAppName(getConfig().companyName || 'AVI CONTROL');
+        setAppName(config.companyName || 'AVI CONTROL');
+        
+        if (config.logoUrl) {
+           let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+           if (!link) {
+               link = document.createElement('link');
+               link.rel = 'icon';
+               document.head.appendChild(link);
+           }
+           link.href = config.logoUrl;
+        }
     };
+    check();
     const interval = setInterval(check, 5000);
     window.addEventListener('avi_data_config', check);
     return () => {

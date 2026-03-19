@@ -140,7 +140,19 @@ const WeighingStation: React.FC = () => {
 
     if (editingOrderId) {
       const existing = getOrders().find(o => o.id === editingOrderId);
-      if (existing) saveOrder({ ...existing, clientName: newClientName, targetCrates: target, birdsPerCrate: birds });
+      if (existing) {
+          const updatedRecords = existing.records.map(r => {
+              if (r.type === 'FULL') {
+                  return { ...r, birds: r.quantity * birds };
+              }
+              return r;
+          });
+          const updatedOrder = { ...existing, clientName: newClientName, targetCrates: target, birdsPerCrate: birds, records: updatedRecords };
+          saveOrder(updatedOrder);
+          if (activeOrder?.id === editingOrderId) {
+              setActiveOrder(updatedOrder);
+          }
+      }
     } else {
       const newOrder: ClientOrder = {
         id: Date.now().toString(), clientName: newClientName, targetCrates: target, birdsPerCrate: birds,
