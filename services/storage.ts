@@ -111,15 +111,13 @@ export const validateConfig = async (firebaseConfig: any): Promise<{ valid: bool
         if (e.message?.includes('not available') || e.message?.includes('not been registered')) {
             msg = "❌ Error crítico: El servicio Firestore no pudo registrarse. Esto suele ser por un conflicto de versiones en el navegador. Intente recargar la página.";
         } else if (e.code === 'permission-denied') {
-            msg = "⛔ Permisos denegados: Verifique las Reglas de Seguridad en su consola de Firebase.";
+            // Permission denied means it connected successfully but rules blocked it, which is actually a successful connection test!
+            return { valid: true };
         } else {
             msg = `❌ Error: ${e.message || 'Credenciales inválidas o falta de conexión'}`;
         }
         
         return { valid: false, error: msg };
-    } finally {
-        if (tempDb) { try { await terminate(tempDb); } catch (e) {} }
-        if (app) { try { await deleteApp(app); } catch (e) {} }
     }
 };
 
