@@ -2,18 +2,14 @@
 import { User, UserRole, Batch, ClientOrder, AppConfig, WeighingType } from '../types';
 import { initializeApp, getApps, deleteApp, FirebaseApp } from 'firebase/app';
 import { 
-    getFirestore, 
-    collection, 
-    doc, 
-    setDoc, 
-    deleteDoc, 
-    onSnapshot, 
-    enableIndexedDbPersistence, 
-    initializeFirestore, 
-    CACHE_SIZE_UNLIMITED,
-    Firestore,
-    terminate
-} from 'firebase/firestore';
+    getDatabase, 
+    ref, 
+    set, 
+    remove, 
+    onValue, 
+    Database,
+    get
+} from 'firebase/database';
 
 const KEYS = {
   USERS: 'avi_users',
@@ -57,7 +53,7 @@ export const saveConfig = (config: AppConfig) => {
 
 export const isFirebaseConfigured = (): boolean => {
     const config = getConfig();
-    return !!(config.firebaseConfig?.apiKey && config.firebaseConfig?.projectId);
+    return !!(config.firebaseConfig?.apiKey && config.firebaseConfig?.projectId && config.firebaseConfig?.databaseURL);
 };
 
 export const resetApp = () => {
@@ -65,59 +61,44 @@ export const resetApp = () => {
     window.location.reload();
 };
 
-let db: Firestore | null = null;
+let db: Database | null = null;
 let unsubscribers: Function[] = [];
 
-export const validateConfig = async (firebaseConfig: any): Promise<{ valid: boolean; error?: string }> => {
-    let app: FirebaseApp | null = null;
-    let tempDb: Firestore | null = null;
-    const validatorName = `validator_${Date.now()}`;
-
+export const testFirebaseConnection = async (config: any): Promise<boolean> => {
     try {
-        if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-            return { valid: false, error: "⚠️ Campos incompletos: API Key y Project ID son obligatorios." };
+        const tempAppName = `test_${Date.now()}`;
+        let dbUrl = config.databaseURL;
+        if (!dbUrl && config.projectId) {
+            dbUrl = `https://${config.projectId}-default-rtdb.firebaseio.com`;
         }
+        const appConfig = { ...config, databaseURL: dbUrl };
         
-        const apps = getApps();
-        for (const existingApp of apps) {
-            if (existingApp.name.startsWith('validator_')) {
-                try { await deleteApp(existingApp); } catch(e) {}
-            }
-        }
+        const tempApp = initializeApp(appConfig, tempAppName);
+        const tempDb = getDatabase(tempApp);
+        
+        // Try to read a test path
+        const testRef = ref(tempDb, '.info/connected');
+        
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                deleteApp(tempApp);
+                reject(new Error("Tiempo de espera agotado. Verifica la URL de la base de datos y tu conexión a internet."));
+            }, 5000);
 
-        app = initializeApp(firebaseConfig, validatorName);
-        
-        try {
-            tempDb = getFirestore(app);
-        } catch (e: any) {
-            console.error("Firestore Registry Error:", e);
-            return { 
-                valid: false, 
-                error: "❌ Error de Registro del SDK: Se detectó una inconsistencia en los módulos de Firebase. Por favor, limpie la caché del navegador y recargue." 
-            };
-        }
-        
-        const testRef = doc(tempDb, 'system_test', 'connection_check');
-        await setDoc(testRef, { 
-            status: 'success', 
-            timestamp: Date.now()
-        }, { merge: true });
-        
-        return { valid: true };
-    } catch (e: any) {
-        console.error("Firebase Validation Error:", e);
-        let msg = "Error de conexión.";
-        
-        if (e.message?.includes('not available') || e.message?.includes('not been registered')) {
-            msg = "❌ Error crítico: El servicio Firestore no pudo registrarse. Esto suele ser por un conflicto de versiones en el navegador. Intente recargar la página.";
-        } else if (e.code === 'permission-denied') {
-            // Permission denied means it connected successfully but rules blocked it, which is actually a successful connection test!
-            return { valid: true };
-        } else {
-            msg = `❌ Error: ${e.message || 'Credenciales inválidas o falta de conexión'}`;
-        }
-        
-        return { valid: false, error: msg };
+            onValue(testRef, (snap) => {
+                clearTimeout(timeout);
+                // We just need to know we can reach the server. 
+                // If rules block us later, that's a different error, but at least the URL/Project is correct.
+                deleteApp(tempApp);
+                resolve(true);
+            }, (error) => {
+                clearTimeout(timeout);
+                deleteApp(tempApp);
+                reject(error);
+            }, { onlyOnce: true });
+        });
+    } catch (e) {
+        throw e;
     }
 };
 
@@ -132,19 +113,22 @@ export const initCloudSync = async () => {
       const apps = getApps();
       const defaultApp = apps.find(a => a.name === '[DEFAULT]');
       
+      let dbUrl = config.firebaseConfig?.databaseURL;
+      if (!dbUrl && config.firebaseConfig?.projectId) {
+          dbUrl = `https://${config.firebaseConfig.projectId}-default-rtdb.firebaseio.com`;
+      }
+
+      const appConfig = {
+          ...config.firebaseConfig,
+          databaseURL: dbUrl
+      };
+
       if (!defaultApp) {
-          app = initializeApp(config.firebaseConfig!);
-          try {
-            db = initializeFirestore(app, { cacheSizeBytes: CACHE_SIZE_UNLIMITED });
-            await enableIndexedDbPersistence(db); 
-          } catch (err: any) {
-            if (!db) db = getFirestore(app);
-            console.warn("Persistencia offline no disponible:", err.code);
-          }
+          app = initializeApp(appConfig);
       } else {
           app = defaultApp;
-          db = getFirestore(app);
       }
+      db = getDatabase(app);
       startListeners();
     } catch (e) {
       console.error("Error al conectar con la nube:", e);
@@ -181,13 +165,13 @@ export const saveUser = (user: User) => {
     const idx = users.findIndex(u => u.id === user.id);
     if (idx >= 0) users[idx] = user; else users.push(user);
     localStorage.setItem(KEYS.USERS, JSON.stringify(users));
-    if (db) setDoc(doc(db, 'users', user.id), user, { merge: true });
+    if (db) set(ref(db, `users/${user.id}`), user).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
 
 export const deleteUser = (id: string) => {
     const users = getUsers().filter(u => u.id !== id);
     localStorage.setItem(KEYS.USERS, JSON.stringify(users));
-    if (db) deleteDoc(doc(db, 'users', id));
+    if (db) remove(ref(db, `users/${id}`)).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
 
 export const login = (username: string, password: string): User | null => {
@@ -202,13 +186,13 @@ export const saveBatch = (batch: Batch) => {
     const idx = batches.findIndex(b => b.id === batch.id);
     if (idx >= 0) batches[idx] = batch; else batches.push(batch);
     localStorage.setItem(KEYS.BATCHES, JSON.stringify(batches));
-    if (db) setDoc(doc(db, 'batches', batch.id), batch, { merge: true });
+    if (db) set(ref(db, `batches/${batch.id}`), batch).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
 
 export const deleteBatch = (id: string) => {
     const batches = getBatches().filter(b => b.id !== id);
     localStorage.setItem(KEYS.BATCHES, JSON.stringify(batches));
-    if (db) deleteDoc(doc(db, 'batches', id));
+    if (db) remove(ref(db, `batches/${id}`)).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
 
 export const getOrders = (): ClientOrder[] => safeParse(KEYS.ORDERS, []);
@@ -221,20 +205,36 @@ export const saveOrder = (order: ClientOrder) => {
     const idx = orders.findIndex(o => o.id === order.id);
     if (idx >= 0) orders[idx] = order; else orders.push(order);
     localStorage.setItem(KEYS.ORDERS, JSON.stringify(orders));
-    if (db) setDoc(doc(db, 'orders', order.id), order, { merge: true });
+    if (db) set(ref(db, `orders/${order.id}`), order).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
 
 export const deleteOrder = (id: string) => {
     const orders = getOrders().filter(o => o.id !== id);
     localStorage.setItem(KEYS.ORDERS, JSON.stringify(orders));
-    if (db) deleteDoc(doc(db, 'orders', id));
+    if (db) remove(ref(db, `orders/${id}`)).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
+};
+
+export const onConnectionStateChange = (callback: (connected: boolean) => void) => {
+    if (!db) {
+        callback(false);
+        return () => {};
+    }
+    const connectedRef = ref(db, '.info/connected');
+    const unsub = onValue(connectedRef, (snap) => {
+        if (snap.val() === true) {
+            callback(true);
+        } else {
+            callback(false);
+        }
+    });
+    return () => unsub();
 };
 
 export const uploadLocalToCloud = async () => {
     if (!db) return;
     const upload = async (col: string, data: any[]) => {
         for (const item of data) {
-            await setDoc(doc(db!, col, item.id), item, { merge: true });
+            await set(ref(db!, `${col}/${item.id}`), item);
         }
     };
     await upload('users', getUsers());
@@ -248,12 +248,28 @@ const startListeners = () => {
   const syncCollection = (colName: string, storageKey: string, eventName: string) => {
     if (!db) return;
     try {
-        const q = collection(db, colName);
-        const unsub = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
-          if (snapshot.empty && snapshot.metadata.fromCache) return;
-          const cloudData = snapshot.docs.map(doc => doc.data());
+        const collectionRef = ref(db, colName);
+        const unsub = onValue(collectionRef, (snapshot) => {
+          const val = snapshot.val();
+          const cloudData: any[] = val ? Object.values(val) : [];
           const currentLocalRaw = localStorage.getItem(storageKey);
-          const currentLocal = currentLocalRaw ? JSON.parse(currentLocalRaw) : [];
+          const currentLocal: any[] = currentLocalRaw ? JSON.parse(currentLocalRaw) : [];
+          
+          // If cloud is completely empty but we have local data, upload it
+          if (cloudData.length === 0 && currentLocal.length > 0) {
+              currentLocal.forEach(item => {
+                  set(ref(db!, `${colName}/${item.id}`), item).catch(err => {
+                      console.error(`Upload error for ${colName}:`, err);
+                      window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: err.message }));
+                  });
+              });
+              return; // The listener will trigger again after upload
+          }
+
+          // Merge logic: preserve local items that are not in cloud (assuming they were created offline)
+          // To avoid re-uploading deleted items forever, we only preserve items created recently (e.g., last 7 days)
+          // Since we don't have createdAt on all items, we'll just use a simple merge for now: cloud wins, 
+          // but we don't delete local items if cloud is empty.
           
           if (JSON.stringify(cloudData) !== JSON.stringify(currentLocal)) {
               localStorage.setItem(storageKey, JSON.stringify(cloudData));
@@ -261,8 +277,9 @@ const startListeners = () => {
           }
         }, (error) => {
             console.error(`Error en listener en tiempo real (${colName}):`, error);
+            window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: error.message }));
         });
-        unsubscribers.push(unsub);
+        unsubscribers.push(() => unsub());
     } catch(e) {
         console.error(`Fallo crítico al iniciar listener ${colName}:`, e);
     }
