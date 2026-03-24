@@ -1,7 +1,7 @@
 
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import { AppConfig } from '../../types';
-import { getConfig, saveConfig, resetApp, isFirebaseConfigured, uploadLocalToCloud, testFirebaseConnection } from '../../services/storage';
+import { getConfig, saveConfig, resetApp, isFirebaseConfigured, validateConfig, uploadLocalToCloud } from '../../services/storage';
 import { 
   Save, Check, X, Layout, 
   Image as ImageIcon, Trash2, Printer, Scale, Bluetooth, AlertCircle,
@@ -15,9 +15,11 @@ const Configuration: React.FC = () => {
   const [saved, setSaved] = useState(false);
   const { user } = useContext(AuthContext);
   
-  const [isConnected, setIsConnected] = useState(isFirebaseConfigured());
+  const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [testError, setTestError] = useState('');
+  const [isTested, setIsTested] = useState(false);
 
   const [browserSupport, setBrowserSupport] = useState({ 
     bluetooth: false, 
@@ -66,35 +68,11 @@ const Configuration: React.FC = () => {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const handleLinkCloud = async () => {
-      if (!manualForm.projectId || !manualForm.apiKey) {
-          alert("❌ Error: Project ID y API Key son obligatorios.");
-          return;
-      }
-
-      setIsConnecting(true);
-      
-      // Construct databaseURL if missing
-      let dbUrl = manualForm.databaseURL;
-      if (!dbUrl && manualForm.projectId) {
-          dbUrl = `https://${manualForm.projectId}-default-rtdb.firebaseio.com`;
-      }
-      
-      const configToSave = {
-          ...manualForm,
-          databaseURL: dbUrl
-      };
-
-      try {
-          await testFirebaseConnection(configToSave);
-          saveConfig({ ...config, firebaseConfig: configToSave });
-          setIsConnected(true);
-          alert("✅ Servidor vinculado. El sistema se reiniciará para aplicar los cambios.");
-          window.location.reload();
-      } catch (error: any) {
-          alert(`❌ Error al conectar con Firebase:\n${error.message}\n\nRevisa que la URL de la base de datos y el Project ID sean correctos.`);
-          setIsConnecting(false);
-      }
+  const handleLinkCloud = () => {
+      saveConfig({ ...config, firebaseConfig: manualForm });
+      setIsConnected(true);
+      alert("✅ Servidor vinculado.");
+      window.location.reload();
   };
 
   const handleUploadData = async () => {
@@ -270,30 +248,6 @@ const Configuration: React.FC = () => {
           </div>
 
           <div className="space-y-6">
-              {!isConnected && (
-                  <div className="bg-amber-50 border border-amber-200 p-5 rounded-2xl space-y-3">
-                      <div className="flex items-center gap-2 text-amber-800 font-black text-xs uppercase tracking-widest">
-                         <AlertCircle size={16}/> Instrucciones para Realtime Database
-                      </div>
-                      <ol className="text-[11px] text-amber-900 font-medium space-y-2 list-decimal ml-4 leading-relaxed">
-                          <li>Crea un proyecto en <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" className="text-blue-600 underline font-bold">Firebase Console</a>.</li>
-                          <li>Ve a <b>Build &gt; Realtime Database</b> y haz clic en "Crear base de datos".</li>
-                          <li>Ve a la pestaña <b>Reglas (Rules)</b> y configúralas así para desarrollo:
-                              <pre className="bg-amber-100/50 p-2 rounded-lg mt-1 font-mono text-[10px] text-amber-900 border border-amber-200">
-{`{
-  "rules": {
-    ".read": true,
-    ".write": true
-  }
-}`}
-                              </pre>
-                          </li>
-                          <li>Ve a <b>Configuración del proyecto</b>, añade una Web App ({"</>"}) y copia el objeto <code>firebaseConfig</code>.</li>
-                          <li>Asegúrate de copiar la <b>Database URL</b> que aparece en la consola de Realtime Database.</li>
-                      </ol>
-                  </div>
-              )}
-
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-blue-50 p-4 rounded-2xl border border-blue-100">
                   <div>
                       <h3 className="text-sm font-black text-blue-900 uppercase tracking-tight">Configuración de Firebase</h3>
@@ -353,7 +307,7 @@ const Configuration: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Project ID *</label>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Project ID</label>
                       <input 
                           type="text" 
                           value={manualForm.projectId} 
@@ -363,23 +317,13 @@ const Configuration: React.FC = () => {
                       />
                   </div>
                   <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">API Key *</label>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">API Key</label>
                       <input 
                           type="text" 
                           value={manualForm.apiKey} 
                           onChange={e => setManualForm({...manualForm, apiKey: e.target.value})}
                           className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-mono text-xs text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
                           placeholder="AIzaSy..."
-                      />
-                  </div>
-                  <div className="space-y-1 md:col-span-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Database URL * (Muy Importante)</label>
-                      <input 
-                          type="text" 
-                          value={manualForm.databaseURL} 
-                          onChange={e => setManualForm({...manualForm, databaseURL: e.target.value})}
-                          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-mono text-xs text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
-                          placeholder="https://mi-proyecto-default-rtdb.firebaseio.com"
                       />
                   </div>
                   <div className="space-y-1">
@@ -422,42 +366,36 @@ const Configuration: React.FC = () => {
                           placeholder="1234567890"
                       />
                   </div>
+                  <div className="space-y-1 md:col-span-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Database URL (Opcional)</label>
+                      <input 
+                          type="text" 
+                          value={manualForm.databaseURL} 
+                          onChange={e => setManualForm({...manualForm, databaseURL: e.target.value})}
+                          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-mono text-xs text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
+                          placeholder="https://mi-proyecto.firebaseio.com"
+                      />
+                  </div>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4 mt-4">
                   <button 
                       onClick={handleLinkCloud}
-                      disabled={isConnecting}
-                      className="flex-[2] bg-blue-900 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-800 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                      className="flex-[2] bg-blue-900 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-800 transition-all flex items-center justify-center gap-2"
                   >
-                      {isConnecting ? <Loader2 size={16} className="animate-spin"/> : <Key size={16}/>}
-                      {isConnecting ? 'Vinculando...' : 'Vincular Servidor'}
+                      <Key size={16}/>
+                      Vincular Servidor
                   </button>
 
                   {isConnected && (
-                      <>
-                          <button 
-                              onClick={handleUploadData}
-                              disabled={isUploading}
-                              className="flex-1 bg-emerald-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                          >
-                              {isUploading ? <Loader2 size={16} className="animate-spin"/> : <Upload size={16}/>}
-                              Subir Datos
-                          </button>
-                          <button 
-                              onClick={() => {
-                                  if (confirm("¿Estás seguro de desvincular el servidor? Se perderá la sincronización en la nube.")) {
-                                      saveConfig({ ...config, firebaseConfig: undefined });
-                                      alert("✅ Servidor desvinculado. El sistema se reiniciará.");
-                                      window.location.reload();
-                                  }
-                              }}
-                              className="flex-1 bg-red-100 text-red-700 py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-red-200 transition-all flex items-center justify-center gap-2"
-                          >
-                              <CloudOff size={16}/>
-                              Desvincular
-                          </button>
-                      </>
+                      <button 
+                          onClick={handleUploadData}
+                          disabled={isUploading}
+                          className="flex-1 bg-emerald-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                          {isUploading ? <Loader2 size={16} className="animate-spin"/> : <Upload size={16}/>}
+                          Subir Datos
+                      </button>
                   )}
               </div>
           </div>

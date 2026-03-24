@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { User } from './types';
 import { LogOut, ArrowLeft, Settings, Database, Cloud, CloudOff, Wifi, WifiOff } from 'lucide-react';
-import { isFirebaseConfigured, getConfig, onConnectionStateChange, initCloudSync } from './services/storage';
+import { isFirebaseConfigured, getConfig } from './services/storage';
 
 // Pages
 import LoginPage from './components/pages/Login';
@@ -25,12 +25,13 @@ export const AuthContext = React.createContext<{
 const Container: React.FC<{ children: React.ReactNode; title?: string; showBack?: boolean }> = ({ children, title, showBack }) => {
   const { user, logout } = React.useContext(AuthContext);
   const navigate = useNavigate();
-  const [isCloudConnected, setIsCloudConnected] = useState(false);
+  const [isCloudConnected, setIsCloudConnected] = useState(isFirebaseConfigured());
   const [appName, setAppName] = useState(getConfig().companyName || 'AVI CONTROL');
   
   useEffect(() => {
     const check = () => {
         const config = getConfig();
+        setIsCloudConnected(isFirebaseConfigured());
         setAppName(config.companyName || 'AVI CONTROL');
         
         if (config.logoUrl) {
@@ -46,27 +47,9 @@ const Container: React.FC<{ children: React.ReactNode; title?: string; showBack?
     check();
     const interval = setInterval(check, 5000);
     window.addEventListener('avi_data_config', check);
-    
-    const handleSyncError = (e: any) => {
-        console.error("Sync error caught in App:", e.detail);
-    };
-    window.addEventListener('avi_sync_error', handleSyncError);
-    
-    let unsubConnection = () => {};
-    if (isFirebaseConfigured()) {
-        // Wait a bit for db to be initialized
-        setTimeout(() => {
-            unsubConnection = onConnectionStateChange((connected) => {
-                setIsCloudConnected(connected);
-            });
-        }, 1000);
-    }
-
     return () => {
         clearInterval(interval);
         window.removeEventListener('avi_data_config', check);
-        window.removeEventListener('avi_sync_error', handleSyncError);
-        unsubConnection();
     }
   }, []);
 
@@ -116,56 +99,14 @@ const Container: React.FC<{ children: React.ReactNode; title?: string; showBack?
 const App: React.FC = () => {
     const [user, setUserState] = useState<User | null>(null);
 
-    const [syncError, setSyncError] = useState<string | null>(null);
-
-    useEffect(() => {
-        // 1. Check Login with Safe Parse
-        const saved = localStorage.getItem('avi_session');
-        if (saved) {
-            try {
-                setUserState(JSON.parse(saved));
-            } catch (e) {
-                console.error("Session corrupted, clearing");
-                localStorage.removeItem('avi_session');
-            }
-        }
-
-        // 2. Initialize Cloud
-        if (isFirebaseConfigured()) {
-            initCloudSync();
-        }
-
-        const handleSyncError = (e: any) => {
-            console.error("Sync error caught in App:", e.detail);
-            setSyncError(e.detail);
-        };
-        window.addEventListener('avi_sync_error', handleSyncError);
-
-        return () => {
-            window.removeEventListener('avi_sync_error', handleSyncError);
-        };
-    }, []);
-
     const setUser = (u: User | null) => {
         setUserState(u);
-        if (u) {
-            localStorage.setItem('avi_session', JSON.stringify(u));
-        } else {
-            localStorage.removeItem('avi_session');
-        }
     };
 
     const logout = () => setUser(null);
 
     return (
         <AuthContext.Provider value={{ user, setUser, logout }}>
-            {syncError && (
-                <div className="fixed top-0 left-0 right-0 z-[100] bg-red-600 text-white p-3 text-center text-xs font-bold shadow-lg flex items-center justify-center gap-2">
-                    <Database size={14} />
-                    Error de sincronización: {syncError}. Revisa las reglas de seguridad o la URL de la base de datos.
-                    <button onClick={() => setSyncError(null)} className="ml-4 bg-red-800 px-2 py-1 rounded hover:bg-red-900 transition-all">Cerrar</button>
-                </div>
-            )}
             <HashRouter>
                 <Routes>
                     <Route path="/login" element={<LoginPage />} />
