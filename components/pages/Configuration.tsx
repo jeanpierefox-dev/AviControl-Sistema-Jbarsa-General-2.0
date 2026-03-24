@@ -6,7 +6,7 @@ import {
   Save, Check, X, Layout, 
   Image as ImageIcon, Trash2, Printer, Scale, Bluetooth, AlertCircle,
   Apple, ExternalLink, Info, Smartphone, Wifi, BluetoothOff, Globe,
-  Cloud, Database, Key, Upload, Loader2
+  Cloud, Database, Key, Upload, Loader2, Copy, ClipboardPaste
 } from 'lucide-react';
 import { AuthContext } from '../../App';
 
@@ -68,31 +68,7 @@ const Configuration: React.FC = () => {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const handleTestConnection = async () => {
-      setTestError('');
-      setIsTested(false);
-      setIsConnecting(true);
-      try {
-          if (!manualForm.apiKey || !manualForm.projectId) {
-              setTestError("⚠️ Datos incompletos. API Key y Project ID son requeridos.");
-              setIsConnecting(false);
-              return;
-          }
-          const res = await validateConfig(manualForm);
-          if (!res.valid) {
-              setTestError(res.error || "Error de validación.");
-          } else {
-              setIsTested(true);
-          }
-      } catch (e) {
-          setTestError("Error crítico.");
-      } finally {
-          setIsConnecting(false);
-      }
-  };
-
   const handleLinkCloud = () => {
-      if (!isTested) return;
       saveConfig({ ...config, firebaseConfig: manualForm });
       setIsConnected(true);
       alert("✅ Servidor vinculado.");
@@ -272,81 +248,140 @@ const Configuration: React.FC = () => {
           </div>
 
           <div className="space-y-6">
-              <div className="space-y-2">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">ID Organización</label>
-                  <input 
-                      type="text" 
-                      value={manualForm.projectId} 
-                      onChange={e => setManualForm({...manualForm, projectId: e.target.value})}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-lg text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
-                      placeholder="mi-liga-voley"
-                  />
-                  <p className="text-[10px] text-slate-500 font-mono ml-1">Unique League Identifier</p>
-              </div>
-
-              <div className="flex gap-4 border-b border-slate-200">
-                  <button className="px-4 py-3 text-xs font-black text-slate-400 uppercase tracking-widest">Import Code</button>
-                  <button className="px-4 py-3 text-xs font-black text-blue-700 uppercase tracking-widest border-b-2 border-blue-600 bg-blue-50">Manual Input</button>
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                  <div>
+                      <h3 className="text-sm font-black text-blue-900 uppercase tracking-tight">Configuración de Firebase</h3>
+                      <p className="text-[11px] text-blue-600 font-medium mt-1">Copia y pega estos parámetros para vincular otros dispositivos rápidamente.</p>
+                  </div>
+                  <div className="flex gap-2 w-full md:w-auto">
+                      <button 
+                          onClick={() => {
+                              navigator.clipboard.writeText(JSON.stringify(manualForm, null, 2));
+                              alert("✅ Configuración copiada al portapapeles");
+                          }}
+                          className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white text-blue-700 rounded-xl hover:bg-blue-100 transition-all font-bold text-xs uppercase tracking-wider border border-blue-200"
+                          title="Copiar Configuración"
+                      >
+                          <Copy size={16} /> Copiar
+                      </button>
+                      <button 
+                          onClick={async () => {
+                              try {
+                                  const text = await navigator.clipboard.readText();
+                                  
+                                  // Intentar extraer JSON si está dentro de un bloque de código
+                                  let jsonStr = text;
+                                  const match = text.match(/\{[\s\S]*\}/);
+                                  if (match) {
+                                      jsonStr = match[0];
+                                      // Convertir claves sin comillas a JSON válido (ej. apiKey: "..." -> "apiKey": "...")
+                                      jsonStr = jsonStr.replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/'/g, '"');
+                                  }
+                                  
+                                  const parsed = JSON.parse(jsonStr);
+                                  if (parsed.apiKey || parsed.projectId) {
+                                      setManualForm({
+                                          apiKey: parsed.apiKey || '',
+                                          projectId: parsed.projectId || '',
+                                          authDomain: parsed.authDomain || '',
+                                          databaseURL: parsed.databaseURL || '',
+                                          appId: parsed.appId || '',
+                                          storageBucket: parsed.storageBucket || '',
+                                          messagingSenderId: parsed.messagingSenderId || ''
+                                      });
+                                      alert("✅ Configuración pegada correctamente");
+                                  } else {
+                                      alert("⚠️ El texto no parece contener una configuración válida de Firebase.");
+                                  }
+                              } catch (e) {
+                                  alert("❌ Error al pegar: Asegúrate de copiar un objeto JSON válido.");
+                              }
+                          }}
+                          className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all font-bold text-xs uppercase tracking-wider shadow-sm"
+                          title="Pegar Configuración"
+                      >
+                          <ClipboardPaste size={16} /> Pegar
+                      </button>
+                  </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <input 
-                      type="text" 
-                      value={manualForm.apiKey} 
-                      onChange={e => setManualForm({...manualForm, apiKey: e.target.value})}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-mono text-sm text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
-                      placeholder="API Key"
-                  />
-                  <input 
-                      type="text" 
-                      value={manualForm.authDomain} 
-                      onChange={e => setManualForm({...manualForm, authDomain: e.target.value})}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-mono text-sm text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
-                      placeholder="Auth Domain"
-                  />
-                  <input 
-                      type="text" 
-                      value={manualForm.databaseURL} 
-                      onChange={e => setManualForm({...manualForm, databaseURL: e.target.value})}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-mono text-sm text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all md:col-span-2"
-                      placeholder="Database URL"
-                  />
-                  <input 
-                      type="text" 
-                      value={manualForm.projectId} 
-                      onChange={e => setManualForm({...manualForm, projectId: e.target.value})}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-mono text-sm text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
-                      placeholder="Project ID"
-                  />
-                  <input 
-                      type="text" 
-                      value={manualForm.appId} 
-                      onChange={e => setManualForm({...manualForm, appId: e.target.value})}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-mono text-sm text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
-                      placeholder="App ID"
-                  />
-              </div>
-
-              {testError && (
-                  <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-600 text-xs font-bold">
-                      {testError}
+                  <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Project ID</label>
+                      <input 
+                          type="text" 
+                          value={manualForm.projectId} 
+                          onChange={e => setManualForm({...manualForm, projectId: e.target.value})}
+                          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-mono text-xs text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
+                          placeholder="mi-proyecto-123"
+                      />
                   </div>
-              )}
+                  <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">API Key</label>
+                      <input 
+                          type="text" 
+                          value={manualForm.apiKey} 
+                          onChange={e => setManualForm({...manualForm, apiKey: e.target.value})}
+                          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-mono text-xs text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
+                          placeholder="AIzaSy..."
+                      />
+                  </div>
+                  <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Auth Domain</label>
+                      <input 
+                          type="text" 
+                          value={manualForm.authDomain} 
+                          onChange={e => setManualForm({...manualForm, authDomain: e.target.value})}
+                          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-mono text-xs text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
+                          placeholder="mi-proyecto.firebaseapp.com"
+                      />
+                  </div>
+                  <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">App ID</label>
+                      <input 
+                          type="text" 
+                          value={manualForm.appId} 
+                          onChange={e => setManualForm({...manualForm, appId: e.target.value})}
+                          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-mono text-xs text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
+                          placeholder="1:1234567890:web:abcde..."
+                      />
+                  </div>
+                  <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Storage Bucket</label>
+                      <input 
+                          type="text" 
+                          value={manualForm.storageBucket} 
+                          onChange={e => setManualForm({...manualForm, storageBucket: e.target.value})}
+                          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-mono text-xs text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
+                          placeholder="mi-proyecto.appspot.com"
+                      />
+                  </div>
+                  <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Messaging Sender ID</label>
+                      <input 
+                          type="text" 
+                          value={manualForm.messagingSenderId} 
+                          onChange={e => setManualForm({...manualForm, messagingSenderId: e.target.value})}
+                          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-mono text-xs text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
+                          placeholder="1234567890"
+                      />
+                  </div>
+                  <div className="space-y-1 md:col-span-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Database URL (Opcional)</label>
+                      <input 
+                          type="text" 
+                          value={manualForm.databaseURL} 
+                          onChange={e => setManualForm({...manualForm, databaseURL: e.target.value})}
+                          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-mono text-xs text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
+                          placeholder="https://mi-proyecto.firebaseio.com"
+                      />
+                  </div>
+              </div>
 
               <div className="flex flex-col sm:flex-row gap-4 mt-4">
                   <button 
-                      onClick={handleTestConnection}
-                      disabled={isConnecting}
-                      className="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                      {isConnecting ? <Loader2 size={16} className="animate-spin"/> : <Database size={16}/>}
-                      Probar Conexión
-                  </button>
-                  
-                  <button 
                       onClick={handleLinkCloud}
-                      disabled={!isTested}
-                      className="flex-[2] bg-blue-900 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-800 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:bg-slate-100 disabled:text-slate-400"
+                      className="flex-[2] bg-blue-900 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-800 transition-all flex items-center justify-center gap-2"
                   >
                       <Key size={16}/>
                       Vincular Servidor
