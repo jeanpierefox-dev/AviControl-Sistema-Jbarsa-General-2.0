@@ -6,7 +6,7 @@ import {
   Save, Check, X, Layout, 
   Image as ImageIcon, Trash2, Printer, Scale, Bluetooth, AlertCircle,
   Apple, ExternalLink, Info, Smartphone, Wifi, BluetoothOff, Globe,
-  Cloud, Database, Key, Upload, Loader2, Copy, ClipboardPaste
+  Cloud, CloudOff, Database, Key, Upload, Loader2, Copy, ClipboardPaste
 } from 'lucide-react';
 import { AuthContext } from '../../App';
 
