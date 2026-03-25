@@ -52,9 +52,10 @@ const Reports: React.FC = () => {
 
       // Filter orders by selected date
       const filteredOrdersByDate = allOrders.filter(o => {
+          const records = o.records || [];
           // Check if any record in the order matches the selected date
-          if (o.records.length > 0) {
-              return o.records.some(r => {
+          if (records.length > 0) {
+              return records.some(r => {
                   const dateObj = new Date(r.timestamp);
                   const year = dateObj.getFullYear();
                   const month = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -101,7 +102,8 @@ const Reports: React.FC = () => {
     if (!showDetailModal) return;
     if (!window.confirm("¿Estás seguro de eliminar este registro de peso?")) return;
 
-    const updatedRecords = showDetailModal.records.filter(r => r.id !== recordId);
+    const records = showDetailModal.records || [];
+    const updatedRecords = records.filter(r => r.id !== recordId);
     const updatedOrder = { ...showDetailModal, records: updatedRecords };
     
     saveOrder(updatedOrder);
@@ -110,9 +112,10 @@ const Reports: React.FC = () => {
   };
 
   const getTotals = (order: ClientOrder) => {
-    const full = order.records.filter(r => r.type === 'FULL');
-    const empty = order.records.filter(r => r.type === 'EMPTY');
-    const mort = order.records.filter(r => r.type === 'MORTALITY');
+    const records = order.records || [];
+    const full = records.filter(r => r.type === 'FULL');
+    const empty = records.filter(r => r.type === 'EMPTY');
+    const mort = records.filter(r => r.type === 'MORTALITY');
     
     const wF = full.reduce((a, b) => a + b.weight, 0);
     const wE = empty.reduce((a, b) => a + b.weight, 0);
@@ -195,9 +198,10 @@ const Reports: React.FC = () => {
         doc.text("DETALLE DE PESOS", 40, y, { align: 'center' });
         y += 2;
 
-        const fullRecords = order.records.filter(r => r.type === 'FULL').sort((a, b) => b.timestamp - a.timestamp);
-        const emptyRecords = order.records.filter(r => r.type === 'EMPTY').sort((a, b) => b.timestamp - a.timestamp);
-        const mortRecords = order.records.filter(r => r.type === 'MORTALITY').sort((a, b) => b.timestamp - a.timestamp);
+        const records = order.records || [];
+        const fullRecords = records.filter(r => r.type === 'FULL').sort((a, b) => b.timestamp - a.timestamp);
+        const emptyRecords = records.filter(r => r.type === 'EMPTY').sort((a, b) => b.timestamp - a.timestamp);
+        const mortRecords = records.filter(r => r.type === 'MORTALITY').sort((a, b) => b.timestamp - a.timestamp);
 
         const renderCategory = (title: string, records: any[], totalWeight: number, qty?: number) => {
             if (records.length === 0) return;
@@ -387,9 +391,10 @@ const Reports: React.FC = () => {
     doc.text("DESGLOSE DE PESADAS", 14, y);
     y += 5;
 
-    const fullRecords = order.records.filter(r => r.type === 'FULL').sort((a, b) => b.timestamp - a.timestamp);
-    const emptyRecords = order.records.filter(r => r.type === 'EMPTY').sort((a, b) => b.timestamp - a.timestamp);
-    const mortRecords = order.records.filter(r => r.type === 'MORTALITY').sort((a, b) => b.timestamp - a.timestamp);
+    const records = order.records || [];
+    const fullRecords = records.filter(r => r.type === 'FULL').sort((a, b) => b.timestamp - a.timestamp);
+    const emptyRecords = records.filter(r => r.type === 'EMPTY').sort((a, b) => b.timestamp - a.timestamp);
+    const mortRecords = records.filter(r => r.type === 'MORTALITY').sort((a, b) => b.timestamp - a.timestamp);
 
     const renderCategoryGridA4 = (title: string, records: any[], totalWeight: number, qty?: number) => {
         if (records.length === 0) return;
@@ -686,9 +691,9 @@ Gracias por su preferencia!`;
                                                 <h5 className="text-[10px] font-black text-blue-800 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">Jabas Llenas</h5>
                                                 <div className="max-h-48 overflow-y-auto pr-1">
                                                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                                                        {order.records.filter(r => r.type === 'FULL').map((r, i) => (
+                                                        {(order.records || []).filter(r => r.type === 'FULL').map((r, i) => (
                                                             <div key={r.id} className="bg-blue-50 border border-blue-100 p-2 rounded-lg text-center flex flex-col justify-center">
-                                                                <span className="text-[9px] font-black text-blue-400 uppercase">#{order.records.filter(rt => rt.type === 'FULL').length - i}</span>
+                                                                <span className="text-[9px] font-black text-blue-400 uppercase">#{(order.records || []).filter(rt => rt.type === 'FULL').length - i}</span>
                                                                 <span className="font-digital font-bold text-blue-900 text-sm">{r.weight.toFixed(1)}</span>
                                                             </div>
                                                         ))}
@@ -700,9 +705,9 @@ Gracias por su preferencia!`;
                                                 <h5 className="text-[10px] font-black text-slate-700 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">Jabas Vacías</h5>
                                                 <div className="max-h-48 overflow-y-auto pr-1">
                                                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                                                        {order.records.filter(r => r.type === 'EMPTY').map((r, i) => (
+                                                        {(order.records || []).filter(r => r.type === 'EMPTY').map((r, i) => (
                                                             <div key={r.id} className="bg-orange-50 border border-orange-100 p-2 rounded-lg text-center flex flex-col justify-center">
-                                                                <span className="text-[9px] font-black text-orange-400 uppercase">#{order.records.filter(rt => rt.type === 'EMPTY').length - i}</span>
+                                                                <span className="text-[9px] font-black text-orange-400 uppercase">#{(order.records || []).filter(rt => rt.type === 'EMPTY').length - i}</span>
                                                                 <span className="font-digital font-bold text-orange-900 text-sm">{r.weight.toFixed(1)}</span>
                                                             </div>
                                                         ))}
@@ -714,9 +719,9 @@ Gracias por su preferencia!`;
                                                 <h5 className="text-[10px] font-black text-red-800 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">Mortalidad</h5>
                                                 <div className="max-h-48 overflow-y-auto pr-1">
                                                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                                                        {order.records.filter(r => r.type === 'MORTALITY').map((r, i) => (
+                                                        {(order.records || []).filter(r => r.type === 'MORTALITY').map((r, i) => (
                                                             <div key={r.id} className="bg-red-50 border border-red-100 p-2 rounded-lg text-center flex flex-col justify-center">
-                                                                <span className="text-[9px] font-black text-red-400 uppercase">#{order.records.filter(rt => rt.type === 'MORTALITY').length - i}</span>
+                                                                <span className="text-[9px] font-black text-red-400 uppercase">#{(order.records || []).filter(rt => rt.type === 'MORTALITY').length - i}</span>
                                                                 <span className="font-digital font-bold text-red-900 text-sm">{r.weight.toFixed(1)}</span>
                                                             </div>
                                                         ))}
@@ -901,9 +906,9 @@ Gracias por su preferencia!`;
                                         Llenas
                                     </div>
                                     <div className="p-2 flex-1 max-h-60 overflow-y-auto space-y-1">
-                                        {showDetailModal.records.filter(r => r.type === 'FULL').map((r, i) => (
+                                        {(showDetailModal.records || []).filter(r => r.type === 'FULL').map((r, i) => (
                                             <div key={r.id} className="flex justify-between items-center text-[9px] border-b border-slate-100 pb-1 group">
-                                                <span className="text-slate-400 w-6">#{showDetailModal.records.filter(rt => rt.type === 'FULL').length - i}</span>
+                                                <span className="text-slate-400 w-6">#{(showDetailModal.records || []).filter(rt => rt.type === 'FULL').length - i}</span>
                                                 <span className="font-mono font-bold text-slate-700 flex-1 text-center">{r.weight.toFixed(1)}</span>
                                                 <button 
                                                     onClick={() => handleDeleteRecord(r.id)}
@@ -927,9 +932,9 @@ Gracias por su preferencia!`;
                                         Vacías
                                     </div>
                                     <div className="p-2 flex-1 max-h-60 overflow-y-auto space-y-1">
-                                        {showDetailModal.records.filter(r => r.type === 'EMPTY').map((r, i) => (
+                                        {(showDetailModal.records || []).filter(r => r.type === 'EMPTY').map((r, i) => (
                                             <div key={r.id} className="flex justify-between items-center text-[9px] border-b border-slate-100 pb-1 group">
-                                                <span className="text-slate-400 w-6">#{showDetailModal.records.filter(rt => rt.type === 'EMPTY').length - i}</span>
+                                                <span className="text-slate-400 w-6">#{(showDetailModal.records || []).filter(rt => rt.type === 'EMPTY').length - i}</span>
                                                 <span className="font-mono font-bold text-slate-700 flex-1 text-center">{r.weight.toFixed(1)}</span>
                                                 <button 
                                                     onClick={() => handleDeleteRecord(r.id)}
@@ -953,9 +958,9 @@ Gracias por su preferencia!`;
                                         Merma
                                     </div>
                                     <div className="p-2 flex-1 max-h-60 overflow-y-auto space-y-1">
-                                        {showDetailModal.records.filter(r => r.type === 'MORTALITY').map((r, i) => (
+                                        {(showDetailModal.records || []).filter(r => r.type === 'MORTALITY').map((r, i) => (
                                             <div key={r.id} className="flex justify-between items-center text-[9px] border-b border-slate-100 pb-1 group">
-                                                <span className="text-slate-400 w-6">#{showDetailModal.records.filter(rt => rt.type === 'MORTALITY').length - i}</span>
+                                                <span className="text-slate-400 w-6">#{(showDetailModal.records || []).filter(rt => rt.type === 'MORTALITY').length - i}</span>
                                                 <span className="font-mono font-bold text-slate-700 flex-1 text-center">{r.weight.toFixed(1)}</span>
                                                 <button 
                                                     onClick={() => handleDeleteRecord(r.id)}

@@ -17,6 +17,7 @@ const WeighingStation: React.FC = () => {
   const navigate = useNavigate();
   const [config] = useState(getConfig());
   const { user } = useContext(AuthContext);
+  const [batch, setBatch] = useState<any | null>(null);
 
   const [activeOrder, setActiveOrder] = useState<ClientOrder | null>(null);
   const [orders, setOrders] = useState<ClientOrder[]>([]);
@@ -41,10 +42,45 @@ const WeighingStation: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CREDIT'>('CASH');
 
   useEffect(() => {
-    loadOrders();
-    const handleUpdate = () => loadOrders();
-    window.addEventListener('avi_data_orders', handleUpdate);
-    return () => window.removeEventListener('avi_data_orders', handleUpdate);
+    const refreshOrders = () => {
+      const all = getOrders();
+      let filtered = mode === WeighingType.BATCH && batchId 
+        ? all.filter(o => o.batchId === batchId) 
+        : all.filter(o => !o.batchId && o.weighingMode === mode);
+      
+      if (user?.role !== UserRole.ADMIN) {
+        filtered = filtered.filter(o => !o.createdBy || o.createdBy === user?.id);
+      }
+      
+      filtered.sort((a, b) => (a.status === 'OPEN' ? -1 : 1));
+      setOrders(filtered);
+
+      // Sync activeOrder if it's currently open and changed in cloud
+      setActiveOrder(current => {
+        if (!current) return null;
+        const updated = filtered.find(o => o.id === current.id);
+        if (updated && JSON.stringify(updated) !== JSON.stringify(current)) {
+          return updated;
+        }
+        return current;
+      });
+    };
+
+    refreshOrders();
+    window.addEventListener('avi_data_orders', refreshOrders);
+    return () => window.removeEventListener('avi_data_orders', refreshOrders);
+  }, [mode, batchId, user]);
+
+  useEffect(() => {
+    if (mode === WeighingType.BATCH && batchId) {
+      const loadBatch = () => {
+        const b = getBatches().find(x => x.id === batchId);
+        if (b) setBatch(b);
+      };
+      loadBatch();
+      window.addEventListener('avi_data_batches', loadBatch);
+      return () => window.removeEventListener('avi_data_batches', loadBatch);
+    }
   }, [mode, batchId]);
 
   useEffect(() => {
@@ -54,6 +90,8 @@ const WeighingStation: React.FC = () => {
   }, [activeTab, activeOrder]);
 
   const loadOrders = () => {
+    // This function is now mostly for manual triggers if needed, 
+    // but the useEffect handles the main logic.
     const all = getOrders();
     let filtered = mode === WeighingType.BATCH && batchId 
       ? all.filter(o => o.batchId === batchId) 
@@ -141,7 +179,8 @@ const WeighingStation: React.FC = () => {
     if (editingOrderId) {
       const existing = getOrders().find(o => o.id === editingOrderId);
       if (existing) {
-          const updatedRecords = existing.records.map(r => {
+          const records = existing.records || [];
+          const updatedRecords = records.map(r => {
               if (r.type === 'FULL') {
                   return { ...r, birds: r.quantity * birds };
               }
@@ -166,9 +205,10 @@ const WeighingStation: React.FC = () => {
   };
 
   const getTotals = (order: ClientOrder) => {
-    const full = order.records.filter(r => r.type === 'FULL');
-    const empty = order.records.filter(r => r.type === 'EMPTY');
-    const mort = order.records.filter(r => r.type === 'MORTALITY');
+    const records = order.records || [];
+    const full = records.filter(r => r.type === 'FULL');
+    const empty = records.filter(r => r.type === 'EMPTY');
+    const mort = records.filter(r => r.type === 'MORTALITY');
     
     const wF = full.reduce((a, b) => a + b.weight, 0);
     const wE = empty.reduce((a, b) => a + b.weight, 0);
@@ -192,6 +232,17 @@ const WeighingStation: React.FC = () => {
     return { wF, wE, wM, qF, qE, qM, bF, net, cF, cE, cM };
   };
 
+  const getAdjustedTimestamp = () => {
+    if (mode === WeighingType.BATCH && batch && batch.createdAt) {
+      const batchDate = new Date(batch.createdAt);
+      const now = new Date();
+      // Use batch date but current time
+      batchDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+      return batchDate.getTime();
+    }
+    return Date.now();
+  };
+
   const addWeight = () => {
     if (!activeOrder || !weightInput || !qtyInput) return;
     
@@ -200,14 +251,16 @@ const WeighingStation: React.FC = () => {
     // Check target crates limit
     if (activeOrder.targetCrates > 0) {
         if (activeTab === 'FULL') {
-            const currentFull = activeOrder.records.filter(r => r.type === 'FULL').reduce((a, b) => a + b.quantity, 0);
+            const records = activeOrder.records || [];
+            const currentFull = records.filter(r => r.type === 'FULL').reduce((a, b) => a + b.quantity, 0);
             if (currentFull + quantity > activeOrder.targetCrates) {
                 alert(`¡Límite de jabas llenas excedido! La meta es ${activeOrder.targetCrates} y ya tiene ${currentFull}.`);
                 return;
             }
         }
         if (activeTab === 'EMPTY') {
-            const currentEmpty = activeOrder.records.filter(r => r.type === 'EMPTY').reduce((a, b) => a + b.quantity, 0);
+            const records = activeOrder.records || [];
+            const currentEmpty = records.filter(r => r.type === 'EMPTY').reduce((a, b) => a + b.quantity, 0);
             if (currentEmpty + quantity > activeOrder.targetCrates) {
                 alert(`¡Límite de jabas vacías excedido! La meta es ${activeOrder.targetCrates} y ya tiene ${currentEmpty}.`);
                 return;
@@ -216,14 +269,18 @@ const WeighingStation: React.FC = () => {
     }
 
     const birds = activeTab === 'FULL' ? quantity * parseInt(birdsPerCrate || '0') : (activeTab === 'MORTALITY' ? quantity : 0);
+    const timestamp = getAdjustedTimestamp();
 
     const record: WeighingRecord = {
-      id: Date.now().toString(), timestamp: Date.now(), weight: parseFloat(weightInput),
+      id: Date.now().toString(), 
+      timestamp: timestamp, 
+      weight: parseFloat(weightInput),
       quantity: quantity, 
       birds: birds,
       type: activeTab
     };
-    const updated = { ...activeOrder, records: [record, ...activeOrder.records] };
+    const records = activeOrder.records || [];
+    const updated = { ...activeOrder, records: [record, ...records] };
     saveOrder(updated);
     setActiveOrder(updated);
     setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
@@ -233,7 +290,8 @@ const WeighingStation: React.FC = () => {
 
   const deleteRecord = (id: string) => {
     if(!confirm('¿Eliminar registro?')) return;
-    const updated = { ...activeOrder!, records: activeOrder!.records.filter(r => r.id !== id) };
+    const records = activeOrder?.records || [];
+    const updated = { ...activeOrder!, records: records.filter(r => r.id !== id) };
     saveOrder(updated);
     setActiveOrder(updated);
     setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
@@ -876,55 +934,6 @@ const WeighingStation: React.FC = () => {
             })}
           </div>
         </div>
-
-        {showClientModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm border border-gray-100">
-              <h3 className="text-2xl font-black mb-6 text-slate-900">Nuevo Cliente</h3>
-              <div className="space-y-5">
-                <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Nombre del Cliente</label>
-                    <input 
-                        list="client-names"
-                        className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all" 
-                        value={newClientName} 
-                        onChange={e => setNewClientName(e.target.value)} 
-                        placeholder="Ej. Juan Perez" 
-                    />
-                    <datalist id="client-names">
-                        {Array.from(new Set(getOrders().map(o => o.clientName))).map(name => (
-                            <option key={name} value={name} />
-                        ))}
-                    </datalist>
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Meta de Jabas</label>
-                    <input 
-                        type="number" 
-                        className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all" 
-                        value={targetCrates} 
-                        onChange={e => setTargetCrates(e.target.value)} 
-                        placeholder="Ej. 100" 
-                    />
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Pollos por Jaba (Promedio)</label>
-                    <input 
-                        type="number" 
-                        className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all" 
-                        value={newClientBirdsPerCrate} 
-                        onChange={e => setNewClientBirdsPerCrate(e.target.value)} 
-                        placeholder="Ej. 10" 
-                    />
-                </div>
-              </div>
-              <div className="mt-8 flex justify-end space-x-3">
-                <button onClick={() => setShowClientModal(false)} className="text-slate-500 font-bold hover:text-slate-800 px-4 py-2 hover:bg-slate-100 rounded-lg transition-colors">Cancelar</button>
-                <button onClick={handleSaveClient} className="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition-colors">Crear</button>
-              </div>
-            </div>
-          </div>
-        )}
       </>
     );
   }
@@ -1094,16 +1103,16 @@ const WeighingStation: React.FC = () => {
               {type === 'FULL' ? 'Lista Brutos' : type === 'EMPTY' ? 'Lista Tara' : 'Lista Merma'}
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
-              {activeOrder.records.filter(r => r.type === type).map((r, idx) => (
+              {(activeOrder.records || []).filter(r => r.type === type).map((r, idx) => (
                 <div key={r.id} className="flex justify-between items-center bg-white p-5 rounded-2xl border border-slate-100 shadow-sm transition-all group hover:border-blue-200">
                   <div className="flex items-center gap-4">
-                    <span className="text-[10px] font-black text-slate-300">#{activeOrder.records.filter(rt => rt.type === type).length - idx}</span>
+                    <span className="text-[10px] font-black text-slate-300">#{(activeOrder.records || []).filter(rt => rt.type === type).length - idx}</span>
                     <p className="font-digital font-black text-slate-800 text-lg md:text-xl">{r.weight.toFixed(2)}</p>
                   </div>
                   {!isLocked && <button onClick={() => deleteRecord(r.id)} className="p-2 text-slate-300 hover:text-red-600 transition-all"><Trash2 size={16}/></button>}
                 </div>
               ))}
-              {activeOrder.records.filter(r => r.type === type).length === 0 && (
+              {(activeOrder.records || []).filter(r => r.type === type).length === 0 && (
                  <div className="py-10 text-center text-slate-200 font-black uppercase text-[8px] tracking-widest opacity-50">Sin registros</div>
               )}
             </div>
@@ -1221,18 +1230,18 @@ const WeighingStation: React.FC = () => {
       {showClientModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm border border-gray-100">
-              <h3 className="text-2xl font-black mb-6 text-slate-900">Nuevo Cliente</h3>
+              <h3 className="text-2xl font-black mb-6 text-slate-900">{editingOrderId ? 'Editar Cliente' : 'Nuevo Cliente'}</h3>
               <div className="space-y-5">
                 <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Nombre del Cliente</label>
                     <input 
-                        list="client-names-2"
+                        list="client-names"
                         className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all" 
                         value={newClientName} 
                         onChange={e => setNewClientName(e.target.value)} 
                         placeholder="Ej. Juan Perez" 
                     />
-                    <datalist id="client-names-2">
+                    <datalist id="client-names">
                         {Array.from(new Set(getOrders().map(o => o.clientName))).map(name => (
                             <option key={name} value={name} />
                         ))}
@@ -1261,7 +1270,7 @@ const WeighingStation: React.FC = () => {
               </div>
               <div className="mt-8 flex justify-end space-x-3">
                 <button onClick={() => setShowClientModal(false)} className="text-slate-500 font-bold hover:text-slate-800 px-4 py-2 hover:bg-slate-100 rounded-lg transition-colors">Cancelar</button>
-                <button onClick={handleSaveClient} className="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition-colors">Crear</button>
+                <button onClick={handleSaveClient} className="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition-colors">{editingOrderId ? 'Guardar' : 'Crear'}</button>
               </div>
             </div>
           </div>

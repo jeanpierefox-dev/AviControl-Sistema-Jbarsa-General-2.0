@@ -16,15 +16,14 @@ const BatchList: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
 
-  useEffect(() => {
-    refresh();
-  }, [selectedDate]);
-
   const refresh = () => {
       const all = getBatches();
       // Filter by selected date
       const filteredByDate = all.filter(b => {
-          const dateObj = new Date(b.createdAt);
+          if (!b.createdAt) return false;
+          const dateObj = new Date(Number(b.createdAt));
+          if (isNaN(dateObj.getTime())) return false;
+          
           const year = dateObj.getFullYear();
           const month = String(dateObj.getMonth() + 1).padStart(2, '0');
           const day = String(dateObj.getDate()).padStart(2, '0');
@@ -32,13 +31,21 @@ const BatchList: React.FC = () => {
           return batchDate === selectedDate;
       });
 
-      setBatches(filteredByDate.sort((a, b) => b.createdAt - a.createdAt));
-      
       // Filter: Admin sees all, others see only their own
+      let finalBatches = filteredByDate;
       if (user?.role !== UserRole.ADMIN) {
-          setBatches(prev => prev.filter(b => b.createdBy === user?.id));
+          finalBatches = finalBatches.filter(b => b.createdBy === user?.id);
       }
+      
+      setBatches(finalBatches.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
   };
+
+  useEffect(() => {
+    refresh();
+    const handleUpdate = () => refresh();
+    window.addEventListener('avi_data_batches', handleUpdate);
+    return () => window.removeEventListener('avi_data_batches', handleUpdate);
+  }, [selectedDate, user]);
 
   const handleSave = () => {
     if (!currentBatch.name || !currentBatch.totalCratesLimit) return;
@@ -71,7 +78,8 @@ const BatchList: React.FC = () => {
     let totalMort = 0; let totalMortWeight = 0;
 
     orders.forEach(order => {
-      order.records.forEach(r => {
+      const records = order.records || [];
+      records.forEach(r => {
         if (r.type === 'FULL') { totalFullCrates += r.quantity; totalFullWeight += r.weight; }
         if (r.type === 'EMPTY') { totalEmptyCrates += r.quantity; totalEmptyWeight += r.weight; }
         if (r.type === 'MORTALITY') { totalMort += r.quantity; totalMortWeight += r.weight; }

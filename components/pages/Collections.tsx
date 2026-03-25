@@ -29,9 +29,10 @@ const Collections: React.FC = () => {
   }
 
   const calculateBalance = (order: ClientOrder) => {
-    const full = order.records.filter(r => r.type === 'FULL').reduce((a,b)=>a+b.weight,0);
-    const empty = order.records.filter(r => r.type === 'EMPTY').reduce((a,b)=>a+b.weight,0);
-    const mort = order.records.filter(r => r.type === 'MORTALITY').reduce((a,b)=>a+b.weight,0);
+    const records = order.records || [];
+    const full = records.filter(r => r.type === 'FULL').reduce((a,b)=>a+b.weight,0);
+    const empty = records.filter(r => r.type === 'EMPTY').reduce((a,b)=>a+b.weight,0);
+    const mort = records.filter(r => r.type === 'MORTALITY').reduce((a,b)=>a+b.weight,0);
     let net = order.weighingMode === WeighingType.SOLO_POLLO ? full : full - empty - mort;
     const totalDue = net * order.pricePerKg;
     const totalPaid = order.payments.reduce((a,b) => a + b.amount, 0);
