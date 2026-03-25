@@ -6,8 +6,8 @@ import { login, getConfig, saveConfig } from '../../services/storage';
 import { Scale, User, Lock } from 'lucide-react';
 
 const Login: React.FC = () => {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('1234');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   
   const { setUser } = useContext(AuthContext);
