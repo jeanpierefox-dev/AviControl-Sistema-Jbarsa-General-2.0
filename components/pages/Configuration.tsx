@@ -255,6 +255,34 @@ const Configuration: React.FC = () => {
                   )}
               </div>
           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+              <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-200">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block mb-2">Jabas por Defecto (Llenas)</label>
+                  <input 
+                      type="number" 
+                      inputMode="numeric"
+                      value={config.defaultFullCrateBatch} 
+                      onChange={e => setConfig({...config, defaultFullCrateBatch: parseInt(e.target.value) || 0})}
+                      className="w-full bg-white border-2 border-slate-100 rounded-2xl px-4 py-3 font-black text-sm text-slate-900 outline-none focus:border-blue-600 transition-all"
+                      placeholder="Ej. 5"
+                  />
+                  <p className="text-[9px] text-slate-400 font-medium mt-2">Cantidad de jabas sugerida al iniciar una pesada de pollos llenos.</p>
+              </div>
+
+              <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-200">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block mb-2">Jabas por Defecto (Vacías)</label>
+                  <input 
+                      type="number" 
+                      inputMode="numeric"
+                      value={config.defaultEmptyCrateBatch} 
+                      onChange={e => setConfig({...config, defaultEmptyCrateBatch: parseInt(e.target.value) || 0})}
+                      className="w-full bg-white border-2 border-slate-100 rounded-2xl px-4 py-3 font-black text-sm text-slate-900 outline-none focus:border-blue-600 transition-all"
+                      placeholder="Ej. 10"
+                  />
+                  <p className="text-[9px] text-slate-400 font-medium mt-2">Cantidad de jabas sugerida al iniciar una pesada de tara (vacías).</p>
+              </div>
+          </div>
       </div>
 
       {/* Cloud Sync */}

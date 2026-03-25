@@ -24,7 +24,7 @@ const Collections: React.FC = () => {
 
   const refresh = () => {
       const all = getOrders();
-      if (user?.role === UserRole.ADMIN) setOrders(all);
+      if (user?.role === UserRole.ADMIN || user?.role === UserRole.GENERAL) setOrders(all);
       else setOrders(all.filter(o => !o.createdBy || o.createdBy === user?.id));
   }
 
@@ -332,6 +332,7 @@ const Collections: React.FC = () => {
                               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-xl">S/.</span>
                               <input 
                                   type="number" 
+                                  inputMode="decimal"
                                   className="w-full bg-white border-2 border-slate-200 rounded-xl py-4 pl-12 pr-4 font-mono font-black text-2xl text-slate-900 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all" 
                                   value={payAmount} 
                                   onChange={e => setPayAmount(e.target.value)} 

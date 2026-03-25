@@ -48,7 +48,7 @@ const WeighingStation: React.FC = () => {
         ? all.filter(o => o.batchId === batchId) 
         : all.filter(o => !o.batchId && o.weighingMode === mode);
       
-      if (user?.role !== UserRole.ADMIN) {
+      if (user?.role !== UserRole.ADMIN && user?.role !== UserRole.GENERAL) {
         filtered = filtered.filter(o => !o.createdBy || o.createdBy === user?.id);
       }
       
@@ -97,7 +97,7 @@ const WeighingStation: React.FC = () => {
       ? all.filter(o => o.batchId === batchId) 
       : all.filter(o => !o.batchId && o.weighingMode === mode);
     
-    if (user?.role !== UserRole.ADMIN) {
+    if (user?.role !== UserRole.ADMIN && user?.role !== UserRole.GENERAL) {
       filtered = filtered.filter(o => !o.createdBy || o.createdBy === user?.id);
     }
     
@@ -113,7 +113,10 @@ const WeighingStation: React.FC = () => {
         setQtyInput(config.defaultFullCrateBatch.toString()); 
         setBirdsPerCrate(activeOrder?.birdsPerCrate?.toString() || '10'); 
       }
-      if (activeTab === 'EMPTY') { setQtyInput('10'); setBirdsPerCrate('0'); }
+      if (activeTab === 'EMPTY') { 
+        setQtyInput(config.defaultEmptyCrateBatch.toString()); 
+        setBirdsPerCrate('0'); 
+      }
       if (activeTab === 'MORTALITY') { setQtyInput('1'); setBirdsPerCrate('1'); }
     }
   };

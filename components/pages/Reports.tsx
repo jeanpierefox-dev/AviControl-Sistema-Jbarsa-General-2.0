@@ -71,7 +71,7 @@ const Reports: React.FC = () => {
           return false;
       });
 
-      if (user?.role === UserRole.ADMIN) {
+      if (user?.role === UserRole.ADMIN || user?.role === UserRole.GENERAL) {
           setBatches(filteredBatchesByDate);
           setOrders(filteredOrdersByDate);
       } else {

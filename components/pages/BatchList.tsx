@@ -31,9 +31,9 @@ const BatchList: React.FC = () => {
           return batchDate === selectedDate;
       });
 
-      // Filter: Admin sees all, others see only their own
+      // Filter: Admin and General see all, others see only their own
       let finalBatches = filteredByDate;
-      if (user?.role !== UserRole.ADMIN) {
+      if (user?.role !== UserRole.ADMIN && user?.role !== UserRole.GENERAL) {
           finalBatches = finalBatches.filter(b => b.createdBy === user?.id);
       }
       
@@ -226,6 +226,7 @@ const BatchList: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Meta de Jabas (Límite)</label>
                 <input 
                   type="number"
+                  inputMode="numeric"
                   className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all"
                   value={currentBatch.totalCratesLimit || ''}
                   onChange={e => setCurrentBatch({...currentBatch, totalCratesLimit: Number(e.target.value)})}
