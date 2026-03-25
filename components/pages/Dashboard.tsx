@@ -6,6 +6,35 @@ import { AuthContext } from '../../App';
 import { UserRole, WeighingType } from '../../types';
 import { getConfig, getOrders, getBatches, resetApp } from '../../services/storage';
 
+const MenuCard = ({ title, desc, icon, onClick, color, roles, compact = false, mode, user }: any) => {
+  if (!roles.includes(user?.role)) return null;
+  if (mode && user?.role !== UserRole.ADMIN) {
+      const allowed = user?.allowedModes || [];
+      if (!allowed.includes(mode)) return null;
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      className={`relative overflow-hidden bg-white rounded-[2rem] shadow-sm border border-slate-200 hover:shadow-2xl hover:border-blue-400 transition-all duration-300 text-left group ${compact ? 'p-5' : 'p-7'}`}
+    >
+      <div className={`absolute top-0 right-0 w-32 h-32 transform translate-x-12 -translate-y-12 rounded-full opacity-[0.03] ${color}`}></div>
+      <div className="relative z-10 flex items-start space-x-5">
+        <div className={`p-4 rounded-2xl flex items-center justify-center ${color} text-white shadow-lg group-hover:scale-110 transition-transform duration-500`}>
+          {icon}
+        </div>
+        <div className="flex-1">
+          <h3 className={`font-black text-slate-900 uppercase tracking-tighter ${compact ? 'text-xs' : 'text-lg'}`}>{title}</h3>
+          {!compact && <p className="text-xs text-slate-500 mt-2 mb-4 leading-relaxed font-medium line-clamp-2">{desc}</p>}
+          <div className={`flex items-center font-black text-[9px] uppercase tracking-widest mt-1 ${color.replace('bg-', 'text-')} group-hover:translate-x-1 transition-transform`}>
+            Iniciar Módulo <ArrowRight size={14} className="ml-1" />
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+};
+
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
@@ -20,7 +49,7 @@ const Dashboard: React.FC = () => {
         const todayWeight = orders.reduce((acc, order) => {
             const isToday = new Date(order.id ? parseInt(order.id) : Date.now()).toDateString() === today;
             if (!isToday) return acc;
-            return acc + order.records.filter(r => r.type === 'FULL').reduce((sum, r) => sum + r.weight, 0);
+            return acc + (order.records || []).filter(r => r.type === 'FULL').reduce((sum, r) => sum + r.weight, 0);
         }, 0);
 
         setStats({
@@ -38,35 +67,6 @@ const Dashboard: React.FC = () => {
         window.removeEventListener('avi_data_orders', calculateStats);
     };
   }, []);
-
-  const MenuCard = ({ title, desc, icon, onClick, color, roles, compact = false, mode }: any) => {
-    if (!roles.includes(user?.role)) return null;
-    if (mode && user?.role !== UserRole.ADMIN) {
-        const allowed = user?.allowedModes || [];
-        if (!allowed.includes(mode)) return null;
-    }
-
-    return (
-      <button
-        onClick={onClick}
-        className={`relative overflow-hidden bg-white rounded-[2rem] shadow-sm border border-slate-200 hover:shadow-2xl hover:border-blue-400 transition-all duration-300 text-left group ${compact ? 'p-5' : 'p-7'}`}
-      >
-        <div className={`absolute top-0 right-0 w-32 h-32 transform translate-x-12 -translate-y-12 rounded-full opacity-[0.03] ${color}`}></div>
-        <div className="relative z-10 flex items-start space-x-5">
-          <div className={`p-4 rounded-2xl flex items-center justify-center ${color} text-white shadow-lg group-hover:scale-110 transition-transform duration-500`}>
-            {icon}
-          </div>
-          <div className="flex-1">
-            <h3 className={`font-black text-slate-900 uppercase tracking-tighter ${compact ? 'text-xs' : 'text-lg'}`}>{title}</h3>
-            {!compact && <p className="text-xs text-slate-500 mt-2 mb-4 leading-relaxed font-medium line-clamp-2">{desc}</p>}
-            <div className={`flex items-center font-black text-[9px] uppercase tracking-widest mt-1 ${color.replace('bg-', 'text-')} group-hover:translate-x-1 transition-transform`}>
-              Iniciar Módulo <ArrowRight size={14} className="ml-1" />
-            </div>
-          </div>
-        </div>
-      </button>
-    );
-  };
 
   return (
     <div className="space-y-8 animate-fade-in pb-10">
@@ -89,7 +89,7 @@ const Dashboard: React.FC = () => {
                     <ShieldCheck size={14} className="text-blue-600"/>
                     <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest">Sesión Protegida</span>
                 </div>
-                <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none">Hola, {user?.name.split(' ')[0]}</h2>
+                <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none">Hola, {user?.name?.split(' ')[0] || 'Usuario'}</h2>
                 <p className="text-slate-400 font-bold uppercase tracking-widest text-[9px] mt-1">Sistema de Gestión Barsa v1.2</p>
             </div>
         </div>
@@ -124,6 +124,7 @@ const Dashboard: React.FC = () => {
               color="bg-blue-900"
               roles={[UserRole.ADMIN, UserRole.GENERAL, UserRole.OPERATOR]}
               mode={WeighingType.BATCH}
+              user={user}
             />
             <MenuCard
               title="Módulo Solo Pollo"
@@ -133,6 +134,7 @@ const Dashboard: React.FC = () => {
               color="bg-amber-500"
               roles={[UserRole.ADMIN, UserRole.GENERAL, UserRole.OPERATOR]}
               mode={WeighingType.SOLO_POLLO}
+              user={user}
             />
             <MenuCard
               title="Control de Jabas"
@@ -142,6 +144,7 @@ const Dashboard: React.FC = () => {
               color="bg-emerald-600"
               roles={[UserRole.ADMIN, UserRole.GENERAL, UserRole.OPERATOR]}
               mode={WeighingType.SOLO_JABAS}
+              user={user}
             />
         </div>
       </div>
@@ -160,6 +163,7 @@ const Dashboard: React.FC = () => {
               color="bg-indigo-600"
               roles={[UserRole.ADMIN, UserRole.GENERAL]}
               compact
+              user={user}
             />
             <MenuCard
               title="Reportes"
@@ -168,6 +172,7 @@ const Dashboard: React.FC = () => {
               color="bg-violet-600"
               roles={[UserRole.ADMIN, UserRole.GENERAL]}
               compact
+              user={user}
             />
             <MenuCard
               title="Usuarios"
@@ -176,6 +181,7 @@ const Dashboard: React.FC = () => {
               color="bg-rose-500"
               roles={[UserRole.ADMIN, UserRole.GENERAL]}
               compact
+              user={user}
             />
             <MenuCard
               title="Ajustes"
@@ -184,6 +190,7 @@ const Dashboard: React.FC = () => {
               color="bg-slate-800"
               roles={[UserRole.ADMIN]}
               compact
+              user={user}
             />
         </div>
       </div>

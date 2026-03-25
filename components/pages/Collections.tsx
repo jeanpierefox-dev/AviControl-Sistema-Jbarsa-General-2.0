@@ -226,7 +226,7 @@ const Collections: React.FC = () => {
                         <div className="p-3 bg-blue-500/20 text-blue-400 rounded-xl"><History size={24}/></div>
                         <div>
                             <h3 className="text-xl font-black uppercase tracking-widest">Estado de Cuenta</h3>
-                            <p className="text-xs text-slate-400 font-medium mt-1">{viewHistoryOrder.clientName} - Lote: {viewHistoryOrder.batchId.slice(-6).toUpperCase()}</p>
+                            <p className="text-xs text-slate-400 font-medium mt-1">{viewHistoryOrder.clientName} {viewHistoryOrder.batchId ? `- Lote: ${viewHistoryOrder.batchId.slice(-6).toUpperCase()}` : ''}</p>
                         </div>
                       </div>
                       <button onClick={() => setViewHistoryOrder(null)} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><X size={24}/></button>
@@ -248,7 +248,7 @@ const Collections: React.FC = () => {
                               <tbody className="divide-y divide-slate-100 font-mono text-xs">
                                   {/* Initial Debt Row */}
                                   <tr className="hover:bg-slate-50 transition-colors">
-                                      <td className="p-4 text-slate-500">{new Date(viewHistoryOrder.timestamp).toLocaleDateString()}</td>
+                                      <td className="p-4 text-slate-500">{new Date(parseInt(viewHistoryOrder.id)).toLocaleDateString()}</td>
                                       <td className="p-4 font-sans font-medium text-slate-700">Liquidación Inicial</td>
                                       <td className="p-4 text-right text-slate-900">{calculateBalance(viewHistoryOrder).totalDue.toFixed(2)}</td>
                                       <td className="p-4 text-right text-slate-400">-</td>

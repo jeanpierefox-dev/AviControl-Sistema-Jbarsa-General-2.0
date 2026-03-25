@@ -14,6 +14,7 @@ import WeighingStation from './components/pages/WeighingStation';
 import Collections from './components/pages/Collections';
 import Reports from './components/pages/Reports';
 import Configuration from './components/pages/Configuration';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Context
 export const AuthContext = React.createContext<{
@@ -93,8 +94,8 @@ const Container: React.FC<{ children: React.ReactNode; title?: string; showBack?
             </div>
 
             <div className="text-right hidden sm:block">
-              <p className="text-[10px] font-black text-blue-100 uppercase leading-none">{user.name}</p>
-              <p className="text-[8px] text-blue-400 font-bold uppercase tracking-widest leading-none mt-0.5">{user.role}</p>
+              <p className="text-[10px] font-black text-blue-100 uppercase leading-none">{user?.name || 'Usuario'}</p>
+              <p className="text-[8px] text-blue-400 font-bold uppercase tracking-widest leading-none mt-0.5">{user?.role || 'Rol'}</p>
             </div>
             <button
               onClick={logout}
@@ -158,28 +159,30 @@ const App: React.FC = () => {
     const logout = () => setUser(null);
 
     return (
-        <AuthContext.Provider value={{ user, setUser, logout }}>
-            {syncError && (
-                <div className="fixed top-0 left-0 right-0 z-[100] bg-red-600 text-white p-3 text-center text-xs font-bold shadow-lg flex items-center justify-center gap-2">
-                    <Database size={14} />
-                    Error de sincronización: {syncError}. Revisa las reglas de seguridad o la URL de la base de datos.
-                    <button onClick={() => setSyncError(null)} className="ml-4 bg-red-800 px-2 py-1 rounded hover:bg-red-900 transition-all">Cerrar</button>
-                </div>
-            )}
-            <HashRouter>
-                <Routes>
-                    <Route path="/login" element={<LoginPage />} />
-                    <Route path="/" element={<Container><Dashboard /></Container>} />
-                    <Route path="/usuarios" element={<Container title="Usuarios" showBack><UserManagement /></Container>} />
-                    <Route path="/lotes" element={<Container title="Lotes" showBack><BatchList /></Container>} />
-                    <Route path="/weigh/:mode/:batchId?" element={<Container title="Pesaje" showBack><WeighingStation /></Container>} />
-                    <Route path="/cobranza" element={<Container title="Cobranza" showBack><Collections /></Container>} />
-                    <Route path="/reportes" element={<Container title="Reportes" showBack><Reports /></Container>} />
-                    <Route path="/config" element={<Container title="Ajustes" showBack><Configuration /></Container>} />
-                    <Route path="*" element={<Navigate to="/" />} />
-                </Routes>
-            </HashRouter>
-        </AuthContext.Provider>
+        <ErrorBoundary>
+            <AuthContext.Provider value={{ user, setUser, logout }}>
+                {syncError && (
+                    <div className="fixed top-0 left-0 right-0 z-[100] bg-red-600 text-white p-3 text-center text-xs font-bold shadow-lg flex items-center justify-center gap-2">
+                        <Database size={14} />
+                        Error de sincronización: {syncError}. Revisa las reglas de seguridad o la URL de la base de datos.
+                        <button onClick={() => setSyncError(null)} className="ml-4 bg-red-800 px-2 py-1 rounded hover:bg-red-900 transition-all">Cerrar</button>
+                    </div>
+                )}
+                <HashRouter>
+                    <Routes>
+                        <Route path="/login" element={<LoginPage />} />
+                        <Route path="/" element={<Container><Dashboard /></Container>} />
+                        <Route path="/usuarios" element={<Container title="Usuarios" showBack><UserManagement /></Container>} />
+                        <Route path="/lotes" element={<Container title="Lotes" showBack><BatchList /></Container>} />
+                        <Route path="/weigh/:mode/:batchId?" element={<Container title="Pesaje" showBack><WeighingStation /></Container>} />
+                        <Route path="/cobranza" element={<Container title="Cobranza" showBack><Collections /></Container>} />
+                        <Route path="/reportes" element={<Container title="Reportes" showBack><Reports /></Container>} />
+                        <Route path="/config" element={<Container title="Ajustes" showBack><Configuration /></Container>} />
+                        <Route path="*" element={<Navigate to="/" />} />
+                    </Routes>
+                </HashRouter>
+            </AuthContext.Provider>
+        </ErrorBoundary>
     );
 };
 

@@ -669,7 +669,7 @@ const WeighingStation: React.FC = () => {
     y += 10;
 
     // Table Data Preparation
-    const tableData = batchOrders.map((order: ClientOrder) => {
+    const tableData: any[] = batchOrders.map((order: ClientOrder) => {
         const t = getTotals(order);
         const price = order.pricePerKg || 0;
         const totalAmount = t.net * price;
