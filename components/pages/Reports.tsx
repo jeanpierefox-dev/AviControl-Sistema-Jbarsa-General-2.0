@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useContext } from 'react';
-import { getBatches, getOrders, getConfig, saveOrder, resetApp } from '../../services/storage';
+import { getBatches, getOrders, getConfig, saveOrder, resetApp, getVisibleUserIds } from '../../services/storage';
 import { Batch, ClientOrder, WeighingType, UserRole, WeighingRecord } from '../../types';
 import { 
   ChevronDown, ChevronUp, Package, ShoppingCart, List, Printer, 
@@ -71,13 +71,9 @@ const Reports: React.FC = () => {
           return false;
       });
 
-      if (user?.role === UserRole.ADMIN || user?.role === UserRole.GENERAL) {
-          setBatches(filteredBatchesByDate);
-          setOrders(filteredOrdersByDate);
-      } else {
-          setBatches(filteredBatchesByDate.filter(b => !b.createdBy || b.createdBy === user?.id));
-          setOrders(filteredOrdersByDate.filter(o => !o.createdBy || o.createdBy === user?.id));
-      }
+      const visibleIds = getVisibleUserIds(user);
+      setBatches(filteredBatchesByDate.filter(b => visibleIds.includes(b.createdBy || '')));
+      setOrders(filteredOrdersByDate.filter(o => visibleIds.includes(o.createdBy || '')));
   }
 
   const handlePDFOutput = (doc: jsPDF, filename: string, preview: boolean = false) => {

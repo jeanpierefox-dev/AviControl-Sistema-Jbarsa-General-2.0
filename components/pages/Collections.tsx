@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useContext } from 'react';
-import { getOrders, saveOrder, getConfig } from '../../services/storage';
+import { getOrders, saveOrder, getConfig, getVisibleUserIds } from '../../services/storage';
 import { ClientOrder, WeighingType, UserRole, Payment } from '../../types';
 import { Search, Clock, History, Printer, Filter, CheckCircle, FileText, DollarSign, ArrowUpRight, X, Calendar } from 'lucide-react';
 import jsPDF from 'jspdf';
@@ -24,8 +24,8 @@ const Collections: React.FC = () => {
 
   const refresh = () => {
       const all = getOrders();
-      if (user?.role === UserRole.ADMIN || user?.role === UserRole.GENERAL) setOrders(all);
-      else setOrders(all.filter(o => !o.createdBy || o.createdBy === user?.id));
+      const visibleIds = getVisibleUserIds(user);
+      setOrders(all.filter(o => visibleIds.includes(o.createdBy || '')));
   }
 
   const calculateBalance = (order: ClientOrder) => {

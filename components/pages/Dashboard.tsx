@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Package, Calculator, Users, FileText, Settings, ArrowRight, Bird, Box, TrendingUp, ShieldCheck, Activity, Trash2 } from 'lucide-react';
 import { AuthContext } from '../../App';
 import { UserRole, WeighingType } from '../../types';
-import { getConfig, getOrders, getBatches, resetApp } from '../../services/storage';
+import { getConfig, getOrders, getBatches, resetApp, getVisibleUserIds } from '../../services/storage';
 
 const MenuCard = ({ title, desc, icon, onClick, color, roles, compact = false, mode, user }: any) => {
   if (!roles.includes(user?.role)) return null;
@@ -43,8 +43,9 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     const calculateStats = () => {
-        const batches = getBatches().filter(b => b.status === 'ACTIVE');
-        const orders = getOrders();
+        const visibleIds = getVisibleUserIds(user);
+        const batches = getBatches().filter(b => b.status === 'ACTIVE' && visibleIds.includes(b.createdBy || ''));
+        const orders = getOrders().filter(o => visibleIds.includes(o.createdBy || ''));
         const today = new Date().toDateString();
         const todayWeight = orders.reduce((acc, order) => {
             const isToday = new Date(order.id ? parseInt(order.id) : Date.now()).toDateString() === today;

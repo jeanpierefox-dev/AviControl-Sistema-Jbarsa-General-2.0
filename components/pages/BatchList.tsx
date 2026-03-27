@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Batch, WeighingType, UserRole } from '../../types';
-import { getBatches, saveBatch, deleteBatch, getOrdersByBatch } from '../../services/storage';
+import { getBatches, saveBatch, deleteBatch, getOrdersByBatch, getVisibleUserIds } from '../../services/storage';
 import { Plus, Trash2, Edit, Scale, Calendar, Box, Activity } from 'lucide-react';
 import { AuthContext } from '../../App';
 
@@ -31,11 +31,10 @@ const BatchList: React.FC = () => {
           return batchDate === selectedDate;
       });
 
-      // Filter: Admin and General see all, others see only their own
+      // Filter: Admin sees all, General sees self + operators, others see only their own
       let finalBatches = filteredByDate;
-      if (user?.role !== UserRole.ADMIN && user?.role !== UserRole.GENERAL) {
-          finalBatches = finalBatches.filter(b => b.createdBy === user?.id);
-      }
+      const visibleIds = getVisibleUserIds(user);
+      finalBatches = finalBatches.filter(b => visibleIds.includes(b.createdBy || ''));
       
       setBatches(finalBatches.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
   };

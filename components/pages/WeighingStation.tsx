@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { WeighingType, ClientOrder, WeighingRecord, UserRole } from '../../types';
-import { getOrders, saveOrder, getConfig, deleteOrder, getBatches } from '../../services/storage';
+import { getOrders, saveOrder, getConfig, deleteOrder, getBatches, getVisibleUserIds } from '../../services/storage';
 import { 
   ArrowLeft, Save, X, Eye, Package, PackageOpen, 
   User, Trash2, Box, UserPlus, Bird, Printer, Receipt, 
@@ -48,9 +48,8 @@ const WeighingStation: React.FC = () => {
         ? all.filter(o => o.batchId === batchId) 
         : all.filter(o => !o.batchId && o.weighingMode === mode);
       
-      if (user?.role !== UserRole.ADMIN && user?.role !== UserRole.GENERAL) {
-        filtered = filtered.filter(o => !o.createdBy || o.createdBy === user?.id);
-      }
+      const visibleIds = getVisibleUserIds(user);
+      filtered = filtered.filter(o => visibleIds.includes(o.createdBy || ''));
       
       filtered.sort((a, b) => (a.status === 'OPEN' ? -1 : 1));
       setOrders(filtered);
@@ -97,9 +96,8 @@ const WeighingStation: React.FC = () => {
       ? all.filter(o => o.batchId === batchId) 
       : all.filter(o => !o.batchId && o.weighingMode === mode);
     
-    if (user?.role !== UserRole.ADMIN && user?.role !== UserRole.GENERAL) {
-      filtered = filtered.filter(o => !o.createdBy || o.createdBy === user?.id);
-    }
+    const visibleIds = getVisibleUserIds(user);
+    filtered = filtered.filter(o => visibleIds.includes(o.createdBy || ''));
     
     filtered.sort((a, b) => (a.status === 'OPEN' ? -1 : 1));
     setOrders(filtered);

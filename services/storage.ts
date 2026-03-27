@@ -179,6 +179,19 @@ export const login = (username: string, password: string): User | null => {
     return users.find(u => u.username === username && u.password === password) || null;
 };
 
+export const getVisibleUserIds = (user: User | null): string[] => {
+    if (!user) return [];
+    const allUsers = getUsers();
+    if (user.role === UserRole.ADMIN) {
+        return allUsers.map(u => u.id);
+    }
+    if (user.role === UserRole.GENERAL) {
+        const operators = allUsers.filter(u => u.parentId === user.id);
+        return [user.id, ...operators.map(u => u.id)];
+    }
+    return [user.id];
+};
+
 export const getBatches = (): Batch[] => safeParse(KEYS.BATCHES, []);
 
 export const saveBatch = (batch: Batch) => {
