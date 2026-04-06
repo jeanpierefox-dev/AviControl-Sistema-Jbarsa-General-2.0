@@ -40,6 +40,7 @@ const WeighingStation: React.FC = () => {
 
   const [pricePerKg, setPricePerKg] = useState<number | string>('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CREDIT'>('CASH');
+  const [isLameInput, setIsLameInput] = useState(false);
 
   useEffect(() => {
     const refreshOrders = () => {
@@ -104,6 +105,7 @@ const WeighingStation: React.FC = () => {
   };
 
   const setDefaultQuantity = () => {
+    setIsLameInput(false);
     if (mode === WeighingType.SOLO_POLLO) { setQtyInput('10'); setBirdsPerCrate('1'); }
     else if (mode === WeighingType.SOLO_JABAS) { setQtyInput('1'); setBirdsPerCrate('0'); }
     else {
@@ -230,7 +232,11 @@ const WeighingStation: React.FC = () => {
     const cE = empty.length;
     const cM = mort.length;
 
-    return { wF, wE, wM, qF, qE, qM, bF, net, cF, cE, cM };
+    // Averages
+    const avgNet = bF > 0 ? net / bF : 0;
+    const avgMort = qM > 0 ? wM / qM : 0;
+
+    return { wF, wE, wM, qF, qE, qM, bF, net, cF, cE, cM, avgNet, avgMort };
   };
 
   const getAdjustedTimestamp = () => {
@@ -278,7 +284,8 @@ const WeighingStation: React.FC = () => {
       weight: parseFloat(weightInput),
       quantity: quantity, 
       birds: birds,
-      type: activeTab
+      type: activeTab,
+      isLame: activeTab === 'MORTALITY' ? isLameInput : false
     };
     const records = activeOrder.records || [];
     const updated = { ...activeOrder, records: [record, ...records] };
@@ -360,7 +367,9 @@ const WeighingStation: React.FC = () => {
                 ['Jabas Llenas:', t.qF.toString()],
                 ['Total Pollos:', t.bF.toString()],
                 ['Jabas Vacías:', t.qE.toString()],
-                ['Pollos Muertos:', t.qM.toString()]
+                ['Pollos Muertos:', t.qM.toString()],
+                ['Prom. Peso Neto:', `${t.avgNet.toFixed(2)} kg`],
+                ['Prom. P. Muerto:', `${t.avgMort.toFixed(2)} kg`]
             ],
             theme: 'grid',
             styles: { fontSize: 8, cellPadding: 1.5 },
@@ -393,7 +402,7 @@ const WeighingStation: React.FC = () => {
                     let suffix = '';
                     if (r.type === 'FULL') suffix = `${r.quantity}j, ${r.birds}p`;
                     else if (r.type === 'EMPTY') suffix = `${r.quantity}j`;
-                    else if (r.type === 'MORTALITY') suffix = `${r.quantity}p`;
+                    else if (r.type === 'MORTALITY') suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}`;
                     return [r.weight.toFixed(2), suffix];
                 }), 4),
                 theme: 'grid',
@@ -412,6 +421,12 @@ const WeighingStation: React.FC = () => {
         renderCategory("LLENAS", fullRecords, t.wF, t.qF);
         renderCategory("VACÍAS", emptyRecords, t.wE, t.qE);
         renderCategory("MORTALIDAD", mortRecords, t.wM, t.qM);
+
+        if (mortRecords.some(r => r.isLame)) {
+            doc.setFontSize(7).setFont("helvetica", "italic");
+            doc.text("* PC = Pollo Cojo", 5, y + 2);
+            y += 5;
+        }
     }
 
     y += 2;
@@ -425,6 +440,9 @@ const WeighingStation: React.FC = () => {
     doc.text("Peso Bruto:", 8, y); doc.text(`${t.wF.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
     doc.text("Tara Total:", 8, y); doc.text(`-${t.wE.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
     doc.text("Mortalidad:", 8, y); doc.text(`-${t.wM.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+    doc.setFontSize(8).setFont("helvetica", "italic");
+    doc.text("Prom. Peso Neto:", 8, y); doc.text(`${t.avgNet.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 4;
+    doc.text("Prom. P. Muerto:", 8, y); doc.text(`${t.avgMort.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
     
     doc.setFontSize(11).setFont("helvetica", "bold");
     doc.text("PESO NETO:", 8, y + 2);
@@ -514,6 +532,8 @@ const WeighingStation: React.FC = () => {
             ['Peso Bruto:', `${t.wF.toFixed(2)} kg`],
             ['Tara Total:', `-${t.wE.toFixed(2)} kg`],
             ['Mortalidad:', `-${t.wM.toFixed(2)} kg`],
+            ['Prom. P. Neto:', `${t.avgNet.toFixed(2)} kg`],
+            ['Prom. P. Muerto:', `${t.avgMort.toFixed(2)} kg`],
             ['PESO NETO:', `${t.net.toFixed(2)} kg`]
         ],
         theme: 'grid',
@@ -616,6 +636,8 @@ const WeighingStation: React.FC = () => {
             ['Jabas Llenas (Bruto)', t.qF, `${t.bF} Pollos`, t.wF.toFixed(2)],
             ['Jabas Vacías (Tara)', t.qE, '-', `-${t.wE.toFixed(2)}`],
             ['Mortalidad (Pollos Muertos)', t.qM, '-', `-${t.wM.toFixed(2)}`],
+            ['Promedio Peso Neto', '-', '-', `${t.avgNet.toFixed(2)} kg`],
+            ['Promedio Peso Muerto', '-', '-', `${t.avgMort.toFixed(2)} kg`],
             [{ content: 'PESO NETO FINAL', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold', fontSize: 11 } }, { content: t.net.toFixed(2), styles: { fontStyle: 'bold', fontSize: 11, fillColor: [240, 253, 244], textColor: [21, 128, 61] } }]
         ],
         theme: 'grid',
@@ -653,7 +675,7 @@ const WeighingStation: React.FC = () => {
                 let suffix = '';
                 if (r.type === 'FULL') suffix = `${r.quantity}j, ${r.birds}p`;
                 else if (r.type === 'EMPTY') suffix = `${r.quantity}j`;
-                else if (r.type === 'MORTALITY') suffix = `${r.quantity}p`;
+                else if (r.type === 'MORTALITY') suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}`;
                 return [r.weight.toFixed(2), suffix];
             }), 8),
             theme: 'grid',
@@ -665,6 +687,12 @@ const WeighingStation: React.FC = () => {
     renderCategoryGridA4("JABAS LLENAS", fullRecords, t.wF, t.qF);
     renderCategoryGridA4("JABAS VACÍAS", emptyRecords, t.wE, t.qE);
     renderCategoryGridA4("MORTALIDAD", mortRecords, t.wM, t.qM);
+
+    if (mortRecords.some(r => r.isLame)) {
+        y = (doc as any).lastAutoTable.finalY + 5;
+        doc.setFontSize(8).setFont("helvetica", "italic");
+        doc.text("* PC = Pollo Cojo", 14, y);
+    }
     
     // Footer
     const pageCount = (doc as any).internal.getNumberOfPages();
@@ -1136,7 +1164,7 @@ const WeighingStation: React.FC = () => {
                       />
                   </div>
 
-                  <div className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl flex flex-col items-center justify-center shadow-inner">
+                  <div className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl flex flex-col items-center justify-center shadow-inner relative">
                       <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5 leading-none">PESO (KG)</span>
                       <input 
                         ref={weightInputRef} 
@@ -1149,6 +1177,14 @@ const WeighingStation: React.FC = () => {
                         step="0.01"
                         inputMode="decimal"
                       />
+                      {activeTab === 'MORTALITY' && (
+                        <button 
+                          onClick={() => setIsLameInput(!isLameInput)}
+                          className={`absolute -bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest transition-all shadow-md ${isLameInput ? 'bg-amber-500 text-white' : 'bg-white text-slate-400 border border-slate-200'}`}
+                        >
+                          {isLameInput ? 'Pollo Cojo (PC)' : 'Pollo Muerto'}
+                        </button>
+                      )}
                   </div>
                   <button onClick={addWeight} className="w-20 md:w-32 bg-blue-950 text-white rounded-xl shadow-xl hover:bg-blue-900 transition-all flex items-center justify-center border-b-4 border-blue-800 active:scale-95">
                       <Save size={24}/>
@@ -1170,6 +1206,7 @@ const WeighingStation: React.FC = () => {
                       <div className="flex items-center gap-4">
                         <span className="text-[10px] font-black text-slate-300">#{(activeOrder.records || []).filter(rt => rt.type === type).length - idx}</span>
                         <p className="font-digital font-black text-slate-800 text-lg md:text-xl">{r.weight.toFixed(2)}</p>
+                        {r.isLame && <span className="bg-amber-100 text-amber-700 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest">PC</span>}
                       </div>
                       {!isLocked && <button onClick={() => deleteRecord(r.id)} className="p-2 text-slate-300 hover:text-red-600 transition-all"><Trash2 size={16}/></button>}
                     </div>

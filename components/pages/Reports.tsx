@@ -124,7 +124,12 @@ const Reports: React.FC = () => {
     const bF = full.reduce((a, b) => a + (b.birds !== undefined ? b.birds : (order.weighingMode === WeighingType.SOLO_POLLO ? b.quantity : b.quantity * 10)), 0);
     
     const net = order.weighingMode === WeighingType.SOLO_POLLO ? wF : wF - wE - wM;
-    return { wF, wE, wM, qF, qE, qM, bF, net };
+    
+    // Averages
+    const avgNet = bF > 0 ? net / bF : 0;
+    const avgMort = qM > 0 ? wM / qM : 0;
+
+    return { wF, wE, wM, qF, qE, qM, bF, net, avgNet, avgMort };
   };
 
   const renderTicketContent = (doc: jsPDF, order: ClientOrder, isSalesTicket: boolean) => {
@@ -177,7 +182,9 @@ const Reports: React.FC = () => {
                 ['Jabas Llenas:', t.qF.toString()],
                 ['Total Pollos:', t.bF.toString()],
                 ['Jabas Vacías:', t.qE.toString()],
-                ['Pollos Muertos:', t.qM.toString()]
+                ['Pollos Muertos:', t.qM.toString()],
+                ['Prom. Peso Neto:', `${t.avgNet.toFixed(2)} kg`],
+                ['Prom. P. Muerto:', `${t.avgMort.toFixed(2)} kg`]
             ],
             theme: 'grid',
             styles: { fontSize: 8, cellPadding: 1.5 },
@@ -211,7 +218,7 @@ const Reports: React.FC = () => {
                     let suffix = '';
                     if (r.type === 'FULL') suffix = `${r.quantity}j, ${r.birds}p`;
                     else if (r.type === 'EMPTY') suffix = `${r.quantity}j`;
-                    else if (r.type === 'MORTALITY') suffix = `${r.quantity}p`;
+                    else if (r.type === 'MORTALITY') suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}`;
                     return [r.weight.toFixed(2), suffix];
                 }), 4),
                 theme: 'grid',
@@ -230,6 +237,12 @@ const Reports: React.FC = () => {
         renderCategory("LLENAS", fullRecords, t.wF, t.qF);
         renderCategory("VACÍAS", emptyRecords, t.wE, t.qE);
         renderCategory("MORTALIDAD", mortRecords, t.wM, t.qM);
+
+        if (mortRecords.some(r => r.isLame)) {
+            doc.setFontSize(7).setFont("helvetica", "italic");
+            doc.text("* PC = Pollo Cojo", 5, y + 2);
+            y += 5;
+        }
     } else {
         // General Weights Box
         autoTable(doc, {
@@ -239,6 +252,8 @@ const Reports: React.FC = () => {
                 ['Peso Bruto:', `${t.wF.toFixed(2)} kg`],
                 ['Tara Total:', `-${t.wE.toFixed(2)} kg`],
                 ['Mortalidad:', `-${t.wM.toFixed(2)} kg`],
+                ['Prom. P. Neto:', `${t.avgNet.toFixed(2)} kg`],
+                ['Prom. P. Muerto:', `${t.avgMort.toFixed(2)} kg`],
                 ['PESO NETO:', `${t.net.toFixed(2)} kg`]
             ],
             theme: 'grid',
@@ -263,6 +278,9 @@ const Reports: React.FC = () => {
     doc.text("Peso Bruto:", 8, y); doc.text(`${t.wF.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
     doc.text("Tara Total:", 8, y); doc.text(`-${t.wE.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
     doc.text("Mortalidad:", 8, y); doc.text(`-${t.wM.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+    doc.setFontSize(8).setFont("helvetica", "italic");
+    doc.text("Prom. Peso Neto:", 8, y); doc.text(`${t.avgNet.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 4;
+    doc.text("Prom. P. Muerto:", 8, y); doc.text(`${t.avgMort.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
     
     doc.setFontSize(11).setFont("helvetica", "bold");
     doc.text("PESO NETO:", 8, y + 2);
@@ -370,6 +388,8 @@ const Reports: React.FC = () => {
             ['Jabas Llenas (Bruto)', t.qF, `${t.bF} Pollos`, t.wF.toFixed(2)],
             ['Jabas Vacías (Tara)', t.qE, '-', `-${t.wE.toFixed(2)}`],
             ['Mortalidad (Pollos Muertos)', t.qM, '-', `-${t.wM.toFixed(2)}`],
+            ['Promedio Peso Neto', '-', '-', `${t.avgNet.toFixed(2)} kg`],
+            ['Promedio Peso Muerto', '-', '-', `${t.avgMort.toFixed(2)} kg`],
             [{ content: 'PESO NETO FINAL', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold', fontSize: 11 } }, { content: t.net.toFixed(2), styles: { fontStyle: 'bold', fontSize: 11, fillColor: [240, 253, 244], textColor: [21, 128, 61] } }]
         ],
         theme: 'grid',
@@ -408,7 +428,7 @@ const Reports: React.FC = () => {
                 let suffix = '';
                 if (r.type === 'FULL') suffix = `${r.quantity}j, ${r.birds}p`;
                 else if (r.type === 'EMPTY') suffix = `${r.quantity}j`;
-                else if (r.type === 'MORTALITY') suffix = `${r.quantity}p`;
+                else if (r.type === 'MORTALITY') suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}`;
                 return [r.weight.toFixed(2), suffix];
             }), 8),
             theme: 'grid',
@@ -420,6 +440,12 @@ const Reports: React.FC = () => {
     renderCategoryGridA4("JABAS LLENAS", fullRecords, t.wF, t.qF);
     renderCategoryGridA4("JABAS VACÍAS", emptyRecords, t.wE, t.qE);
     renderCategoryGridA4("MORTALIDAD", mortRecords, t.wM, t.qM);
+
+    if (mortRecords.some(r => r.isLame)) {
+        y = (doc as any).lastAutoTable.finalY + 5;
+        doc.setFontSize(8).setFont("helvetica", "italic");
+        doc.text("* PC = Pollo Cojo", 14, y);
+    }
     
     // Footer
     const pageCount = (doc as any).internal.getNumberOfPages();

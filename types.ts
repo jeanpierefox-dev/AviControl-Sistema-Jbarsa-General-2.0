@@ -27,6 +27,7 @@ export interface WeighingRecord {
   quantity: number; // Number of crates or chickens in this specific weigh
   birds?: number; // Number of birds in this specific weigh
   type: 'FULL' | 'EMPTY' | 'MORTALITY';
+  isLame?: boolean; // New field for "pollo cojos"
 }
 
 export interface ClientOrder {
