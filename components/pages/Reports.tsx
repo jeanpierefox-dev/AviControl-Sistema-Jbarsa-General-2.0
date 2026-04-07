@@ -125,11 +125,18 @@ const Reports: React.FC = () => {
     
     const net = order.weighingMode === WeighingType.SOLO_POLLO ? wF : wF - wE - wM;
     
+    // Lame Chickens (Pollos Cojos)
+    const lame = mort.filter(r => r.isLame);
+    const wLame = lame.reduce((a, b) => a + b.weight, 0);
+    const qLame = lame.reduce((a, b) => a + b.quantity, 0);
+    const lamePercWeight = wF > 0 ? (wLame / wF) * 100 : 0;
+    const lamePercQty = bF > 0 ? (qLame / bF) * 100 : 0;
+
     // Averages
     const avgNet = bF > 0 ? net / bF : 0;
     const avgMort = qM > 0 ? wM / qM : 0;
 
-    return { wF, wE, wM, qF, qE, qM, bF, net, avgNet, avgMort };
+    return { wF, wE, wM, qF, qE, qM, bF, net, avgNet, avgMort, wLame, qLame, lamePercWeight, lamePercQty };
   };
 
   const renderTicketContent = (doc: jsPDF, order: ClientOrder, isSalesTicket: boolean) => {
@@ -456,6 +463,79 @@ const Reports: React.FC = () => {
     }
 
     handlePDFOutput(doc, `Reporte_A4_${order.clientName}_${order.id}.pdf`, false);
+  };
+
+  const generateLameTicketPDF = (order: ClientOrder, preview: boolean = false) => {
+    const t = getTotals(order);
+    const doc = new jsPDF({ unit: 'mm', format: [80, 150] });
+    const batch = getBatches().find(b => b.id === order.batchId);
+    const batchName = batch ? batch.name : 'Venta Directa';
+    
+    let y = 10;
+    
+    if (config.logoUrl) {
+        doc.addImage(config.logoUrl, 'PNG', 25, y, 30, 30);
+        y += 35;
+    }
+
+    doc.setFontSize(14).setFont("helvetica", "bold");
+    doc.text(config.companyName.toUpperCase(), 40, y, { align: 'center' });
+    y += 5;
+    
+    doc.setFontSize(10).setFont("helvetica", "bold");
+    doc.text("REPORTE POLLOS COJOS", 40, y, { align: 'center' });
+    y += 5;
+    
+    doc.setFontSize(8).setFont("helvetica", "italic");
+    doc.text(`FECHA: ${new Date().toLocaleString()}`, 40, y, { align: 'center' });
+    y += 5;
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.5);
+    doc.line(5, y, 75, y);
+    y += 5;
+
+    doc.setFontSize(9).setFont("helvetica", "bold");
+    doc.text(`LOTE: ${batchName.toUpperCase()}`, 5, y);
+    y += 5;
+    doc.text(`CLIENTE: ${order.clientName.toUpperCase()}`, 5, y);
+    y += 7;
+
+    const lameRecords = (order.records || []).filter(r => r.isLame);
+    
+    autoTable(doc, {
+        startY: y,
+        head: [['#', 'PESO (KG)', 'CANT']],
+        body: lameRecords.map((r, i) => [i + 1, r.weight.toFixed(2), r.quantity]),
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 1.5, halign: 'center' },
+        margin: { left: 5, right: 5 }
+    });
+    
+    y = (doc as any).lastAutoTable.finalY + 8;
+
+    doc.setFontSize(10).setFont("helvetica", "bold");
+    doc.text("RESUMEN COJOS", 40, y, { align: 'center' });
+    y += 5;
+    
+    doc.setFontSize(9).setFont("helvetica", "normal");
+    doc.text(`Total Cantidad:`, 5, y); doc.text(`${t.qLame} pollos`, 75, y, { align: 'right' }); y += 5;
+    doc.text(`Total Peso:`, 5, y); doc.text(`${t.wLame.toFixed(2)} kg`, 75, y, { align: 'right' }); y += 7;
+    
+    doc.setFillColor(241, 245, 249);
+    doc.rect(5, y, 70, 10, 'F');
+    doc.setFontSize(9).setFont("helvetica", "bold");
+    doc.text("% DE LA CARGA (PESO):", 8, y + 6);
+    doc.text(`${t.lamePercWeight.toFixed(2)}%`, 72, y + 6, { align: 'right' });
+    y += 12;
+
+    doc.text("% DE LA CARGA (CANT):", 8, y);
+    doc.text(`${t.lamePercQty.toFixed(2)}%`, 72, y, { align: 'right' });
+    y += 10;
+
+    doc.setFontSize(8).setFont("helvetica", "italic");
+    doc.text("¡Gracias por su preferencia!", 40, y, { align: 'center' });
+
+    handlePDFOutput(doc, `Cojos_${order.clientName}_${order.id.slice(-6)}.pdf`, preview);
   };
 
   const shareViaWhatsApp = (order: ClientOrder) => {
@@ -884,6 +964,9 @@ Gracias por su preferencia!`;
                         </button>
                         <button onClick={() => generateA4ClientPDF(showDetailModal)} className="flex-1 bg-blue-900 text-white px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-800 shadow-lg transition-all">
                             <Download size={14} /> Reporte A4
+                        </button>
+                        <button onClick={() => generateLameTicketPDF(showDetailModal, true)} className="flex-1 bg-orange-500 text-white px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-orange-600 shadow-lg transition-all">
+                            <Receipt size={14} /> Ticket Cojos
                         </button>
                         <button onClick={() => shareViaWhatsApp(showDetailModal)} className="flex-1 bg-green-500 text-white px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-green-600 shadow-lg transition-all">
                             <Share2 size={14} /> WhatsApp
