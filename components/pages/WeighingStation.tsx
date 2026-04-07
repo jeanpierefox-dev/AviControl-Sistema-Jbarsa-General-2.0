@@ -787,7 +787,7 @@ const WeighingStation: React.FC = () => {
 
   const generateBatchReportPDF = () => {
     const batchOrders = orders;
-    let totalFull = 0, totalEmpty = 0, totalNet = 0, totalMort = 0;
+    let totalFull = 0, totalEmpty = 0, totalNet = 0, totalMort = 0, totalLameWeight = 0, totalLameQty = 0, totalBirds = 0;
     
     batchOrders.forEach(o => {
       const stats = getTotals(o);
@@ -795,6 +795,9 @@ const WeighingStation: React.FC = () => {
       totalEmpty += stats.wE;
       totalMort += stats.wM;
       totalNet += stats.net;
+      totalLameWeight += stats.wLame;
+      totalLameQty += stats.qLame;
+      totalBirds += stats.bF;
     });
 
     const doc = new jsPDF('landscape');
@@ -898,6 +901,38 @@ const WeighingStation: React.FC = () => {
             8: { fontStyle: 'bold' }, // Monto Total
             10: { fontStyle: 'bold', textColor: [185, 28, 28] } // Saldo
         }
+    });
+
+    // Lame Chickens Summary Table
+    y = (doc as any).lastAutoTable.finalY + 15;
+    if (y > 160) { doc.addPage(); y = 20; }
+
+    doc.setFontSize(14).setFont("helvetica", "bold");
+    doc.text("RESUMEN DE POLLOS COJOS (PC)", 14, y);
+    y += 5;
+
+    const lamePercWeight = totalFull > 0 ? (totalLameWeight / totalFull) * 100 : 0;
+    const lamePercQty = totalBirds > 0 ? (totalLameQty / totalBirds) * 100 : 0;
+
+    autoTable(doc, {
+        startY: y,
+        head: [['CONCEPTO', 'CANTIDAD (POLLOS)', 'PESO TOTAL (KG)', '% DE LA CARGA (CANT)', '% DE LA CARGA (PESO)']],
+        body: [
+            [
+                'TOTAL POLLOS COJOS (PC)', 
+                totalLameQty.toString(), 
+                totalLameWeight.toFixed(2), 
+                `${lamePercQty.toFixed(2)}%`, 
+                `${lamePercWeight.toFixed(2)}%`
+            ]
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [249, 115, 22], textColor: 255, fontStyle: 'bold', fontSize: 9, halign: 'center' },
+        styles: { fontSize: 9, cellPadding: 4, halign: 'center' },
+        columnStyles: {
+            0: { halign: 'left', fontStyle: 'bold', cellWidth: 60 }
+        },
+        margin: { left: 14 }
     });
 
     // Footer

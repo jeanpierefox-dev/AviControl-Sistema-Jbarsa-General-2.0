@@ -660,6 +660,38 @@ Gracias por su preferencia!`;
         }
     });
 
+    // Lame Chickens Summary Table
+    y = (doc as any).lastAutoTable.finalY + 15;
+    if (y > 160) { doc.addPage(); y = 20; }
+
+    doc.setFontSize(14).setFont("helvetica", "bold");
+    doc.text("RESUMEN DE POLLOS COJOS (PC)", 14, y);
+    y += 5;
+
+    const lamePercWeight = stats.totalFull > 0 ? (stats.totalLameWeight / stats.totalFull) * 100 : 0;
+    const lamePercQty = stats.totalBirds > 0 ? (stats.totalLameQty / stats.totalBirds) * 100 : 0;
+
+    autoTable(doc, {
+        startY: y,
+        head: [['CONCEPTO', 'CANTIDAD (POLLOS)', 'PESO TOTAL (KG)', '% DE LA CARGA (CANT)', '% DE LA CARGA (PESO)']],
+        body: [
+            [
+                'TOTAL POLLOS COJOS (PC)', 
+                stats.totalLameQty.toString(), 
+                stats.totalLameWeight.toFixed(2), 
+                `${lamePercQty.toFixed(2)}%`, 
+                `${lamePercWeight.toFixed(2)}%`
+            ]
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [249, 115, 22], textColor: 255, fontStyle: 'bold', fontSize: 9, halign: 'center' },
+        styles: { fontSize: 9, cellPadding: 4, halign: 'center' },
+        columnStyles: {
+            0: { halign: 'left', fontStyle: 'bold', cellWidth: 60 }
+        },
+        margin: { left: 14 }
+    });
+
     // Footer
     const pageCount = (doc as any).internal.getNumberOfPages();
     for(let i = 1; i <= pageCount; i++) {
@@ -673,7 +705,7 @@ Gracias por su preferencia!`;
 
   const getStats = (filterFn: (o: ClientOrder) => boolean) => {
     const filteredOrders = orders.filter(filterFn);
-    let totalFull = 0, totalEmpty = 0, totalNet = 0, totalMort = 0;
+    let totalFull = 0, totalEmpty = 0, totalNet = 0, totalMort = 0, totalLameWeight = 0, totalLameQty = 0, totalBirds = 0;
     
     filteredOrders.forEach(o => {
       const stats = getTotals(o);
@@ -681,9 +713,12 @@ Gracias por su preferencia!`;
       totalEmpty += stats.wE;
       totalMort += stats.wM;
       totalNet += stats.net;
+      totalLameWeight += stats.wLame;
+      totalLameQty += stats.qLame;
+      totalBirds += stats.bF;
     });
 
-    return { totalFull, totalEmpty, totalMort, totalNet, orderCount: filteredOrders.length, batchOrders: filteredOrders };
+    return { totalFull, totalEmpty, totalMort, totalNet, totalLameWeight, totalLameQty, totalBirds, orderCount: filteredOrders.length, batchOrders: filteredOrders };
   };
 
   const ReportCard = ({ id, title, subtitle, icon, stats }: any) => {
