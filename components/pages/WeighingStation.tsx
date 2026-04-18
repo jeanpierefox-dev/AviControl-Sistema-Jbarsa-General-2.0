@@ -45,6 +45,7 @@ const WeighingStation: React.FC = () => {
   const [pricePerKg, setPricePerKg] = useState<number | string>('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CREDIT'>('CASH');
   const [isLameInput, setIsLameInput] = useState(false);
+  const [mortalityOrigin, setMortalityOrigin] = useState<'GALPON' | 'ACOPIO'>('GALPON');
 
   useEffect(() => {
     const refreshOrders = () => {
@@ -335,7 +336,8 @@ const WeighingStation: React.FC = () => {
       quantity: quantity, 
       birds: birds,
       type: activeTab,
-      isLame: activeTab === 'MORTALITY' ? isLameInput : false
+      isLame: activeTab === 'MORTALITY' ? isLameInput : false,
+      origin: activeTab === 'MORTALITY' ? mortalityOrigin : undefined
     };
     const records = activeOrder.records || [];
     const updated = { ...activeOrder, records: [record, ...records] };
@@ -350,6 +352,22 @@ const WeighingStation: React.FC = () => {
     if(!confirm('¿Eliminar registro?')) return;
     const records = activeOrder?.records || [];
     const updated = { ...activeOrder!, records: records.filter(r => r.id !== id) };
+    saveOrder(updated);
+    setActiveOrder(updated);
+    setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
+  };
+
+  const toggleRecordOrigin = (recordId: string) => {
+    if (!activeOrder || isLocked) return;
+    const records = activeOrder.records || [];
+    const updatedRecords = records.map(r => {
+      if (r.id === recordId && r.type === 'MORTALITY') {
+        const currentOrigin = r.origin || 'GALPON';
+        return { ...r, origin: currentOrigin === 'GALPON' ? 'ACOPIO' : 'GALPON' as 'GALPON' | 'ACOPIO' };
+      }
+      return r;
+    });
+    const updated = { ...activeOrder, records: updatedRecords };
     saveOrder(updated);
     setActiveOrder(updated);
     setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
@@ -1363,12 +1381,20 @@ const WeighingStation: React.FC = () => {
                         inputMode="decimal"
                       />
                       {activeTab === 'MORTALITY' && (
-                        <button 
-                          onClick={() => setIsLameInput(!isLameInput)}
-                          className={`absolute -bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest transition-all shadow-md ${isLameInput ? 'bg-amber-500 text-white' : 'bg-white text-slate-400 border border-slate-200'}`}
-                        >
-                          {isLameInput ? 'Pollo Cojo (PC)' : 'Pollo Muerto'}
-                        </button>
+                        <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 flex gap-2 w-full justify-center">
+                          <button 
+                            onClick={() => setIsLameInput(!isLameInput)}
+                            className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest transition-all shadow-md whitespace-nowrap ${isLameInput ? 'bg-amber-500 text-white' : 'bg-white text-slate-400 border border-slate-200'}`}
+                          >
+                            {isLameInput ? 'Pollo Cojo (PC)' : 'Pollo Muerto'}
+                          </button>
+                          <button 
+                            onClick={() => setMortalityOrigin(mortalityOrigin === 'GALPON' ? 'ACOPIO' : 'GALPON')}
+                            className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest transition-all shadow-md whitespace-nowrap ${mortalityOrigin === 'ACOPIO' ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'}`}
+                          >
+                            {mortalityOrigin}
+                          </button>
+                        </div>
                       )}
                   </div>
                   <button onClick={addWeight} className="w-20 md:w-32 bg-blue-950 text-white rounded-xl shadow-xl hover:bg-blue-900 transition-all flex items-center justify-center border-b-4 border-blue-800 active:scale-95">
@@ -1394,8 +1420,21 @@ const WeighingStation: React.FC = () => {
                     <div key={r.id} className="flex justify-between items-center bg-white p-5 rounded-2xl border border-slate-100 shadow-sm transition-all group hover:border-blue-200">
                       <div className="flex items-center gap-4">
                         <span className="text-[10px] font-black text-slate-300">#{(activeOrder.records || []).filter(rt => rt.type === type).length - idx}</span>
-                        <p className="font-digital font-black text-slate-800 text-lg md:text-xl">{r.weight.toFixed(2)}</p>
-                        {r.isLame && <span className="bg-amber-100 text-amber-700 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest">PC</span>}
+                        <div className="flex flex-col">
+                            <p className="font-digital font-black text-slate-800 text-lg md:text-xl">{r.weight.toFixed(2)}</p>
+                            <div className="flex items-center gap-2">
+                                {r.isLame && <span className="bg-amber-100 text-amber-700 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest">PC</span>}
+                                {r.type === 'MORTALITY' && (
+                                    <button 
+                                        onClick={() => toggleRecordOrigin(r.id)}
+                                        className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest transition-colors ${r.origin === 'ACOPIO' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}
+                                        title="Click para cambiar origen"
+                                    >
+                                        {r.origin || 'GALPON'}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
                       </div>
                       {!isLocked && <button onClick={() => deleteRecord(r.id)} className="p-2 text-slate-300 hover:text-red-600 transition-all"><Trash2 size={16}/></button>}
                     </div>
