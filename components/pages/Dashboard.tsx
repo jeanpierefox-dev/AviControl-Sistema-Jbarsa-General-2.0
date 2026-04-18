@@ -128,8 +128,8 @@ const Dashboard: React.FC = () => {
               user={user}
             />
             <MenuCard
-              title="Módulo Solo Pollo"
-              desc="Interfaz rápida para ventas directas. Ideal para despachos menores sin lote."
+              title="Solo Pollos (Sacos)"
+              desc="Interfaz para venta de pollos vivos en sacos. Sin tara ni mortalidad."
               icon={<Bird size={26} />}
               onClick={() => navigate(`/weigh/${WeighingType.SOLO_POLLO}`)}
               color="bg-amber-500"
@@ -138,8 +138,8 @@ const Dashboard: React.FC = () => {
               user={user}
             />
             <MenuCard
-              title="Control de Jabas"
-              desc="Despacho por unidades. Calcula el peso estimado basado en promedios."
+              title="Pesaje Pollos Muertos"
+              desc="Registro rápido de mortalidad por cliente. Solo pesaje de merma."
               icon={<Box size={26} />}
               onClick={() => navigate(`/weigh/${WeighingType.SOLO_JABAS}`)}
               color="bg-emerald-600"

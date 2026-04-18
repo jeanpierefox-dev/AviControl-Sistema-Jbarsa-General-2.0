@@ -789,7 +789,7 @@ Gracias por su preferencia!`;
                                                 {order.status === 'CLOSED' ? 'CERRADO' : 'ABIERTO'}
                                             </span>
                                             <span className="text-[8px] bg-slate-50 text-slate-400 px-2 py-1 rounded font-black uppercase border border-slate-100">
-                                                {order.weighingMode}
+                                                {order.weighingMode === WeighingType.BATCH ? 'PESAJE POR LOTE' : order.weighingMode === WeighingType.SOLO_POLLO ? 'SOLO POLLOS (SACOS)' : 'POLLOS MUERTOS'}
                                             </span>
                                         </div>
                                     </div>
