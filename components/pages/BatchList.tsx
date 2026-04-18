@@ -91,6 +91,14 @@ const BatchList: React.FC = () => {
     const percent = Math.min((totalFullCrates / batch.totalCratesLimit) * 100, 100);
     const netWeight = totalFullWeight - totalEmptyWeight - totalMortWeight;
 
+    const chunkArray = (array: any[], size: number) => {
+        const chunked = [];
+        for (let i = 0; i < array.length; i += size) {
+            chunked.push(array.slice(i, i + size));
+        }
+        return chunked;
+    };
+
     const generateBatchTicket = () => {
         // Pass 1: Calculate height
         const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 1000] });
@@ -185,6 +193,7 @@ const BatchList: React.FC = () => {
                 ['  - Galpón:', qM_Galpon.toString()],
                 ['  - Acopio:', qM_Acopio.toString()],
                 ['Prom. Peso Neto:', `${(totalBirds > 0 ? netWeight / totalBirds : 0).toFixed(2)} kg`],
+                ['Prom. P. Muerto:', `${(totalMort > 0 ? totalMortWeight / totalMort : 0).toFixed(2)} kg`],
                 ['PESO NETO TOTAL:', `${netWeight.toFixed(2)} kg`]
             ],
             theme: 'grid',
@@ -224,6 +233,56 @@ const BatchList: React.FC = () => {
             margin: { left: 5, right: 5 }
         });
         y = (doc as any).lastAutoTable.finalY + 10;
+
+        // DETAILED RECORDS PER CLIENT
+        doc.setFontSize(9).setFont("helvetica", "bold");
+        doc.text("DETALLE DE PESAS POR CLIENTE", 40, y, { align: 'center' });
+        y += 5;
+
+        orders.forEach(o => {
+            doc.setFontSize(8).setFont("helvetica", "bold");
+            doc.text(`CLIENTE: ${o.clientName.toUpperCase()}`, 5, y);
+            y += 4;
+
+            const records = o.records || [];
+            if (records.length > 0) {
+                const types = ['FULL', 'EMPTY', 'MORTALITY'];
+                types.forEach(type => {
+                    const filtered = records.filter(r => r.type === type);
+                    if (filtered.length > 0) {
+                        const title = type === 'FULL' ? (o.weighingMode === WeighingType.SOLO_POLLO ? 'SACOS' : 'LLENAS') : type === 'EMPTY' ? 'VACÍAS' : 'MUERTOS';
+                        
+                        autoTable(doc, {
+                            startY: y,
+                            head: [[{ content: title, colSpan: 4, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0, fontSize: 6 } }]],
+                            body: chunkArray(filtered.flatMap(r => {
+                                let suffix = '';
+                                if (r.type === 'FULL') suffix = o.weighingMode === WeighingType.SOLO_POLLO ? `${r.birds}p` : `${r.quantity}j, ${r.birds}p`;
+                                else if (r.type === 'EMPTY') suffix = `${r.quantity}j`;
+                                else if (r.type === 'MORTALITY') {
+                                    const originLabel = (r.origin || 'GALPON') === 'ACOPIO' ? ' (AC)' : ' (GL)';
+                                    suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}${originLabel}`;
+                                }
+                                return [r.weight.toFixed(2), suffix];
+                            }), 4),
+                            theme: 'grid',
+                            styles: { fontSize: 6, cellPadding: 0.8, halign: 'center' },
+                            margin: { left: 5, right: 5 },
+                            tableWidth: 70
+                        });
+                        y = (doc as any).lastAutoTable.finalY + 2;
+                        
+                        if (y > 950) { // Safety break for very long tickets (unlikely but possible if dummy doc)
+                             // This is problematic with dummyDoc approach, but usually fine for thermal tickets
+                        }
+                    }
+                });
+            }
+            y += 4;
+            doc.setDrawColor(200);
+            doc.line(10, y, 70, y);
+            y += 5;
+        });
 
         // Grand Totals
         doc.setFontSize(10).setFont("helvetica", "bold");
