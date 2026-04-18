@@ -265,6 +265,14 @@ const WeighingStation: React.FC = () => {
     const qE = empty.reduce((a, b) => a + b.quantity, 0); // Total Crates Empty
     const qM = mort.reduce((a, b) => a + b.quantity, 0); // Total Mortality Count (birds usually)
     
+    // Mortality by origin
+    const mortGalpon = mort.filter(r => (r.origin || 'GALPON') === 'GALPON');
+    const mortAcopio = mort.filter(r => r.origin === 'ACOPIO');
+    const wM_Galpon = mortGalpon.reduce((a, b) => a + b.weight, 0);
+    const qM_Galpon = mortGalpon.reduce((a, b) => a + b.quantity, 0);
+    const wM_Acopio = mortAcopio.reduce((a, b) => a + b.weight, 0);
+    const qM_Acopio = mortAcopio.reduce((a, b) => a + b.quantity, 0);
+
     // Calculate total birds
     // If birds property exists, use it. Otherwise fallback to quantity * 10 (legacy) or just quantity if SOLO_POLLO
     const bF = full.reduce((a, b) => a + (b.birds !== undefined ? b.birds : (order.weighingMode === WeighingType.SOLO_POLLO ? b.quantity : b.quantity * 10)), 0);
@@ -287,7 +295,10 @@ const WeighingStation: React.FC = () => {
     const avgNet = bF > 0 ? net / bF : 0;
     const avgMort = qM > 0 ? wM / qM : 0;
 
-    return { wF, wE, wM, qF, qE, qM, bF, net, cF, cE, cM, avgNet, avgMort, wLame, qLame, lamePercWeight, lamePercQty };
+    return { 
+      wF, wE, wM, qF, qE, qM, bF, net, cF, cE, cM, avgNet, avgMort, wLame, qLame, lamePercWeight, lamePercQty,
+      wM_Galpon, qM_Galpon, wM_Acopio, qM_Acopio 
+    };
   };
 
   const getAdjustedTimestamp = () => {
@@ -436,6 +447,8 @@ const WeighingStation: React.FC = () => {
                 mode !== WeighingType.SOLO_JABAS ? ['Total Pollos:', t.bF.toString()] : null,
                 mode === WeighingType.BATCH ? ['Jabas Vacías:', t.qE.toString()] : null,
                 mode !== WeighingType.SOLO_POLLO ? ['Pollos Muertos:', t.qM.toString()] : null,
+                t.qM_Galpon > 0 ? ['  - De Galpón:', t.qM_Galpon.toString()] : null,
+                t.qM_Acopio > 0 ? ['  - De Acopio:', t.qM_Acopio.toString()] : null,
                 mode !== WeighingType.SOLO_JABAS ? ['Prom. Peso Neto:', `${t.avgNet.toFixed(2)} kg`] : null,
                 mode !== WeighingType.SOLO_POLLO ? ['Prom. P. Muerto:', `${t.avgMort.toFixed(2)} kg`] : null
             ].filter(Boolean) as any,
@@ -470,7 +483,10 @@ const WeighingStation: React.FC = () => {
                     let suffix = '';
                     if (r.type === 'FULL') suffix = mode === WeighingType.SOLO_POLLO ? `${r.birds}p` : `${r.quantity}j, ${r.birds}p`;
                     else if (r.type === 'EMPTY') suffix = `${r.quantity}j`;
-                    else if (r.type === 'MORTALITY') suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}`;
+                    else if (r.type === 'MORTALITY') {
+                        const originLabel = (r.origin || 'GALPON') === 'ACOPIO' ? ' (AC)' : ' (GL)';
+                        suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}${originLabel}`;
+                    }
                     return [r.weight.toFixed(2), suffix];
                 }), 4),
                 theme: 'grid',
@@ -492,7 +508,11 @@ const WeighingStation: React.FC = () => {
 
         if (mortRecords.some(r => r.isLame)) {
             doc.setFontSize(7).setFont("helvetica", "italic");
-            doc.text("* PC = Pollo Cojo", 5, y + 2);
+            doc.text("* PC = Pollo Cojo, GL = Galpón, AC = Acopio", 5, y + 2);
+            y += 5;
+        } else if (mortRecords.length > 0) {
+            doc.setFontSize(7).setFont("helvetica", "italic");
+            doc.text("* GL = Galpón, AC = Acopio", 5, y + 2);
             y += 5;
         }
     }
@@ -600,6 +620,8 @@ const WeighingStation: React.FC = () => {
             mode !== WeighingType.SOLO_JABAS ? ['Peso Bruto:', `${t.wF.toFixed(2)} kg`] : null,
             mode === WeighingType.BATCH ? ['Tara Total:', `-${t.wE.toFixed(2)} kg`] : null,
             mode !== WeighingType.SOLO_POLLO ? ['Mortalidad:', `-${t.wM.toFixed(2)} kg`] : null,
+            t.wM_Galpon > 0 ? ['  - Merma Galpón:', `-${t.wM_Galpon.toFixed(2)} kg`] : null,
+            t.wM_Acopio > 0 ? ['  - Merma Acopio:', `-${t.wM_Acopio.toFixed(2)} kg`] : null,
             mode !== WeighingType.SOLO_JABAS ? ['Prom. P. Neto:', `${t.avgNet.toFixed(2)} kg`] : null,
             mode !== WeighingType.SOLO_POLLO ? ['Prom. P. Muerto:', `${t.avgMort.toFixed(2)} kg`] : null,
             mode !== WeighingType.SOLO_JABAS ? ['PESO NETO:', `${t.net.toFixed(2)} kg`] : null
