@@ -470,6 +470,8 @@ const WeighingStation: React.FC = () => {
         const fullRecords = order.records.filter(r => r.type === 'FULL').sort((a, b) => b.timestamp - a.timestamp);
         const emptyRecords = order.records.filter(r => r.type === 'EMPTY').sort((a, b) => b.timestamp - a.timestamp);
         const mortRecords = order.records.filter(r => r.type === 'MORTALITY').sort((a, b) => b.timestamp - a.timestamp);
+        const mortGalponRecords = mortRecords.filter(r => (r.origin || 'GALPON') === 'GALPON');
+        const mortAcopioRecords = mortRecords.filter(r => r.origin === 'ACOPIO');
 
         const renderCategory = (title: string, records: any[], totalWeight: number, qty?: number) => {
             if (records.length === 0) return;
@@ -504,7 +506,14 @@ const WeighingStation: React.FC = () => {
 
         renderCategory(mode === WeighingType.SOLO_POLLO ? "SACOS" : "LLENAS", fullRecords, t.wF, t.qF);
         renderCategory("VACÍAS", emptyRecords, t.wE, t.qE);
-        renderCategory(mode === WeighingType.SOLO_JABAS ? "MUERTOS" : "MORTALIDAD", mortRecords, t.wM, t.qM);
+        
+        if (mode === WeighingType.SOLO_JABAS) {
+            renderCategory("MUERTOS GALPON", mortGalponRecords, t.wM_Galpon, t.qM_Galpon);
+            renderCategory("MUERTOS ACOPIO", mortAcopioRecords, t.wM_Acopio, t.qM_Acopio);
+        } else {
+            renderCategory("MORTALIDAD GALPON", mortGalponRecords, t.wM_Galpon, t.qM_Galpon);
+            renderCategory("MORTALIDAD ACOPIO", mortAcopioRecords, t.wM_Acopio, t.qM_Acopio);
+        }
 
         if (mortRecords.some(r => r.isLame)) {
             doc.setFontSize(7).setFont("helvetica", "italic");
