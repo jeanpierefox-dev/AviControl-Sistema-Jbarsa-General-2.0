@@ -414,11 +414,11 @@ const WeighingStation: React.FC = () => {
             startY: y,
             head: [[{ content: 'RESUMEN DE CANTIDADES', colSpan: 2, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
             body: [
-                [mode === WeighingType.SOLO_POLLO ? 'Cant. Sacos:' : 'Jabas Llenas:', t.qF.toString()],
-                ['Total Pollos:', t.bF.toString()],
+                mode !== WeighingType.SOLO_JABAS ? [mode === WeighingType.SOLO_POLLO ? 'Cant. Sacos:' : 'Jabas Llenas:', t.qF.toString()] : null,
+                mode !== WeighingType.SOLO_JABAS ? ['Total Pollos:', t.bF.toString()] : null,
                 mode === WeighingType.BATCH ? ['Jabas Vacías:', t.qE.toString()] : null,
                 mode !== WeighingType.SOLO_POLLO ? ['Pollos Muertos:', t.qM.toString()] : null,
-                ['Prom. Peso Neto:', `${t.avgNet.toFixed(2)} kg`],
+                mode !== WeighingType.SOLO_JABAS ? ['Prom. Peso Neto:', `${t.avgNet.toFixed(2)} kg`] : null,
                 mode !== WeighingType.SOLO_POLLO ? ['Prom. P. Muerto:', `${t.avgMort.toFixed(2)} kg`] : null
             ].filter(Boolean) as any,
             theme: 'grid',
@@ -579,12 +579,12 @@ const WeighingStation: React.FC = () => {
         startY: y,
         head: [[{ content: 'RESUMEN DE PESOS', colSpan: 2, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
         body: [
-            ['Peso Bruto:', `${t.wF.toFixed(2)} kg`],
+            mode !== WeighingType.SOLO_JABAS ? ['Peso Bruto:', `${t.wF.toFixed(2)} kg`] : null,
             mode === WeighingType.BATCH ? ['Tara Total:', `-${t.wE.toFixed(2)} kg`] : null,
             mode !== WeighingType.SOLO_POLLO ? ['Mortalidad:', `-${t.wM.toFixed(2)} kg`] : null,
-            ['Prom. P. Neto:', `${t.avgNet.toFixed(2)} kg`],
+            mode !== WeighingType.SOLO_JABAS ? ['Prom. P. Neto:', `${t.avgNet.toFixed(2)} kg`] : null,
             mode !== WeighingType.SOLO_POLLO ? ['Prom. P. Muerto:', `${t.avgMort.toFixed(2)} kg`] : null,
-            ['PESO NETO:', `${t.net.toFixed(2)} kg`]
+            mode !== WeighingType.SOLO_JABAS ? ['PESO NETO:', `${t.net.toFixed(2)} kg`] : null
         ].filter(Boolean) as any[],
         theme: 'grid',
         styles: { fontSize: 9, cellPadding: 2 },
