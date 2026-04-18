@@ -446,9 +446,9 @@ const WeighingStation: React.FC = () => {
                 mode !== WeighingType.SOLO_JABAS ? [mode === WeighingType.SOLO_POLLO ? 'Cant. Sacos:' : 'Jabas Llenas:', t.qF.toString()] : null,
                 mode !== WeighingType.SOLO_JABAS ? ['Total Pollos:', t.bF.toString()] : null,
                 mode === WeighingType.BATCH ? ['Jabas Vacías:', t.qE.toString()] : null,
-                mode !== WeighingType.SOLO_POLLO ? ['Pollos Muertos:', t.qM.toString()] : null,
-                t.qM_Galpon > 0 ? ['  - De Galpón:', t.qM_Galpon.toString()] : null,
-                t.qM_Acopio > 0 ? ['  - De Acopio:', t.qM_Acopio.toString()] : null,
+                t.qM_Galpon > 0 ? ['Muertos Galpón:', t.qM_Galpon.toString()] : null,
+                t.qM_Acopio > 0 ? ['Muertos Acopio:', t.qM_Acopio.toString()] : null,
+                mode !== WeighingType.SOLO_POLLO ? ['TOTAL MUERTOS:', t.qM.toString()] : null,
                 mode !== WeighingType.SOLO_JABAS ? ['Prom. Peso Neto:', `${t.avgNet.toFixed(2)} kg`] : null,
                 mode !== WeighingType.SOLO_POLLO ? ['Prom. P. Muerto:', `${t.avgMort.toFixed(2)} kg`] : null
             ].filter(Boolean) as any,
@@ -527,7 +527,17 @@ const WeighingStation: React.FC = () => {
     doc.setFontSize(9).setFont("helvetica", "normal");
     doc.text("Peso Bruto:", 8, y); doc.text(`${t.wF.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
     doc.text("Tara Total:", 8, y); doc.text(`-${t.wE.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
-    doc.text("Mortalidad:", 8, y); doc.text(`-${t.wM.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+    
+    if (t.wM_Galpon > 0) {
+        doc.text("Merma Galpón:", 8, y); doc.text(`-${t.wM_Galpon.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+    }
+    if (t.wM_Acopio > 0) {
+        doc.text("Merma Acopio:", 8, y); doc.text(`-${t.wM_Acopio.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+    }
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("TOTAL MERMA:", 8, y); doc.text(`-${t.wM.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(8).setFont("helvetica", "italic");
     doc.text("Prom. Peso Neto:", 8, y); doc.text(`${t.avgNet.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 4;
     doc.text("Prom. P. Muerto:", 8, y); doc.text(`${t.avgMort.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
@@ -619,9 +629,9 @@ const WeighingStation: React.FC = () => {
         body: [
             mode !== WeighingType.SOLO_JABAS ? ['Peso Bruto:', `${t.wF.toFixed(2)} kg`] : null,
             mode === WeighingType.BATCH ? ['Tara Total:', `-${t.wE.toFixed(2)} kg`] : null,
-            mode !== WeighingType.SOLO_POLLO ? ['Mortalidad:', `-${t.wM.toFixed(2)} kg`] : null,
-            t.wM_Galpon > 0 ? ['  - Merma Galpón:', `-${t.wM_Galpon.toFixed(2)} kg`] : null,
-            t.wM_Acopio > 0 ? ['  - Merma Acopio:', `-${t.wM_Acopio.toFixed(2)} kg`] : null,
+            t.wM_Galpon > 0 ? ['Merma Galpón:', `-${t.wM_Galpon.toFixed(2)} kg`] : null,
+            t.wM_Acopio > 0 ? ['Merma Acopio:', `-${t.wM_Acopio.toFixed(2)} kg`] : null,
+            mode !== WeighingType.SOLO_POLLO ? ['TOTAL MERMA:', `-${t.wM.toFixed(2)} kg`] : null,
             mode !== WeighingType.SOLO_JABAS ? ['Prom. P. Neto:', `${t.avgNet.toFixed(2)} kg`] : null,
             mode !== WeighingType.SOLO_POLLO ? ['Prom. P. Muerto:', `${t.avgMort.toFixed(2)} kg`] : null,
             mode !== WeighingType.SOLO_JABAS ? ['PESO NETO:', `${t.net.toFixed(2)} kg`] : null
