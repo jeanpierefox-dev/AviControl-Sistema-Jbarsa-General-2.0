@@ -45,7 +45,6 @@ const WeighingStation: React.FC = () => {
   const [pricePerKg, setPricePerKg] = useState<number | string>('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CREDIT'>('CASH');
   const [isLameInput, setIsLameInput] = useState(false);
-  const [mortalityOrigin, setMortalityOrigin] = useState<'GALPON' | 'ACOPIO'>('GALPON');
 
   useEffect(() => {
     const refreshOrders = () => {
@@ -265,14 +264,6 @@ const WeighingStation: React.FC = () => {
     const qE = empty.reduce((a, b) => a + b.quantity, 0); // Total Crates Empty
     const qM = mort.reduce((a, b) => a + b.quantity, 0); // Total Mortality Count (birds usually)
     
-    // Mortality by origin
-    const mortGalpon = mort.filter(r => (r.origin || 'GALPON') === 'GALPON');
-    const mortAcopio = mort.filter(r => r.origin === 'ACOPIO');
-    const wM_Galpon = mortGalpon.reduce((a, b) => a + b.weight, 0);
-    const qM_Galpon = mortGalpon.reduce((a, b) => a + b.quantity, 0);
-    const wM_Acopio = mortAcopio.reduce((a, b) => a + b.weight, 0);
-    const qM_Acopio = mortAcopio.reduce((a, b) => a + b.quantity, 0);
-
     // Calculate total birds
     // If birds property exists, use it. Otherwise fallback to quantity * 10 (legacy) or just quantity if SOLO_POLLO
     const bF = full.reduce((a, b) => a + (b.birds !== undefined ? b.birds : (order.weighingMode === WeighingType.SOLO_POLLO ? b.quantity : b.quantity * 10)), 0);
@@ -296,8 +287,7 @@ const WeighingStation: React.FC = () => {
     const avgMort = qM > 0 ? wM / qM : 0;
 
     return { 
-      wF, wE, wM, qF, qE, qM, bF, net, cF, cE, cM, avgNet, avgMort, wLame, qLame, lamePercWeight, lamePercQty,
-      wM_Galpon, qM_Galpon, wM_Acopio, qM_Acopio 
+      wF, wE, wM, qF, qE, qM, bF, net, cF, cE, cM, avgNet, avgMort, wLame, qLame, lamePercWeight, lamePercQty
     };
   };
 
@@ -347,8 +337,7 @@ const WeighingStation: React.FC = () => {
       quantity: quantity, 
       birds: birds,
       type: activeTab,
-      isLame: activeTab === 'MORTALITY' ? isLameInput : false,
-      origin: activeTab === 'MORTALITY' ? mortalityOrigin : undefined
+      isLame: activeTab === 'MORTALITY' ? isLameInput : false
     };
     const records = activeOrder.records || [];
     const updated = { ...activeOrder, records: [record, ...records] };
@@ -363,22 +352,6 @@ const WeighingStation: React.FC = () => {
     if(!confirm('¿Eliminar registro?')) return;
     const records = activeOrder?.records || [];
     const updated = { ...activeOrder!, records: records.filter(r => r.id !== id) };
-    saveOrder(updated);
-    setActiveOrder(updated);
-    setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
-  };
-
-  const toggleRecordOrigin = (recordId: string) => {
-    if (!activeOrder || isLocked) return;
-    const records = activeOrder.records || [];
-    const updatedRecords = records.map(r => {
-      if (r.id === recordId && r.type === 'MORTALITY') {
-        const currentOrigin = r.origin || 'GALPON';
-        return { ...r, origin: currentOrigin === 'GALPON' ? 'ACOPIO' : 'GALPON' as 'GALPON' | 'ACOPIO' };
-      }
-      return r;
-    });
-    const updated = { ...activeOrder, records: updatedRecords };
     saveOrder(updated);
     setActiveOrder(updated);
     setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
@@ -446,9 +419,7 @@ const WeighingStation: React.FC = () => {
                 mode !== WeighingType.SOLO_JABAS ? [mode === WeighingType.SOLO_POLLO ? 'Cant. Sacos:' : 'Jabas Llenas:', t.qF.toString()] : null,
                 mode !== WeighingType.SOLO_JABAS ? ['Total Pollos:', t.bF.toString()] : null,
                 mode === WeighingType.BATCH ? ['Jabas Vacías:', t.qE.toString()] : null,
-                t.qM_Galpon > 0 ? ['Muertos Galpón:', t.qM_Galpon.toString()] : null,
-                t.qM_Acopio > 0 ? ['Muertos Acopio:', t.qM_Acopio.toString()] : null,
-                mode !== WeighingType.SOLO_POLLO ? ['TOTAL MUERTOS:', t.qM.toString()] : null,
+                mode !== WeighingType.SOLO_POLLO ? ['Pollos Muertos:', t.qM.toString()] : null,
                 mode !== WeighingType.SOLO_JABAS ? ['Prom. Peso Neto:', `${t.avgNet.toFixed(2)} kg`] : null,
                 mode !== WeighingType.SOLO_POLLO ? ['Prom. P. Muerto:', `${t.avgMort.toFixed(2)} kg`] : null
             ].filter(Boolean) as any,
@@ -470,8 +441,6 @@ const WeighingStation: React.FC = () => {
         const fullRecords = order.records.filter(r => r.type === 'FULL').sort((a, b) => b.timestamp - a.timestamp);
         const emptyRecords = order.records.filter(r => r.type === 'EMPTY').sort((a, b) => b.timestamp - a.timestamp);
         const mortRecords = order.records.filter(r => r.type === 'MORTALITY').sort((a, b) => b.timestamp - a.timestamp);
-        const mortGalponRecords = mortRecords.filter(r => (r.origin || 'GALPON') === 'GALPON');
-        const mortAcopioRecords = mortRecords.filter(r => r.origin === 'ACOPIO');
 
         const renderCategory = (title: string, records: any[], totalWeight: number, qty?: number) => {
             if (records.length === 0) return;
@@ -486,8 +455,7 @@ const WeighingStation: React.FC = () => {
                     if (r.type === 'FULL') suffix = mode === WeighingType.SOLO_POLLO ? `${r.birds}p` : `${r.quantity}j, ${r.birds}p`;
                     else if (r.type === 'EMPTY') suffix = `${r.quantity}j`;
                     else if (r.type === 'MORTALITY') {
-                        const originLabel = (r.origin || 'GALPON') === 'ACOPIO' ? ' (AC)' : ' (GL)';
-                        suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}${originLabel}`;
+                        suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}`;
                     }
                     return [r.weight.toFixed(2), suffix];
                 }), 4),
@@ -506,22 +474,11 @@ const WeighingStation: React.FC = () => {
 
         renderCategory(mode === WeighingType.SOLO_POLLO ? "SACOS" : "LLENAS", fullRecords, t.wF, t.qF);
         renderCategory("VACÍAS", emptyRecords, t.wE, t.qE);
-        
-        if (mode === WeighingType.SOLO_JABAS) {
-            renderCategory("MUERTOS GALPON", mortGalponRecords, t.wM_Galpon, t.qM_Galpon);
-            renderCategory("MUERTOS ACOPIO", mortAcopioRecords, t.wM_Acopio, t.qM_Acopio);
-        } else {
-            renderCategory("MORTALIDAD GALPON", mortGalponRecords, t.wM_Galpon, t.qM_Galpon);
-            renderCategory("MORTALIDAD ACOPIO", mortAcopioRecords, t.wM_Acopio, t.qM_Acopio);
-        }
+        renderCategory(mode === WeighingType.SOLO_JABAS ? "MUERTOS" : "MORTALIDAD", mortRecords, t.wM, t.qM);
 
         if (mortRecords.some(r => r.isLame)) {
             doc.setFontSize(7).setFont("helvetica", "italic");
-            doc.text("* PC = Pollo Cojo, GL = Galpón, AC = Acopio", 5, y + 2);
-            y += 5;
-        } else if (mortRecords.length > 0) {
-            doc.setFontSize(7).setFont("helvetica", "italic");
-            doc.text("* GL = Galpón, AC = Acopio", 5, y + 2);
+            doc.text("* PC = Pollo Cojo", 5, y + 2);
             y += 5;
         }
     }
@@ -536,17 +493,7 @@ const WeighingStation: React.FC = () => {
     doc.setFontSize(9).setFont("helvetica", "normal");
     doc.text("Peso Bruto:", 8, y); doc.text(`${t.wF.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
     doc.text("Tara Total:", 8, y); doc.text(`-${t.wE.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
-    
-    if (t.wM_Galpon > 0) {
-        doc.text("Merma Galpón:", 8, y); doc.text(`-${t.wM_Galpon.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
-    }
-    if (t.wM_Acopio > 0) {
-        doc.text("Merma Acopio:", 8, y); doc.text(`-${t.wM_Acopio.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
-    }
-    
-    doc.setFont("helvetica", "bold");
-    doc.text("TOTAL MERMA:", 8, y); doc.text(`-${t.wM.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
-    doc.setFont("helvetica", "normal");
+    doc.text("Mortalidad:", 8, y); doc.text(`-${t.wM.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
     doc.setFontSize(8).setFont("helvetica", "italic");
     doc.text("Prom. Peso Neto:", 8, y); doc.text(`${t.avgNet.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 4;
     doc.text("Prom. P. Muerto:", 8, y); doc.text(`${t.avgMort.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
@@ -638,9 +585,7 @@ const WeighingStation: React.FC = () => {
         body: [
             mode !== WeighingType.SOLO_JABAS ? ['Peso Bruto:', `${t.wF.toFixed(2)} kg`] : null,
             mode === WeighingType.BATCH ? ['Tara Total:', `-${t.wE.toFixed(2)} kg`] : null,
-            t.wM_Galpon > 0 ? ['Merma Galpón:', `-${t.wM_Galpon.toFixed(2)} kg`] : null,
-            t.wM_Acopio > 0 ? ['Merma Acopio:', `-${t.wM_Acopio.toFixed(2)} kg`] : null,
-            mode !== WeighingType.SOLO_POLLO ? ['TOTAL MERMA:', `-${t.wM.toFixed(2)} kg`] : null,
+            mode !== WeighingType.SOLO_POLLO ? ['Mortalidad:', `-${t.wM.toFixed(2)} kg`] : null,
             mode !== WeighingType.SOLO_JABAS ? ['Prom. P. Neto:', `${t.avgNet.toFixed(2)} kg`] : null,
             mode !== WeighingType.SOLO_POLLO ? ['Prom. P. Muerto:', `${t.avgMort.toFixed(2)} kg`] : null,
             mode !== WeighingType.SOLO_JABAS ? ['PESO NETO:', `${t.net.toFixed(2)} kg`] : null
@@ -1429,12 +1374,6 @@ const WeighingStation: React.FC = () => {
                           >
                             {isLameInput ? 'Pollo Cojo (PC)' : 'Pollo Muerto'}
                           </button>
-                          <button 
-                            onClick={() => setMortalityOrigin(mortalityOrigin === 'GALPON' ? 'ACOPIO' : 'GALPON')}
-                            className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest transition-all shadow-md whitespace-nowrap ${mortalityOrigin === 'ACOPIO' ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'}`}
-                          >
-                            {mortalityOrigin}
-                          </button>
                         </div>
                       )}
                   </div>
@@ -1464,15 +1403,8 @@ const WeighingStation: React.FC = () => {
                         <div className="flex flex-col">
                             <p className="font-digital font-black text-slate-800 text-lg md:text-xl">{r.weight.toFixed(2)}</p>
                             <div className="flex items-center gap-2">
-                                {r.isLame && <span className="bg-amber-100 text-amber-700 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest">PC</span>}
-                                {r.type === 'MORTALITY' && (
-                                    <button 
-                                        onClick={() => toggleRecordOrigin(r.id)}
-                                        className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest transition-colors ${r.origin === 'ACOPIO' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}
-                                        title="Click para cambiar origen"
-                                    >
-                                        {r.origin || 'GALPON'}
-                                    </button>
+                                {r.type === 'MORTALITY' && r.isLame && (
+                                    <span className="bg-amber-100 text-amber-700 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest">PC</span>
                                 )}
                             </div>
                         </div>

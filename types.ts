@@ -28,7 +28,6 @@ export interface WeighingRecord {
   birds?: number; // Number of birds in this specific weigh
   type: 'FULL' | 'EMPTY' | 'MORTALITY';
   isLame?: boolean; // New field for "pollo cojos"
-  origin?: 'GALPON' | 'ACOPIO'; // New field for mortality origin
 }
 
 export interface ClientOrder {
