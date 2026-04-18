@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Batch, WeighingType, UserRole } from '../../types';
-import { getBatches, saveBatch, deleteBatch, getOrdersByBatch, getVisibleUserIds } from '../../services/storage';
-import { Plus, Trash2, Edit, Scale, Calendar, Box, Activity } from 'lucide-react';
+import { Batch, WeighingType, UserRole, ClientOrder } from '../../types';
+import { getBatches, saveBatch, deleteBatch, getOrdersByBatch, getVisibleUserIds, getConfig } from '../../services/storage';
+import { Plus, Trash2, Edit, Scale, Calendar, Box, Activity, FileText } from 'lucide-react';
 import { AuthContext } from '../../App';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const BatchList: React.FC = () => {
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -89,6 +91,161 @@ const BatchList: React.FC = () => {
     const percent = Math.min((totalFullCrates / batch.totalCratesLimit) * 100, 100);
     const netWeight = totalFullWeight - totalEmptyWeight - totalMortWeight;
 
+    const generateBatchTicket = () => {
+        // Pass 1: Calculate height
+        const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 1000] });
+        const finalHeight = renderTicketContent(dummyDoc);
+        
+        // Pass 2: Final rendering
+        const doc = new jsPDF({ unit: 'mm', format: [80, finalHeight] });
+        renderTicketContent(doc);
+        
+        const blob = doc.output('blob');
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Total_Carga_${batch.name}_${new Date().getTime()}.pdf`;
+        link.click();
+    };
+
+    const renderTicketContent = (doc: jsPDF) => {
+        const config = getConfig();
+        let y = 10;
+        
+        // Header
+        if (config.logoUrl) {
+            doc.addImage(config.logoUrl, 'PNG', 25, y, 30, 30);
+            y += 35;
+        }
+
+        doc.setFontSize(14).setFont("helvetica", "bold");
+        doc.text(config.companyName.toUpperCase(), 40, y, { align: 'center' });
+        y += 5;
+        
+        doc.setFontSize(9).setFont("helvetica", "normal");
+        doc.text("RESUMEN TOTAL DE CARGA", 40, y, { align: 'center' });
+        y += 5;
+        
+        doc.setFontSize(8).setFont("helvetica", "italic");
+        doc.text(`FECHA: ${new Date().toLocaleString()}`, 40, y, { align: 'center' });
+        y += 5;
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.5);
+        doc.line(5, y, 75, y);
+        y += 5;
+
+        // Batch Info
+        doc.setFontSize(9).setFont("helvetica", "bold");
+        doc.text(`LOTE:`, 5, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(batch.name.toUpperCase(), 20, y);
+        y += 7;
+
+        // Calculate Totals by origin for mortality
+        let qM_Galpon = 0; let wM_Galpon = 0;
+        let qM_Acopio = 0; let wM_Acopio = 0;
+        let totalBirds = 0;
+        let totalAmount = 0;
+
+        orders.forEach(o => {
+            const records = o.records || [];
+            records.forEach(r => {
+                if (r.type === 'MORTALITY') {
+                    if ((r.origin || 'GALPON') === 'GALPON') {
+                        qM_Galpon += r.quantity; wM_Galpon += r.weight;
+                    } else {
+                        qM_Acopio += r.quantity; wM_Acopio += r.weight;
+                    }
+                }
+                if (r.type === 'FULL') {
+                    totalBirds += (r.birds !== undefined ? r.birds : (o.weighingMode === WeighingType.SOLO_POLLO ? r.quantity : r.quantity * 10));
+                }
+            });
+            
+            // Calculate individual order net to sum financial
+            const fR = records.filter(r => r.type === 'FULL');
+            const eR = records.filter(r => r.type === 'EMPTY');
+            const mR = records.filter(r => r.type === 'MORTALITY');
+            const netO = o.weighingMode === WeighingType.SOLO_POLLO ? 
+                fR.reduce((a, b) => a + b.weight, 0) : 
+                fR.reduce((a, b) => a + b.weight, 0) - eR.reduce((a, b) => a + b.weight, 0) - mR.reduce((a, b) => a + b.weight, 0);
+            
+            totalAmount += netO * o.pricePerKg;
+        });
+
+        // Summary Table
+        autoTable(doc, {
+            startY: y,
+            head: [[{ content: 'RESUMEN DE CARGA', colSpan: 2, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
+            body: [
+                ['Total Jabas Llenas:', totalFullCrates.toString()],
+                ['Total Pollos:', totalBirds.toString()],
+                ['Total Jabas Vacías:', totalEmptyCrates.toString()],
+                ['Total Muertos:', totalMort.toString()],
+                ['  - Galpón:', qM_Galpon.toString()],
+                ['  - Acopio:', qM_Acopio.toString()],
+                ['Prom. Peso Neto:', `${(totalBirds > 0 ? netWeight / totalBirds : 0).toFixed(2)} kg`],
+                ['PESO NETO TOTAL:', `${netWeight.toFixed(2)} kg`]
+            ],
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 1.5 },
+            columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40 }, 1: { halign: 'right', cellWidth: 30 } },
+            margin: { left: 5, right: 5 }
+        });
+        y = (doc as any).lastAutoTable.finalY + 8;
+
+        // Clients Table
+        doc.setFontSize(9).setFont("helvetica", "bold");
+        doc.text("DESGLOSE POR CLIENTES", 40, y, { align: 'center' });
+        y += 2;
+
+        const clientRows = orders.map(o => {
+            const fR = (o.records || []).filter(r => r.type === 'FULL');
+            const eR = (o.records || []).filter(r => r.type === 'EMPTY');
+            const mR = (o.records || []).filter(r => r.type === 'MORTALITY');
+            const netO = o.weighingMode === WeighingType.SOLO_POLLO ? 
+                fR.reduce((a, b) => a + b.weight, 0) : 
+                fR.reduce((a, b) => a + b.weight, 0) - eR.reduce((a, b) => a + b.weight, 0) - mR.reduce((a, b) => a + b.weight, 0);
+            
+            return [
+                o.clientName.substring(0, 15),
+                netO.toFixed(2),
+                (netO * o.pricePerKg).toFixed(2)
+            ];
+        });
+
+        autoTable(doc, {
+            startY: y,
+            head: [['Cliente', 'Neto (kg)', 'S/. Total']],
+            body: clientRows,
+            theme: 'grid',
+            styles: { fontSize: 7, cellPadding: 1.5 },
+            columnStyles: { 0: { cellWidth: 30 }, 1: { halign: 'right', cellWidth: 20 }, 2: { halign: 'right', cellWidth: 20 } },
+            margin: { left: 5, right: 5 }
+        });
+        y = (doc as any).lastAutoTable.finalY + 10;
+
+        // Grand Totals
+        doc.setFontSize(10).setFont("helvetica", "bold");
+        doc.text("TOTALES GENERALES", 5, y);
+        y += 5;
+        doc.setFontSize(9).setFont("helvetica", "normal");
+        doc.text("Peso Neto Carga:", 8, y); doc.text(`${netWeight.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+        doc.text("Mortalidad Total:", 8, y); doc.text(`${totalMortWeight.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+        
+        if (totalAmount > 0) {
+            doc.setFontSize(11).setFont("helvetica", "bold");
+            doc.text("VALOR TOTAL:", 8, y + 2);
+            doc.text(`S/. ${totalAmount.toFixed(2)}`, 72, y + 2, { align: 'right' });
+            y += 12;
+        }
+
+        doc.setFontSize(8).setFont("helvetica", "italic");
+        doc.text("Reporte de Fin de Carga", 40, y, { align: 'center' });
+
+        return y + 15;
+    };
+
     return (
       <div className="bg-white rounded-2xl shadow-lg border border-slate-200 hover:shadow-2xl hover:border-blue-400 transition-all duration-300 overflow-hidden flex flex-col h-full relative group">
           {/* Header */}
@@ -106,6 +263,7 @@ const BatchList: React.FC = () => {
              </div>
              {canEdit && (
                 <div className="flex space-x-2">
+                    <button onClick={generateBatchTicket} className="bg-slate-800 p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition-colors" title="Ticket Total Carga"><FileText size={14} /></button>
                     <button onClick={() => { setCurrentBatch(batch); setShowModal(true); }} className="bg-slate-800 p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"><Edit size={14} /></button>
                     <button onClick={() => handleDelete(batch.id)} className="bg-slate-800 p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-slate-700 transition-colors"><Trash2 size={14} /></button>
                 </div>
