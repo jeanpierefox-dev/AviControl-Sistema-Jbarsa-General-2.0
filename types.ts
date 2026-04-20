@@ -57,6 +57,7 @@ export interface Payment {
 export interface Batch {
   id: string;
   name: string;
+  date?: string; // Format YYYY-MM-DD for easier display and filtering
   createdAt: number;
   totalCratesLimit: number; // Estimated capacity
   status: 'ACTIVE' | 'ARCHIVED';

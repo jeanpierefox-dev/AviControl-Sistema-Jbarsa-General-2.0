@@ -50,11 +50,16 @@ const BatchList: React.FC = () => {
 
   const handleSave = () => {
     if (!currentBatch.name || !currentBatch.totalCratesLimit) return;
+    const timestamp = currentBatch.createdAt || Date.now();
+    const d = new Date(timestamp);
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    
     const batch: Batch = {
       id: currentBatch.id || Date.now().toString(),
       name: currentBatch.name,
+      date: dateStr,
       totalCratesLimit: Number(currentBatch.totalCratesLimit),
-      createdAt: currentBatch.createdAt || Date.now(),
+      createdAt: timestamp,
       status: 'ACTIVE',
       createdBy: currentBatch.createdBy || user?.id // Attach User ID
     };

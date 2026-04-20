@@ -20,7 +20,14 @@ const WeighingStation: React.FC = () => {
   const [batch, setBatch] = useState<any | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    
+    // If we are in a batch, try to use the batch date as default
+    if (batchId) {
+        const b = getBatches().find(x => x.id === batchId);
+        if (b && b.date) return b.date;
+    }
+    return today;
   });
 
   const [activeOrder, setActiveOrder] = useState<ClientOrder | null>(null);
@@ -337,14 +344,11 @@ const WeighingStation: React.FC = () => {
   };
 
   const getAdjustedTimestamp = () => {
-    if (mode === WeighingType.BATCH && batch && batch.createdAt) {
-      const batchDate = new Date(batch.createdAt);
-      const now = new Date();
-      // Use batch date but current time
-      batchDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
-      return batchDate.getTime();
-    }
-    return Date.now();
+    const now = new Date();
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    // Combine selected date with current time for correct chronological sorting within the day
+    const targetDate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+    return targetDate.getTime();
   };
 
   const addWeight = () => {
