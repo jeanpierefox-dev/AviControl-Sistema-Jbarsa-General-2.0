@@ -22,6 +22,7 @@ const BatchList: React.FC = () => {
       const all = getBatches();
       // Filter by selected date
       const filteredByDate = all.filter(b => {
+          if (b.date) return b.date === selectedDate;
           if (!b.createdAt) return false;
           const dateObj = new Date(Number(b.createdAt));
           if (isNaN(dateObj.getTime())) return false;

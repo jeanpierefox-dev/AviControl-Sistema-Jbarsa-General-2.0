@@ -34,6 +34,7 @@ export interface WeighingRecord {
 export interface ClientOrder {
   id: string;
   clientName: string;
+  date?: string; // Format YYYY-MM-DD
   targetCrates: number;
   birdsPerCrate?: number; // Default birds per crate for this order
   pricePerKg: number;

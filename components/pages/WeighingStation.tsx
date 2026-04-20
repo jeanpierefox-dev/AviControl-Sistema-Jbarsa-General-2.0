@@ -66,6 +66,9 @@ const WeighingStation: React.FC = () => {
 
       // Filter by selected date
       filtered = filtered.filter(o => {
+          // If explicit date is set, use it (source of truth)
+          if (o.date) return o.date === selectedDate;
+
           const records = o.records || [];
           if (records.length > 0) {
               return records.some(r => {
@@ -74,7 +77,7 @@ const WeighingStation: React.FC = () => {
                   return recordDate === selectedDate;
               });
           }
-          // If no records, check order creation date
+          // Fallback to ID parse
           const createDateObj = new Date(parseInt(o.id));
           const orderDate = `${createDateObj.getFullYear()}-${String(createDateObj.getMonth() + 1).padStart(2, '0')}-${String(createDateObj.getDate()).padStart(2, '0')}`;
           return orderDate === selectedDate;
@@ -130,6 +133,8 @@ const WeighingStation: React.FC = () => {
 
     // Filter by selected date
     filtered = filtered.filter(o => {
+        if (o.date) return o.date === selectedDate;
+        
         const records = o.records || [];
         if (records.length > 0) {
             return records.some(r => {
@@ -202,8 +207,8 @@ const WeighingStation: React.FC = () => {
   };
 
   const handleSaveClient = () => {
-    if (!newClientName || (mode !== WeighingType.SOLO_JABAS && !targetCrates)) return;
-    const target = mode === WeighingType.SOLO_JABAS ? 0 : parseInt(targetCrates);
+    if (!newClientName) return; // Only name is strictly required now
+    const target = mode === WeighingType.SOLO_JABAS ? 0 : (parseInt(targetCrates) || 0);
     const birds = mode === WeighingType.SOLO_JABAS ? 0 : (parseInt(newClientBirdsPerCrate) || 10);
 
     // Check if there's already an open order for this client
@@ -218,6 +223,8 @@ const WeighingStation: React.FC = () => {
             if (!isSameContext) return false;
 
             // Additionally check if it belongs to the current selectedDate
+            if (o.date) return o.date === selectedDate;
+
             const records = o.records || [];
             if (records.length > 0) {
                 return records.some(r => {
@@ -269,22 +276,21 @@ const WeighingStation: React.FC = () => {
           }
       }
     } else {
-      // Ensure the new order is created with a timestamp matching the selected date 
-      // so it shows up in the current view (useful for back-dated or future-dated entries)
-      let orderId = Date.now().toString();
-      const today = new Date();
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      
-      if (selectedDate !== todayStr) {
-          const [year, month, day] = selectedDate.split('-').map(Number);
-          const targetDate = new Date(year, month - 1, day, today.getHours(), today.getMinutes(), today.getSeconds());
-          orderId = targetDate.getTime().toString();
-      }
-
+      // Create new order with specific date and unique ID
       const newOrder: ClientOrder = {
-        id: orderId, clientName: newClientName, targetCrates: target, birdsPerCrate: birds,
-        pricePerKg: 0, status: 'OPEN', records: [], batchId, weighingMode: mode as WeighingType,
-        paymentStatus: 'PENDING', payments: [], createdBy: user?.id
+        id: Date.now().toString(), // Keep true now for uniqueness
+        clientName: newClientName, 
+        date: selectedDate, // Store explicit selected date
+        targetCrates: target, 
+        birdsPerCrate: birds,
+        pricePerKg: 0, 
+        status: 'OPEN', 
+        records: [], 
+        batchId, 
+        weighingMode: mode as WeighingType,
+        paymentStatus: 'PENDING', 
+        payments: [], 
+        createdBy: user?.id
       };
       saveOrder(newOrder);
       setActiveOrder(newOrder);
