@@ -83,7 +83,11 @@ const WeighingStation: React.FC = () => {
           return orderDate === selectedDate;
       });
       
-      filtered.sort((a, b) => (a.status === 'OPEN' ? -1 : 1));
+      // Sort by status (OPEN first) then by ID descending (newer first)
+      filtered.sort((a, b) => {
+        if (a.status !== b.status) return a.status === 'OPEN' ? -1 : 1;
+        return b.id.localeCompare(a.id);
+      });
       setOrders(filtered);
 
       // Sync activeOrder if it's currently open and changed in cloud
@@ -208,23 +212,25 @@ const WeighingStation: React.FC = () => {
 
   const handleSaveClient = () => {
     if (!newClientName) return; // Only name is strictly required now
-    const target = mode === WeighingType.SOLO_JABAS ? 0 : (parseInt(targetCrates) || 0);
-    const birds = mode === WeighingType.SOLO_JABAS ? 0 : (parseInt(newClientBirdsPerCrate) || 10);
+    const target = (mode === WeighingType.SOLO_JABAS || mode === WeighingType.SOLO_POLLO) ? 0 : (parseInt(targetCrates) || 0);
+    const birds = (mode === WeighingType.SOLO_JABAS || mode === WeighingType.SOLO_POLLO) ? 0 : (parseInt(newClientBirdsPerCrate) || 10);
 
     // Check if there's already an open order for this client
     // For mortality mode (SOLO_JABAS), we always allow creating a new registration 
     // to avoid merging with previous sessions as per user request.
-    if (!editingOrderId && mode !== WeighingType.SOLO_JABAS) {
+    const isSpecialType = mode === WeighingType.SOLO_JABAS;
+    if (!editingOrderId && !isSpecialType) {
         const existingOpenOrder = getOrders().find(o => {
-            const isSameContext = o.clientName.toLowerCase() === newClientName.toLowerCase() && 
+            const isSameContext = o.clientName.toLowerCase().trim() === newClientName.toLowerCase().trim() && 
                                  o.status === 'OPEN' && 
-                                 o.weighingMode === mode && 
+                                 (o.weighingMode === mode || (!o.weighingMode && mode === WeighingType.BATCH)) && 
                                  o.batchId === batchId;
             if (!isSameContext) return false;
 
-            // Additionally check if it belongs to the current selectedDate
+            // Strict date check
             if (o.date) return o.date === selectedDate;
 
+            // Fallback for older records
             const records = o.records || [];
             if (records.length > 0) {
                 return records.some(r => {
@@ -234,6 +240,7 @@ const WeighingStation: React.FC = () => {
                 });
             }
             const createD = new Date(parseInt(o.id));
+            if (isNaN(createD.getTime())) return false; // Safety
             const oDate = `${createD.getFullYear()}-${String(createD.getMonth() + 1).padStart(2, '0')}-${String(createD.getDate()).padStart(2, '0')}`;
             return oDate === selectedDate;
         });
@@ -269,7 +276,14 @@ const WeighingStation: React.FC = () => {
               }
               return r;
           });
-          const updatedOrder = { ...existing, clientName: newClientName, targetCrates: target, birdsPerCrate: birds, records: updatedRecords };
+          const updatedOrder: ClientOrder = { 
+              ...existing, 
+              clientName: newClientName, 
+              targetCrates: target, 
+              birdsPerCrate: birds, 
+              records: updatedRecords,
+              date: existing.date || selectedDate 
+          };
           saveOrder(updatedOrder);
           if (activeOrder?.id === editingOrderId) {
               setActiveOrder(updatedOrder);
@@ -1157,6 +1171,9 @@ const WeighingStation: React.FC = () => {
                   <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">
                     {editingOrderId ? 'Editar Cliente' : mode === WeighingType.SOLO_POLLO ? 'Venta Live (Sacos)' : mode === WeighingType.SOLO_JABAS ? 'Registro Muertos' : 'Nuevo Cliente'}
                   </h3>
+                  <div className="bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{selectedDate}</span>
+                  </div>
                 </div>
                 
                 <div className="space-y-4 flex-1">
