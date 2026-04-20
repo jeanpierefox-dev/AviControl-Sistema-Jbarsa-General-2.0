@@ -1,5 +1,5 @@
 {
-  "name": " AviControl-Sistema-Barsa-2.0",
+  "name": "AviControl Barsa 2.0",
   "description": "Sistema integral de control avícola: gestión de lotes, pesaje en tiempo real, cobranzas y control de usuarios.",
   "requestFramePermissions": [
     "bluetooth",

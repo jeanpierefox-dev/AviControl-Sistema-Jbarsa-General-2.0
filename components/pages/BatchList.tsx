@@ -137,8 +137,11 @@ const BatchList: React.FC = () => {
         }
 
         doc.setFontSize(14).setFont("helvetica", "bold");
-        doc.text(config.companyName.toUpperCase(), 40, y, { align: 'center' });
-        y += 5;
+        const splitTitle = doc.splitTextToSize(config.companyName.toUpperCase(), 70);
+        splitTitle.forEach((line: string) => {
+            doc.text(line, 40, y, { align: 'center' });
+            y += 6;
+        });
         
         doc.setFontSize(9).setFont("helvetica", "normal");
         doc.text("RESUMEN TOTAL DE CARGA", 40, y, { align: 'center' });

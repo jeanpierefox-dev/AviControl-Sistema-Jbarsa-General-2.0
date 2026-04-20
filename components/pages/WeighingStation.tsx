@@ -481,8 +481,11 @@ const WeighingStation: React.FC = () => {
     }
 
     doc.setFontSize(14).setFont("helvetica", "bold");
-    doc.text(config.companyName.toUpperCase(), 40, y, { align: 'center' });
-    y += 5;
+    const splitTitle = doc.splitTextToSize(config.companyName.toUpperCase(), 70);
+    splitTitle.forEach((line: string) => {
+        doc.text(line, 40, y, { align: 'center' });
+        y += 6;
+    });
     
     doc.setFontSize(9).setFont("helvetica", "normal");
     doc.text(isSalesTicket ? "TICKET DE VENTA" : "TICKET DE PESAJE", 40, y, { align: 'center' });
@@ -675,8 +678,11 @@ const WeighingStation: React.FC = () => {
     }
 
     doc.setFontSize(14).setFont("helvetica", "bold");
-    doc.text(config.companyName.toUpperCase(), 40, y, { align: 'center' });
-    y += 5;
+    const splitTitleVenta = doc.splitTextToSize(config.companyName.toUpperCase(), 70);
+    splitTitleVenta.forEach((line: string) => {
+        doc.text(line, 40, y, { align: 'center' });
+        y += 6;
+    });
     
     doc.setFontSize(10).setFont("helvetica", "bold");
     doc.text("TICKET DE VENTA", 40, y, { align: 'center' });
@@ -777,7 +783,10 @@ const WeighingStation: React.FC = () => {
 
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(22).setFont("helvetica", "bold");
-    doc.text(config.companyName.toUpperCase(), 105, 20, { align: 'center' });
+    const splitTitle = doc.splitTextToSize(config.companyName.toUpperCase(), 180);
+    splitTitle.forEach((line: string, i: number) => {
+        doc.text(line, 105, 20 + (i * 8), { align: 'center' });
+    });
     
     doc.setFontSize(12).setFont("helvetica", "normal");
     doc.text("REPORTE DETALLADO DE PESAJE", 105, 30, { align: 'center' });
@@ -899,8 +908,11 @@ const WeighingStation: React.FC = () => {
     }
 
     doc.setFontSize(14).setFont("helvetica", "bold");
-    doc.text(config.companyName.toUpperCase(), 40, y, { align: 'center' });
-    y += 5;
+    const splitTitleCojos = doc.splitTextToSize(config.companyName.toUpperCase(), 70);
+    splitTitleCojos.forEach((line: string) => {
+        doc.text(line, 40, y, { align: 'center' });
+        y += 6;
+    });
     
     doc.setFontSize(10).setFont("helvetica", "bold");
     doc.text("REPORTE POLLOS COJOS", 40, y, { align: 'center' });

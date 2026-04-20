@@ -91,7 +91,7 @@ const Dashboard: React.FC = () => {
                     <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest">Sesión Protegida</span>
                 </div>
                 <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none">Hola, {user?.name?.split(' ')[0] || 'Usuario'}</h2>
-                <p className="text-slate-400 font-bold uppercase tracking-widest text-[9px] mt-1">Sistema de Gestión Barsa v1.2</p>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[9px] mt-1">Sistema de Gestión Barsa v2.0</p>
             </div>
         </div>
         
