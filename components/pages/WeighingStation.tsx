@@ -409,12 +409,25 @@ const WeighingStation: React.FC = () => {
       origin: activeTab === 'MORTALITY' ? mortalityOrigin : undefined
     };
     const records = activeOrder.records || [];
-    const updated = { ...activeOrder, records: [record, ...records] };
+    const updated = { ...activeOrder, records: [record, ...records], updatedAt: Date.now() };
+    
+    // Clear weight and focus immediately for better feel
+    setWeightInput('');
+    
+    // In Solo Jabas (Mortality) mode, it's common to weigh different quantities each time, 
+    // so we reset to '1' after each save to avoid accidental duplication of high counts.
+    if (mode === WeighingType.SOLO_JABAS) {
+      setQtyInput('1');
+    }
+    
     saveOrder(updated);
     setActiveOrder(updated);
     setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
-    setWeightInput('');
-    weightInputRef.current?.focus();
+    
+    // Small delay to ensure focus after re-render
+    setTimeout(() => {
+        weightInputRef.current?.focus();
+    }, 50);
   };
 
   const deleteRecord = (id: string) => {
