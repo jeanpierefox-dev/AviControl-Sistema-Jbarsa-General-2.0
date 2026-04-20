@@ -54,57 +54,72 @@ const WeighingStation: React.FC = () => {
   const [isLameInput, setIsLameInput] = useState(false);
   const [mortalityOrigin, setMortalityOrigin] = useState<'GALPON' | 'ACOPIO'>('GALPON');
 
-  useEffect(() => {
-    const refreshOrders = () => {
-      const all = getOrders();
-      let filtered = mode === WeighingType.BATCH && batchId 
-        ? all.filter(o => o.batchId === batchId) 
-        : all.filter(o => !o.batchId && o.weighingMode === mode);
+  const loadOrders = React.useCallback(() => {
+    const all = getOrders();
+    const visibleIds = getVisibleUserIds(user);
+    
+    let filtered = all.filter(o => {
+      // 1. Batch context check
+      const matchesBatch = batchId ? o.batchId === batchId : (!o.batchId || o.batchId === 'undefined');
+      if (!matchesBatch) return false;
+
+      // 2. Mode context check
+      // If we are in the general BATCH mode, we show everything for that batch
+      if (mode === WeighingType.BATCH) return true;
       
-      const visibleIds = getVisibleUserIds(user);
-      filtered = filtered.filter(o => visibleIds.includes(o.createdBy || ''));
+      // If we are in a SOLO mode, we only show orders for that specific mode
+      return o.weighingMode === mode;
+    });
+    
+    // Visibility check
+    filtered = filtered.filter(o => visibleIds.includes(o.createdBy || ''));
 
-      // Filter by selected date
-      filtered = filtered.filter(o => {
-          // If explicit date is set, use it (source of truth)
-          if (o.date) return o.date === selectedDate;
-
-          const records = o.records || [];
-          if (records.length > 0) {
-              return records.some(r => {
-                  const dateObj = new Date(r.timestamp);
-                  const recordDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
-                  return recordDate === selectedDate;
-              });
-          }
-          // Fallback to ID parse
-          const createDateObj = new Date(parseInt(o.id));
-          const orderDate = `${createDateObj.getFullYear()}-${String(createDateObj.getMonth() + 1).padStart(2, '0')}-${String(createDateObj.getDate()).padStart(2, '0')}`;
-          return orderDate === selectedDate;
-      });
-      
-      // Sort by status (OPEN first) then by ID descending (newer first)
-      filtered.sort((a, b) => {
-        if (a.status !== b.status) return a.status === 'OPEN' ? -1 : 1;
-        return b.id.localeCompare(a.id);
-      });
-      setOrders(filtered);
-
-      // Sync activeOrder if it's currently open and changed in cloud
-      setActiveOrder(current => {
-        if (!current) return null;
-        const updated = filtered.find(o => o.id === current.id);
-        if (updated && JSON.stringify(updated) !== JSON.stringify(current)) {
-          return updated;
+    // Strict Date Filtering
+    filtered = filtered.filter(o => {
+        // 1. Explicit date field (Best)
+        if (o.date) return o.date === selectedDate;
+        
+        // 2. Fallback to records
+        const records = o.records || [];
+        if (records.length > 0) {
+            return records.some(r => {
+                const dateObj = new Date(r.timestamp);
+                const recordDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+                return recordDate === selectedDate;
+            });
         }
-        return current;
-      });
-    };
+        
+        // 3. Fallback to ID parse
+        const createDateObj = new Date(parseInt(o.id));
+        if (isNaN(createDateObj.getTime())) return false;
+        const orderDate = `${createDateObj.getFullYear()}-${String(createDateObj.getMonth() + 1).padStart(2, '0')}-${String(createDateObj.getDate()).padStart(2, '0')}`;
+        return orderDate === selectedDate;
+    });
+    
+    // Sort: OPEN first, then ID desc (newer first)
+    filtered.sort((a, b) => {
+      if (a.status !== b.status) return a.status === 'OPEN' ? -1 : 1;
+      return b.id.localeCompare(a.id);
+    });
 
-    refreshOrders();
-    window.addEventListener('avi_data_orders', refreshOrders);
-    return () => window.removeEventListener('avi_data_orders', refreshOrders);
+    setOrders(filtered);
+
+    // Sync activeOrder if it's currently open and changed in cloud
+    setActiveOrder(current => {
+      if (!current) return null;
+      const updated = filtered.find(o => o.id === current.id);
+      if (updated && JSON.stringify(updated) !== JSON.stringify(current)) {
+        return updated;
+      }
+      return current;
+    });
   }, [mode, batchId, user, selectedDate]);
+
+  useEffect(() => {
+    loadOrders();
+    window.addEventListener('avi_data_orders', loadOrders);
+    return () => window.removeEventListener('avi_data_orders', loadOrders);
+  }, [loadOrders]);
 
   useEffect(() => {
     if (mode === WeighingType.BATCH && batchId) {
@@ -124,37 +139,6 @@ const WeighingStation: React.FC = () => {
     return () => clearTimeout(timeout);
   }, [activeTab, activeOrder]);
 
-  const loadOrders = () => {
-    // This function is now mostly for manual triggers if needed, 
-    // but the useEffect handles the main logic.
-    const all = getOrders();
-    let filtered = mode === WeighingType.BATCH && batchId 
-      ? all.filter(o => o.batchId === batchId) 
-      : all.filter(o => !o.batchId && o.weighingMode === mode);
-    
-    const visibleIds = getVisibleUserIds(user);
-    filtered = filtered.filter(o => visibleIds.includes(o.createdBy || ''));
-
-    // Filter by selected date
-    filtered = filtered.filter(o => {
-        if (o.date) return o.date === selectedDate;
-        
-        const records = o.records || [];
-        if (records.length > 0) {
-            return records.some(r => {
-                const dateObj = new Date(r.timestamp);
-                const recordDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
-                return recordDate === selectedDate;
-            });
-        }
-        const createDateObj = new Date(parseInt(o.id));
-        const orderDate = `${createDateObj.getFullYear()}-${String(createDateObj.getMonth() + 1).padStart(2, '0')}-${String(createDateObj.getDate()).padStart(2, '0')}`;
-        return orderDate === selectedDate;
-    });
-    
-    filtered.sort((a, b) => (a.status === 'OPEN' ? -1 : 1));
-    setOrders(filtered);
-  };
 
   const setDefaultQuantity = () => {
     setIsLameInput(false);
@@ -291,8 +275,13 @@ const WeighingStation: React.FC = () => {
       }
     } else {
       // Create new order with specific date and unique ID
+      // If past date, we inject a high sequence into the ID but keep it unique
+      const timestamp = selectedDate === new Date().toISOString().split('T')[0] 
+        ? Date.now() 
+        : new Date(selectedDate + 'T12:00:00').getTime();
+      
       const newOrder: ClientOrder = {
-        id: Date.now().toString(), // Keep true now for uniqueness
+        id: `${timestamp}_${Math.random().toString(36).substr(2, 4)}`,
         clientName: newClientName, 
         date: selectedDate, // Store explicit selected date
         targetCrates: target, 
@@ -300,7 +289,7 @@ const WeighingStation: React.FC = () => {
         pricePerKg: 0, 
         status: 'OPEN', 
         records: [], 
-        batchId, 
+        batchId: batchId || '', 
         weighingMode: mode as WeighingType,
         paymentStatus: 'PENDING', 
         payments: [], 
