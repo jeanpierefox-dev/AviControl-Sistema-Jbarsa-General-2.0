@@ -264,30 +264,51 @@ const startListeners = () => {
         const collectionRef = ref(db, colName);
         const unsub = onValue(collectionRef, (snapshot) => {
           const val = snapshot.val();
-          const cloudData: any[] = val ? Object.values(val) : [];
+          // Smart Merge logic: preserve local state that is fresher than cloud during sync
+          const cloudDataArray: any[] = val ? Object.values(val) : [];
           const currentLocalRaw = localStorage.getItem(storageKey);
           const currentLocal: any[] = currentLocalRaw ? JSON.parse(currentLocalRaw) : [];
           
-          // Merge logic: cloud is source of truth
-          // Sort both by ID to ensure consistent stringification
-          const sortedCloud = [...cloudData].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+          // Use cloud as the base, but look for fresher local items
+          const mergedData = cloudDataArray.map(cloudItem => {
+              const localItem = currentLocal.find(li => li.id === cloudItem.id);
+              if (!localItem) return cloudItem;
+
+              // For orders, we can use the records count as a heuristic for "fresher" data
+              // This prevents a local save from being immediately overwritten by a stale cloud sync
+              if (colName === 'orders') {
+                  const cloudRC = (cloudItem.records || []).length;
+                  const localRC = (localItem.records || []).length;
+                  
+                  // If local has more records, it's likely fresher (write in progress or just finished)
+                  if (localRC > cloudRC) return localItem;
+              }
+              
+              return cloudItem;
+          });
+
+          // Check if we have local-only items (initial upload scenario)
+          currentLocal.forEach(localItem => {
+              if (!cloudDataArray.some(ci => ci.id === localItem.id)) {
+                  mergedData.push(localItem);
+              }
+          });
+
+          const sortedMerged = [...mergedData].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
           const sortedLocal = [...currentLocal].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
           
-          if (JSON.stringify(sortedCloud) !== JSON.stringify(sortedLocal)) {
-              // If cloud is empty but local has data, it might be initial sync or offline data
-              // We only upload if cloud is TRULY empty (not just filtered)
-              if (cloudData.length === 0 && currentLocal.length > 0) {
-                  // Don't overwrite local yet, just upload
+          if (JSON.stringify(sortedMerged) !== JSON.stringify(sortedLocal)) {
+              // If cloud is empty but local has data, upload local data
+              if (cloudDataArray.length === 0 && currentLocal.length > 0) {
                   currentLocal.forEach(item => {
                       set(ref(db!, `${colName}/${item.id}`), item).catch(err => {
                           console.error(`Upload error for ${colName}:`, err);
-                          window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: err.message }));
                       });
                   });
                   return;
               }
 
-              localStorage.setItem(storageKey, JSON.stringify(cloudData));
+              localStorage.setItem(storageKey, JSON.stringify(mergedData));
               window.dispatchEvent(new Event(eventName));
           }
         }, (error) => {

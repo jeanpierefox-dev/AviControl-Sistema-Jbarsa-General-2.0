@@ -140,7 +140,17 @@ const WeighingStation: React.FC = () => {
   }, [activeTab, activeOrder]);
 
 
+  const lastSessionState = useRef<{ id: string | null, tab: string | null }>({ id: null, tab: null });
+
   const setDefaultQuantity = () => {
+    if (!activeOrder) return;
+    
+    // Prevent resetting quantity if we're just updating the same order and haven't switched tabs
+    if (activeOrder.id === lastSessionState.current.id && activeTab === lastSessionState.current.tab) {
+        return;
+    }
+    
+    lastSessionState.current = { id: activeOrder.id, tab: activeTab };
     setIsLameInput(false);
     if (mode === WeighingType.SOLO_POLLO) { 
       setQtyInput('1'); // One sack default
@@ -361,7 +371,7 @@ const WeighingStation: React.FC = () => {
   };
 
   const addWeight = () => {
-    if (!activeOrder || !weightInput || !qtyInput) return;
+    if (!activeOrder || !weightInput || !qtyInput || isLocked) return;
     
     const quantity = parseInt(qtyInput);
     
