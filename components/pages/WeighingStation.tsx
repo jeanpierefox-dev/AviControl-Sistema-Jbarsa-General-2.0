@@ -200,7 +200,9 @@ const WeighingStation: React.FC = () => {
     const birds = mode === WeighingType.SOLO_JABAS ? 0 : (parseInt(newClientBirdsPerCrate) || 10);
 
     // Check if there's already an open order for this client
-    if (!editingOrderId) {
+    // For mortality mode (SOLO_JABAS), we always allow creating a new registration 
+    // to avoid merging with previous sessions as per user request.
+    if (!editingOrderId && mode !== WeighingType.SOLO_JABAS) {
         const existingOpenOrder = getOrders().find(o => {
             const isSameContext = o.clientName.toLowerCase() === newClientName.toLowerCase() && 
                                  o.status === 'OPEN' && 
@@ -278,6 +280,7 @@ const WeighingStation: React.FC = () => {
         paymentStatus: 'PENDING', payments: [], createdBy: user?.id
       };
       saveOrder(newOrder);
+      setActiveOrder(newOrder);
     }
     loadOrders();
     setShowClientModal(false);
