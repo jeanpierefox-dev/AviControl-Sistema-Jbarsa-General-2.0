@@ -46,7 +46,11 @@ const BatchList: React.FC = () => {
     refresh();
     const handleUpdate = () => refresh();
     window.addEventListener('avi_data_batches', handleUpdate);
-    return () => window.removeEventListener('avi_data_batches', handleUpdate);
+    window.addEventListener('avi_data_orders', handleUpdate);
+    return () => {
+      window.removeEventListener('avi_data_batches', handleUpdate);
+      window.removeEventListener('avi_data_orders', handleUpdate);
+    };
   }, [selectedDate, user]);
 
   const handleSave = () => {

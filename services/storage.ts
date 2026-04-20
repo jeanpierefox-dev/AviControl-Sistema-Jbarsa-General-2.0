@@ -165,6 +165,7 @@ export const saveUser = (user: User) => {
     const idx = users.findIndex(u => u.id === user.id);
     if (idx >= 0) users[idx] = user; else users.push(user);
     localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+    window.dispatchEvent(new Event('avi_data_users'));
     if (db) set(ref(db, `users/${user.id}`), user).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
 
@@ -196,10 +197,12 @@ export const getBatches = (): Batch[] => safeParse(KEYS.BATCHES, []);
 
 export const saveBatch = (batch: Batch) => {
     const batches = getBatches();
-    const idx = batches.findIndex(b => b.id === batch.id);
-    if (idx >= 0) batches[idx] = batch; else batches.push(batch);
+    const bWithMeta = { ...batch, updatedAt: Date.now() };
+    const idx = batches.findIndex(b => b.id === bWithMeta.id);
+    if (idx >= 0) batches[idx] = bWithMeta; else batches.push(bWithMeta);
     localStorage.setItem(KEYS.BATCHES, JSON.stringify(batches));
-    if (db) set(ref(db, `batches/${batch.id}`), batch).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
+    window.dispatchEvent(new Event('avi_data_batches'));
+    if (db) set(ref(db, `batches/${bWithMeta.id}`), bWithMeta).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
 
 export const deleteBatch = (id: string) => {
@@ -215,10 +218,12 @@ export const getOrdersByBatch = (batchId: string): ClientOrder[] =>
 
 export const saveOrder = (order: ClientOrder) => {
     const orders = getOrders();
-    const idx = orders.findIndex(o => o.id === order.id);
-    if (idx >= 0) orders[idx] = order; else orders.push(order);
+    const oWithMeta = { ...order, updatedAt: Date.now() };
+    const idx = orders.findIndex(o => o.id === oWithMeta.id);
+    if (idx >= 0) orders[idx] = oWithMeta; else orders.push(oWithMeta);
     localStorage.setItem(KEYS.ORDERS, JSON.stringify(orders));
-    if (db) set(ref(db, `orders/${order.id}`), order).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
+    window.dispatchEvent(new Event('avi_data_orders'));
+    if (db) set(ref(db, `orders/${oWithMeta.id}`), oWithMeta).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
 
 export const deleteOrder = (id: string) => {
@@ -274,13 +279,15 @@ const startListeners = () => {
               const localItem = currentLocal.find(li => li.id === cloudItem.id);
               if (!localItem) return cloudItem;
 
-              // For orders, we can use the records count as a heuristic for "fresher" data
-              // This prevents a local save from being immediately overwritten by a stale cloud sync
+              // Check updatedAt if available (added to ensure reliability)
+              if (localItem.updatedAt && cloudItem.updatedAt) {
+                  if (localItem.updatedAt > cloudItem.updatedAt) return localItem;
+              }
+
+              // Fallback records count heuristic for orders
               if (colName === 'orders') {
                   const cloudRC = (cloudItem.records || []).length;
                   const localRC = (localItem.records || []).length;
-                  
-                  // If local has more records, it's likely fresher (write in progress or just finished)
                   if (localRC > cloudRC) return localItem;
               }
               
