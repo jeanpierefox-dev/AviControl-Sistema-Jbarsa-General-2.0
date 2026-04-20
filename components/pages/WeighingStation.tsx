@@ -201,7 +201,27 @@ const WeighingStation: React.FC = () => {
 
     // Check if there's already an open order for this client
     if (!editingOrderId) {
-        const existingOpenOrder = getOrders().find(o => o.clientName.toLowerCase() === newClientName.toLowerCase() && o.status === 'OPEN' && o.weighingMode === mode && o.batchId === batchId);
+        const existingOpenOrder = getOrders().find(o => {
+            const isSameContext = o.clientName.toLowerCase() === newClientName.toLowerCase() && 
+                                 o.status === 'OPEN' && 
+                                 o.weighingMode === mode && 
+                                 o.batchId === batchId;
+            if (!isSameContext) return false;
+
+            // Additionally check if it belongs to the current selectedDate
+            const records = o.records || [];
+            if (records.length > 0) {
+                return records.some(r => {
+                    const d = new Date(r.timestamp);
+                    const rDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                    return rDate === selectedDate;
+                });
+            }
+            const createD = new Date(parseInt(o.id));
+            const oDate = `${createD.getFullYear()}-${String(createD.getMonth() + 1).padStart(2, '0')}-${String(createD.getDate()).padStart(2, '0')}`;
+            return oDate === selectedDate;
+        });
+
         if (existingOpenOrder) {
             setActiveOrder(existingOpenOrder);
             setShowClientModal(false);
@@ -240,8 +260,20 @@ const WeighingStation: React.FC = () => {
           }
       }
     } else {
+      // Ensure the new order is created with a timestamp matching the selected date 
+      // so it shows up in the current view (useful for back-dated or future-dated entries)
+      let orderId = Date.now().toString();
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      
+      if (selectedDate !== todayStr) {
+          const [year, month, day] = selectedDate.split('-').map(Number);
+          const targetDate = new Date(year, month - 1, day, today.getHours(), today.getMinutes(), today.getSeconds());
+          orderId = targetDate.getTime().toString();
+      }
+
       const newOrder: ClientOrder = {
-        id: Date.now().toString(), clientName: newClientName, targetCrates: target, birdsPerCrate: birds,
+        id: orderId, clientName: newClientName, targetCrates: target, birdsPerCrate: birds,
         pricePerKg: 0, status: 'OPEN', records: [], batchId, weighingMode: mode as WeighingType,
         paymentStatus: 'PENDING', payments: [], createdBy: user?.id
       };
