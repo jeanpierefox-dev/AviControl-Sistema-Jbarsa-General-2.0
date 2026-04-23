@@ -536,66 +536,45 @@ const WeighingStation: React.FC = () => {
         });
         y = (doc as any).lastAutoTable.finalY + 5;
 
-        // DETAILED RECORDS TABLE
+        // DETAILED RECORDS TABLE - CONSOLIDATED
         doc.setFontSize(10).setFont("helvetica", "bold");
         doc.text("DETALLE DE PESOS", 40, y, { align: 'center' });
         y += 2;
 
-        const fullRecords = order.records.filter(r => r.type === 'FULL').sort((a, b) => b.timestamp - a.timestamp);
-        const emptyRecords = order.records.filter(r => r.type === 'EMPTY').sort((a, b) => b.timestamp - a.timestamp);
-        const mortRecords = order.records.filter(r => r.type === 'MORTALITY').sort((a, b) => b.timestamp - a.timestamp);
-        const mortGalponRecords = mortRecords.filter(r => (r.origin || 'GALPON') === 'GALPON');
-        const mortAcopioRecords = mortRecords.filter(r => r.origin === 'ACOPIO');
-
-        const renderCategory = (title: string, records: any[], totalWeight: number, qty?: number) => {
-            if (records.length === 0) return;
-            
-            const headerText = qty !== undefined ? (mode === WeighingType.SOLO_POLLO && title === 'SACOS' ? `${title} (Cant: ${qty})` : (mode === WeighingType.BATCH ? `${title} (Cant: ${qty})` : `${title} (Cant: ${qty})`)) : title;
-            
+        const allRecords = [...order.records].sort((a, b) => a.timestamp - b.timestamp);
+        
+        if (allRecords.length > 0) {
             autoTable(doc, {
                 startY: y,
-                head: [[{ content: headerText, colSpan: 4, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
-                body: chunkArray(records.flatMap(r => {
+                head: [['PESO', 'DETALLE', 'PESO', 'DETALLE']],
+                body: chunkArray(allRecords.flatMap(r => {
                     let suffix = '';
                     if (r.type === 'FULL') suffix = mode === WeighingType.SOLO_POLLO ? `${r.birds}p` : `${r.quantity}j, ${r.birds}p`;
-                    else if (r.type === 'EMPTY') suffix = `${r.quantity}j`;
+                    else if (r.type === 'EMPTY') suffix = `${r.quantity}j (V)`;
                     else if (r.type === 'MORTALITY') {
                         const originLabel = (r.origin || 'GALPON') === 'ACOPIO' ? ' (AC)' : ' (GL)';
-                        suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}${originLabel}`;
+                        suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}${originLabel} (M)`;
                     }
                     return [r.weight.toFixed(2), suffix];
                 }), 4),
                 theme: 'grid',
-                styles: { fontSize: 7, cellPadding: 1, halign: 'center', minCellHeight: 6 },
+                styles: { fontSize: 6.5, cellPadding: 1, halign: 'center', minCellHeight: 5 },
+                headStyles: { fillColor: [220, 226, 230], textColor: 0, fontSize: 6.5 },
                 margin: { left: 5, right: 5 },
                 tableWidth: 70
             });
-            y = (doc as any).lastAutoTable.finalY + 1;
+            y = (doc as any).lastAutoTable.finalY + 3;
             
+            // Short category summaries
             doc.setFontSize(8).setFont("helvetica", "bold");
-            doc.text(`TOTAL ${title}:`, 40, y + 3, { align: 'right' });
-            doc.text(`${totalWeight.toFixed(2)} kg`, 72, y + 3, { align: 'right' });
-            y += 7;
-        };
-
-        renderCategory(mode === WeighingType.SOLO_POLLO ? "SACOS" : "LLENAS", fullRecords, t.wF, t.qF);
-        renderCategory("VACÍAS", emptyRecords, t.wE, t.qE);
-        
-        if (mode === WeighingType.SOLO_JABAS) {
-            renderCategory("MUERTOS GALPON", mortGalponRecords, t.wM_Galpon, t.qM_Galpon);
-            renderCategory("MUERTOS ACOPIO", mortAcopioRecords, t.wM_Acopio, t.qM_Acopio);
-        } else {
-            renderCategory("MORTALIDAD GALPON", mortGalponRecords, t.wM_Galpon, t.qM_Galpon);
-            renderCategory("MORTALIDAD ACOPIO", mortAcopioRecords, t.wM_Acopio, t.qM_Acopio);
+            if (t.wF > 0) { doc.text(`TOTAL LLENAS: ${t.wF.toFixed(2)} kg`, 5, y); y += 4; }
+            if (t.wE > 0) { doc.text(`TOTAL VACÍAS: ${t.wE.toFixed(2)} kg`, 5, y); y += 4; }
+            if (t.wM > 0) { doc.text(`TOTAL MUERTOS: ${t.wM.toFixed(2)} kg`, 5, y); y += 4; }
         }
 
-        if (mortRecords.some(r => r.isLame)) {
+        if (allRecords.some(r => r.type === 'MORTALITY')) {
             doc.setFontSize(7).setFont("helvetica", "italic");
-            doc.text("* PC = Pollo Cojo, GL = Galpón, AC = Acopio", 5, y + 2);
-            y += 5;
-        } else if (mortRecords.length > 0) {
-            doc.setFontSize(7).setFont("helvetica", "italic");
-            doc.text("* GL = Galpón, AC = Acopio", 5, y + 2);
+            doc.text("* (V)=Vacía, (M)=Muerto, PC=Cojo, GL=Galpón, AC=Acopio", 5, y + 2);
             y += 5;
         }
     }

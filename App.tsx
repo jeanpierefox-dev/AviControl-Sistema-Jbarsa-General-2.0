@@ -162,10 +162,28 @@ const App: React.FC = () => {
         <ErrorBoundary>
             <AuthContext.Provider value={{ user, setUser, logout }}>
                 {syncError && (
-                    <div className="fixed top-0 left-0 right-0 z-[100] bg-red-600 text-white p-3 text-center text-xs font-bold shadow-lg flex items-center justify-center gap-2">
-                        <Database size={14} />
-                        Error de sincronización: {syncError}. Revisa las reglas de seguridad o la URL de la base de datos.
-                        <button onClick={() => setSyncError(null)} className="ml-4 bg-red-800 px-2 py-1 rounded hover:bg-red-900 transition-all">Cerrar</button>
+                    <div className="fixed top-0 left-0 right-0 z-[100] bg-red-600 text-white p-3 text-center text-xs font-bold shadow-lg flex flex-col sm:flex-row items-center justify-center gap-3">
+                        <div className="flex items-center gap-2">
+                            <Database size={14} className="animate-pulse" />
+                            <span>Error de sincronización: {syncError}</span>
+                        </div>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={() => {
+                                    setSyncError(null);
+                                    initCloudSync();
+                                }} 
+                                className="bg-white text-red-600 px-3 py-1 rounded-lg hover:bg-slate-100 transition-all uppercase tracking-tighter"
+                            >
+                                Reintentar
+                            </button>
+                            <button 
+                                onClick={() => setSyncError(null)} 
+                                className="bg-red-800 text-white px-3 py-1 rounded-lg hover:bg-red-900 transition-all uppercase tracking-tighter"
+                            >
+                                Ignorar
+                            </button>
+                        </div>
                     </div>
                 )}
                 <HashRouter>

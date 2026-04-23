@@ -117,6 +117,11 @@ export const initCloudSync = async () => {
       if (!dbUrl && config.firebaseConfig?.projectId) {
           dbUrl = `https://${config.firebaseConfig.projectId}-default-rtdb.firebaseio.com`;
       }
+      
+      // Basic validation of URL structure to avoid obscure errors
+      if (dbUrl && !dbUrl.startsWith('http')) {
+          dbUrl = `https://${dbUrl}`;
+      }
 
       const appConfig = {
           ...config.firebaseConfig,
@@ -129,9 +134,19 @@ export const initCloudSync = async () => {
           app = defaultApp;
       }
       db = getDatabase(app);
+      
+      // Listen for connection state specifically for UI reporting
+      const connectedRef = ref(db, '.info/connected');
+      onValue(connectedRef, (snap) => {
+          if (snap.val() === false) {
+              console.warn("Firebase disconnected. Waiting for automatic reconnect...");
+          }
+      });
+
       startListeners();
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error al conectar con la nube:", e);
+      window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message || "Fallo al inicializar Firebase" }));
     }
   }
 };

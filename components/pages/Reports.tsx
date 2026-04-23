@@ -153,8 +153,11 @@ const Reports: React.FC = () => {
     }
 
     doc.setFontSize(14).setFont("helvetica", "bold");
-    doc.text(config.companyName.toUpperCase(), 40, y, { align: 'center' });
-    y += 5;
+    const splitTitle = doc.splitTextToSize(config.companyName.toUpperCase(), 70);
+    splitTitle.forEach((line: string) => {
+        doc.text(line, 40, y, { align: 'center' });
+        y += 6;
+    });
     
     doc.setFontSize(9).setFont("helvetica", "normal");
     doc.text(isSalesTicket ? "TICKET DE VENTA" : "TICKET DE PESAJE", 40, y, { align: 'center' });
@@ -203,51 +206,41 @@ const Reports: React.FC = () => {
         });
         y = (doc as any).lastAutoTable.finalY + 5;
 
-        // DETAILED RECORDS TABLE
+        // DETAILED RECORDS TABLE - CONSOLIDATED
         doc.setFontSize(10).setFont("helvetica", "bold");
         doc.text("DETALLE DE PESOS", 40, y, { align: 'center' });
         y += 2;
 
-        const records = order.records || [];
-        const fullRecords = records.filter(r => r.type === 'FULL').sort((a, b) => b.timestamp - a.timestamp);
-        const emptyRecords = records.filter(r => r.type === 'EMPTY').sort((a, b) => b.timestamp - a.timestamp);
-        const mortRecords = records.filter(r => r.type === 'MORTALITY').sort((a, b) => b.timestamp - a.timestamp);
-
-        const renderCategory = (title: string, records: any[], totalWeight: number, qty?: number) => {
-            if (records.length === 0) return;
-            
-            const headerText = qty !== undefined ? `${title} (Cant: ${qty})` : title;
-            
+        const allRecords = [...(order.records || [])].sort((a, b) => a.timestamp - b.timestamp);
+        
+        if (allRecords.length > 0) {
             autoTable(doc, {
                 startY: y,
-                head: [[{ content: headerText, colSpan: 4, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
-                body: chunkArray(records.flatMap(r => {
+                head: [['PESO', 'DETALLE', 'PESO', 'DETALLE']],
+                body: chunkArray(allRecords.flatMap(r => {
                     let suffix = '';
                     if (r.type === 'FULL') suffix = `${r.quantity}j, ${r.birds}p`;
-                    else if (r.type === 'EMPTY') suffix = `${r.quantity}j`;
-                    else if (r.type === 'MORTALITY') suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}`;
+                    else if (r.type === 'EMPTY') suffix = `${r.quantity}j (V)`;
+                    else if (r.type === 'MORTALITY') suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''} (M)`;
                     return [r.weight.toFixed(2), suffix];
                 }), 4),
                 theme: 'grid',
-                styles: { fontSize: 7, cellPadding: 1, halign: 'center', minCellHeight: 6 },
+                styles: { fontSize: 6.5, cellPadding: 1, halign: 'center', minCellHeight: 5 },
+                headStyles: { fillColor: [220, 226, 230], textColor: 0, fontSize: 6.5 },
                 margin: { left: 5, right: 5 },
                 tableWidth: 70
             });
-            y = (doc as any).lastAutoTable.finalY + 1;
+            y = (doc as any).lastAutoTable.finalY + 3;
             
             doc.setFontSize(8).setFont("helvetica", "bold");
-            doc.text(`TOTAL ${title}:`, 40, y + 3, { align: 'right' });
-            doc.text(`${totalWeight.toFixed(2)} kg`, 72, y + 3, { align: 'right' });
-            y += 7;
-        };
+            if (t.wF > 0) { doc.text(`TOTAL LLENAS: ${t.wF.toFixed(2)} kg`, 5, y); y += 4; }
+            if (t.wE > 0) { doc.text(`TOTAL VACÍAS: ${t.wE.toFixed(2)} kg`, 5, y); y += 4; }
+            if (t.wM > 0) { doc.text(`TOTAL MUERTOS: ${t.wM.toFixed(2)} kg`, 5, y); y += 4; }
+        }
 
-        renderCategory("LLENAS", fullRecords, t.wF, t.qF);
-        renderCategory("VACÍAS", emptyRecords, t.wE, t.qE);
-        renderCategory("MORTALIDAD", mortRecords, t.wM, t.qM);
-
-        if (mortRecords.some(r => r.isLame)) {
+        if (allRecords.some(r => r.type === 'MORTALITY')) {
             doc.setFontSize(7).setFont("helvetica", "italic");
-            doc.text("* PC = Pollo Cojo", 5, y + 2);
+            doc.text("* (V)=Vacía, (M)=Muerto, PC = Pollo Cojo", 5, y + 2);
             y += 5;
         }
     } else {

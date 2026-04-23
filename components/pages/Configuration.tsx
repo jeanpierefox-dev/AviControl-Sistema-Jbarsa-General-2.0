@@ -409,6 +409,9 @@ const Configuration: React.FC = () => {
                           className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-mono text-xs text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
                           placeholder="https://mi-proyecto-default-rtdb.firebaseio.com"
                       />
+                      <p className="text-[9px] text-amber-600 font-bold mt-1 leading-tight">
+                          * Tip: En Firebase Console, ve a "Realtime Database" y copia la URL que aparece arriba.
+                      </p>
                   </div>
                   <div className="space-y-1">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Auth Domain</label>
