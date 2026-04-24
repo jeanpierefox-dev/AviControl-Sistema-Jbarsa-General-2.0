@@ -398,16 +398,20 @@ const WeighingStation: React.FC = () => {
     const birds = activeTab === 'FULL' ? quantity * parseInt(birdsPerCrate || '0') : (activeTab === 'MORTALITY' ? quantity : 0);
     const timestamp = getAdjustedTimestamp();
 
-    const record: WeighingRecord = {
+    const record: any = {
       id: Date.now().toString(), 
       timestamp: timestamp, 
       weight: parseFloat(weightInput),
       quantity: quantity, 
       birds: birds,
-      type: activeTab,
-      isLame: activeTab === 'MORTALITY' ? isLameInput : false,
-      origin: activeTab === 'MORTALITY' ? mortalityOrigin : undefined
+      type: activeTab
     };
+
+    if (activeTab === 'MORTALITY') {
+      record.isLame = isLameInput;
+      record.origin = mortalityOrigin || 'GALPON';
+    }
+
     const records = activeOrder.records || [];
     const updated = { ...activeOrder, records: [record, ...records], updatedAt: Date.now() };
     

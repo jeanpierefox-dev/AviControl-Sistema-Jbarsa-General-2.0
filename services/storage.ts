@@ -180,13 +180,25 @@ export const getUsers = (): User[] => {
     return users;
 };
 
+const cleanData = (obj: any): any => {
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(cleanData);
+    
+    return Object.fromEntries(
+        Object.entries(obj)
+            .filter(([_, v]) => v !== undefined)
+            .map(([k, v]) => [k, cleanData(v)])
+    );
+};
+
 export const saveUser = (user: User) => {
     const users = getUsers();
     const idx = users.findIndex(u => u.id === user.id);
     if (idx >= 0) users[idx] = user; else users.push(user);
+    const cleaned = cleanData(user);
     localStorage.setItem(KEYS.USERS, JSON.stringify(users));
     window.dispatchEvent(new Event('avi_data_users'));
-    if (db) set(ref(db, `users/${user.id}`), user).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
+    if (db) set(ref(db, `users/${user.id}`), cleaned).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
 
 export const deleteUser = (id: string) => {
@@ -220,9 +232,10 @@ export const saveBatch = (batch: Batch) => {
     const bWithMeta = { ...batch, updatedAt: Date.now() };
     const idx = batches.findIndex(b => b.id === bWithMeta.id);
     if (idx >= 0) batches[idx] = bWithMeta; else batches.push(bWithMeta);
+    const cleaned = cleanData(bWithMeta);
     localStorage.setItem(KEYS.BATCHES, JSON.stringify(batches));
     window.dispatchEvent(new Event('avi_data_batches'));
-    if (db) set(ref(db, `batches/${bWithMeta.id}`), bWithMeta).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
+    if (db) set(ref(db, `batches/${bWithMeta.id}`), cleaned).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
 
 export const deleteBatch = (id: string) => {
@@ -241,9 +254,10 @@ export const saveOrder = (order: ClientOrder) => {
     const oWithMeta = { ...order, updatedAt: Date.now() };
     const idx = orders.findIndex(o => o.id === oWithMeta.id);
     if (idx >= 0) orders[idx] = oWithMeta; else orders.push(oWithMeta);
+    const cleaned = cleanData(oWithMeta);
     localStorage.setItem(KEYS.ORDERS, JSON.stringify(orders));
     window.dispatchEvent(new Event('avi_data_orders'));
-    if (db) set(ref(db, `orders/${oWithMeta.id}`), oWithMeta).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
+    if (db) set(ref(db, `orders/${oWithMeta.id}`), cleaned).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
 
 export const deleteOrder = (id: string) => {
