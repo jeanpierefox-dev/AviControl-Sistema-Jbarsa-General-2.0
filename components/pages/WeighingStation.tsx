@@ -536,34 +536,41 @@ const WeighingStation: React.FC = () => {
         });
         y = (doc as any).lastAutoTable.finalY + 5;
 
-        // DETAILED RECORDS TABLE - CONSOLIDATED
+        // DETAILED RECORDS - GROUPED
         doc.setFontSize(10).setFont("helvetica", "bold");
         doc.text("DETALLE DE PESOS", 40, y, { align: 'center' });
         y += 2;
 
-        const allRecords = [...order.records].sort((a, b) => a.timestamp - b.timestamp);
-        
+        const allRecords = order.records || [];
         if (allRecords.length > 0) {
-            autoTable(doc, {
-                startY: y,
-                head: [['PESO', 'DETALLE', 'PESO', 'DETALLE']],
-                body: chunkArray(allRecords.flatMap(r => {
-                    let suffix = '';
-                    if (r.type === 'FULL') suffix = mode === WeighingType.SOLO_POLLO ? `${r.birds}p` : `${r.quantity}j, ${r.birds}p`;
-                    else if (r.type === 'EMPTY') suffix = `${r.quantity}j (V)`;
-                    else if (r.type === 'MORTALITY') {
-                        const originLabel = (r.origin || 'GALPON') === 'ACOPIO' ? ' (AC)' : ' (GL)';
-                        suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}${originLabel} (M)`;
-                    }
-                    return [r.weight.toFixed(2), suffix];
-                }), 4),
-                theme: 'grid',
-                styles: { fontSize: 6.5, cellPadding: 1, halign: 'center', minCellHeight: 5 },
-                headStyles: { fillColor: [220, 226, 230], textColor: 0, fontSize: 6.5 },
-                margin: { left: 5, right: 5 },
-                tableWidth: 70
+            const types: ('FULL' | 'EMPTY' | 'MORTALITY')[] = ['FULL', 'EMPTY', 'MORTALITY'];
+            
+            types.forEach(type => {
+                const filtered = allRecords.filter(r => r.type === type).sort((a,b) => a.timestamp - b.timestamp);
+                if (filtered.length === 0) return;
+
+                const title = type === 'FULL' ? (mode === WeighingType.SOLO_POLLO ? 'SACOS' : 'LLENAS') : type === 'EMPTY' ? 'VACÍAS' : 'MUERTOS';
+                
+                autoTable(doc, {
+                    startY: y,
+                    head: [[{ content: title, colSpan: 4, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0, fontSize: 6.5 } }]],
+                    body: chunkArray(filtered.flatMap(r => {
+                        let suffix = '';
+                        if (r.type === 'FULL') suffix = mode === WeighingType.SOLO_POLLO ? `${r.birds}p` : `${r.quantity}j, ${r.birds}p`;
+                        else if (r.type === 'EMPTY') suffix = `${r.quantity}j (V)`;
+                        else if (r.type === 'MORTALITY') {
+                            const originLabel = (r.origin || 'GALPON') === 'ACOPIO' ? ' (AC)' : ' (GL)';
+                            suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}${originLabel} (M)`;
+                        }
+                        return [r.weight.toFixed(2), suffix];
+                    }), 4),
+                    theme: 'grid',
+                    styles: { fontSize: 6, cellPadding: 0.8, halign: 'center' },
+                    margin: { left: 5, right: 5 },
+                    tableWidth: 70
+                });
+                y = (doc as any).lastAutoTable.finalY + 2;
             });
-            y = (doc as any).lastAutoTable.finalY + 3;
             
             // Short category summaries
             doc.setFontSize(8).setFont("helvetica", "bold");

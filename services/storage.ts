@@ -113,12 +113,12 @@ export const initCloudSync = async () => {
       const apps = getApps();
       const defaultApp = apps.find(a => a.name === '[DEFAULT]');
       
-      let dbUrl = config.firebaseConfig?.databaseURL;
+      let dbUrl = (config.firebaseConfig?.databaseURL || '').trim();
       if (!dbUrl && config.firebaseConfig?.projectId) {
           dbUrl = `https://${config.firebaseConfig.projectId}-default-rtdb.firebaseio.com`;
       }
       
-      // Basic validation of URL structure to avoid obscure errors
+      // Multi-region support: If user provides project-id.region.firebasedatabase.app
       if (dbUrl && !dbUrl.startsWith('http')) {
           dbUrl = `https://${dbUrl}`;
       }
@@ -139,8 +139,13 @@ export const initCloudSync = async () => {
       const connectedRef = ref(db, '.info/connected');
       onValue(connectedRef, (snap) => {
           if (snap.val() === false) {
-              console.warn("Firebase disconnected. Waiting for automatic reconnect...");
+              console.warn("Realtime Database disconnected.");
+          } else {
+              console.log("Realtime Database connected.");
           }
+      }, (err) => {
+          console.error("Connection info listener failed:", err);
+          window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: "Fallo de conexión: Revisa tus credenciales o reglas de seguridad." }));
       });
 
       startListeners();
@@ -335,7 +340,10 @@ const startListeners = () => {
           }
         }, (error) => {
             console.error(`Error en listener en tiempo real (${colName}):`, error);
-            window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: error.message }));
+            const msg = error.message.toLowerCase().includes('permission') 
+                ? "Error de Permisos: Asegúrate que las reglas de tu base de datos permitan lectura/escritura."
+                : error.message;
+            window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: msg }));
         });
         unsubscribers.push(() => unsub());
     } catch(e) {
