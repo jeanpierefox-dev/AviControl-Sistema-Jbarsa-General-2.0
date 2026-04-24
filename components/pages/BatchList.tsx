@@ -110,11 +110,11 @@ const BatchList: React.FC = () => {
     };
 
     const generateBatchTicket = () => {
-        // Pass 1: Calculate height
-        const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 1000] });
+        // Pass 1: Calculate height on a very tall dummy doc to prevent paging
+        const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 15000] }); 
         const finalHeight = renderTicketContent(dummyDoc);
         
-        // Pass 2: Final rendering
+        // Pass 2: Final rendering on a single continuous page
         const doc = new jsPDF({ unit: 'mm', format: [80, finalHeight] });
         renderTicketContent(doc);
         

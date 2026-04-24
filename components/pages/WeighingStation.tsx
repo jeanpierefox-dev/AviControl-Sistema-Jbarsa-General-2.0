@@ -640,11 +640,11 @@ const WeighingStation: React.FC = () => {
   };
 
   const generateWeighingTicketPDF = (order: ClientOrder) => {
-    // Pass 1: Calculate height
-    const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 1000] });
+    // Pass 1: Calculate height on a very tall dummy doc
+    const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 15000] });
     const finalY = renderTicketContent(dummyDoc, order, false);
     
-    // Pass 2: Render with exact height
+    // Pass 2: Render with exact height on a single continuous page
     const doc = new jsPDF({ unit: 'mm', format: [80, finalY] });
     renderTicketContent(doc, order, false);
     handlePDFOutput(doc, `Pesaje_${order.clientName}_${order.id.slice(-6)}.pdf`);
@@ -742,11 +742,11 @@ const WeighingStation: React.FC = () => {
   };
 
   const generateSalesTicketPDF = (order: ClientOrder) => {
-    // Pass 1: Calculate height
-    const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 1000] });
+    // Pass 1: Calculate height on a very tall dummy doc
+    const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 15000] });
     const finalY = renderSalesTicketContent(dummyDoc, order);
     
-    // Pass 2: Render with exact height
+    // Pass 2: Render with exact height on a single continuous page
     const doc = new jsPDF({ unit: 'mm', format: [80, finalY] });
     renderSalesTicketContent(doc, order);
     handlePDFOutput(doc, `Venta_${order.clientName}_${order.id.slice(-6)}.pdf`);

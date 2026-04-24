@@ -410,10 +410,10 @@ const Configuration: React.FC = () => {
                           placeholder="https://mi-proyecto-default-rtdb.firebaseio.com"
                       />
                       <p className="text-[9px] text-amber-600 font-bold mt-1 leading-tight">
-                          * Tip: En Firebase Console, ve a "Realtime Database" y copia la URL que aparece arriba.
+                          * Tip: En Firebase Console, ve a <span className="font-black">"Realtime Database"</span> (no Firestore) y copia la URL completa de arriba.
                       </p>
                       <p className="text-[9px] text-red-600 font-bold mt-1 leading-tight">
-                          * IMPORTANTE: En la pestaña "Rules", debes poner las reglas en: <code className="bg-red-50 px-1 rounded">".read": "true", ".write": "true"</code> si quieres acceso libre para pruebas.
+                          * IMPORTANTE: En "Reglas", usa este formato exacto: <code className="bg-red-50 px-1 rounded">{`{ "rules": { ".read": true, ".write": true } }`}</code> (sin comillas en true/false).
                       </p>
                   </div>
                   <div className="space-y-1">
