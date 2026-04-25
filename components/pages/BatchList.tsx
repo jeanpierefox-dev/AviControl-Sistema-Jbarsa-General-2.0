@@ -274,17 +274,16 @@ const BatchList: React.FC = () => {
                     });
                     if (filtered.length === 0) return;
 
+                    const typeTotalWeight = filtered.reduce((acc, r) => acc + r.weight, 0);
+
                     autoTable(doc, {
                         startY: y,
                         head: [[{ content: tSpec.label, colSpan: 4, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0, fontSize: 6.5 } }]],
                         body: chunkArray(filtered.flatMap(r => {
                             let suffix = '';
                             if (r.type === 'FULL') suffix = o.weighingMode === WeighingType.SOLO_POLLO ? `${r.birds}p` : `${r.quantity}j, ${r.birds}p`;
-                            else if (r.type === 'EMPTY') suffix = `${r.quantity}j (V)`;
-                            else if (r.type === 'MORTALITY') {
-                                const originLabel = (r.origin || 'GALPON') === 'ACOPIO' ? ' (AC)' : ' (GL)';
-                                suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}${originLabel} (M)`;
-                            }
+                            else if (r.type === 'EMPTY') suffix = `${r.quantity}j`;
+                            else if (r.type === 'MORTALITY') suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}`;
                             return [r.weight.toFixed(2), suffix];
                         }), 4),
                         theme: 'grid',
@@ -293,6 +292,10 @@ const BatchList: React.FC = () => {
                         tableWidth: 70
                     });
                     y = (doc as any).lastAutoTable.finalY + 2;
+
+                    doc.setFontSize(7).setFont("helvetica", "bold");
+                    doc.text(`TOTAL ${tSpec.label}: ${typeTotalWeight.toFixed(2)} kg`, 70, y, { align: 'right' });
+                    y += 5;
                 });
             }
             doc.setDrawColor(200);

@@ -229,17 +229,16 @@ const Reports: React.FC = () => {
                 
                 if (filtered.length === 0) return;
 
+                const typeTotalWeight = filtered.reduce((acc, r) => acc + r.weight, 0);
+
                 autoTable(doc, {
                     startY: y,
                     head: [[{ content: tSpec.label, colSpan: 4, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0, fontSize: 6.5 } }]],
                     body: chunkArray(filtered.flatMap(r => {
                         let suffix = '';
                         if (r.type === 'FULL') suffix = order.weighingMode === WeighingType.SOLO_POLLO ? `${r.birds}p` : `${r.quantity}j, ${r.birds}p`;
-                        else if (r.type === 'EMPTY') suffix = `${r.quantity}j (V)`;
-                        else if (r.type === 'MORTALITY') {
-                            const originLabel = (r.origin || 'GALPON') === 'ACOPIO' ? ' (AC)' : ' (GL)';
-                            suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}${originLabel} (M)`;
-                        }
+                        else if (r.type === 'EMPTY') suffix = `${r.quantity}j`;
+                        else if (r.type === 'MORTALITY') suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}`;
                         return [r.weight.toFixed(2), suffix];
                     }), 4),
                     theme: 'grid',
@@ -248,18 +247,18 @@ const Reports: React.FC = () => {
                     tableWidth: 70
                 });
                 y = (doc as any).lastAutoTable.finalY + 2;
+
+                doc.setFontSize(7).setFont("helvetica", "bold");
+                doc.text(`TOTAL ${tSpec.label}: ${typeTotalWeight.toFixed(2)} kg`, 70, y, { align: 'right' });
+                y += 5;
             });
             
-            // Short category summaries
-            doc.setFontSize(8).setFont("helvetica", "bold");
-            if (t.wF > 0) { doc.text(`TOTAL LLENAS: ${t.wF.toFixed(2)} kg`, 5, y); y += 4; }
-            if (t.wE > 0) { doc.text(`TOTAL VACÍAS: ${t.wE.toFixed(2)} kg`, 5, y); y += 4; }
-            if (t.wM > 0) { doc.text(`TOTAL MUERTOS: ${t.wM.toFixed(2)} kg`, 5, y); y += 4; }
+            y += 2;
         }
 
-        if (allRecords.some(r => r.type === 'MORTALITY')) {
+        if (allRecords.some(r => r.type === 'MORTALITY' && r.isLame)) {
             doc.setFontSize(7).setFont("helvetica", "italic");
-            doc.text("* (V)=Vacía, (M)=Muerto, PC=Cojo, GL=Galpón, AC=Acopio", 5, y + 2);
+            doc.text("* PC = Pollo Cojo", 5, y);
             y += 5;
         }
     } else {
