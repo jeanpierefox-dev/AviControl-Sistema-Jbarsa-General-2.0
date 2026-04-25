@@ -564,15 +564,20 @@ const WeighingStation: React.FC = () => {
                 if (filtered.length === 0) return;
 
                 const typeTotalWeight = filtered.reduce((acc, r) => acc + r.weight, 0);
+                const typeTotalQty = filtered.reduce((acc, r) => acc + r.quantity, 0);
+                const sectionTitle = `${tSpec.label} (${typeTotalQty}p)`;
 
                 autoTable(doc, {
                     startY: y,
-                    head: [[{ content: tSpec.label, colSpan: 4, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0, fontSize: 6.5 } }]],
+                    head: [[{ content: sectionTitle, colSpan: 4, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0, fontSize: 6.5 } }]],
                     body: chunkArray(filtered.flatMap(r => {
                         let suffix = '';
                         if (r.type === 'FULL') suffix = mode === WeighingType.SOLO_POLLO ? `${r.birds}p` : `${r.quantity}j, ${r.birds}p`;
                         else if (r.type === 'EMPTY') suffix = `${r.quantity}j`;
-                        else if (r.type === 'MORTALITY') suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}`;
+                        else if (r.type === 'MORTALITY') {
+                            const originLabel = (r.origin || 'GALPON') === 'ACOPIO' ? 'AC' : 'GL';
+                            suffix = `${r.quantity}p${r.isLame ? ' PC' : ''} ${originLabel}`;
+                        }
                         return [r.weight.toFixed(2), suffix];
                     }), 4),
                     theme: 'grid',
@@ -590,9 +595,9 @@ const WeighingStation: React.FC = () => {
             y += 2;
         }
 
-        if (allRecords.some(r => r.type === 'MORTALITY' && r.isLame)) {
+        if (allRecords.some(r => r.type === 'MORTALITY')) {
             doc.setFontSize(7).setFont("helvetica", "italic");
-            doc.text("* PC = Pollo Cojo", 5, y);
+            doc.text("* PC=Cojo, GL=Galpón, AC=Acopio", 5, y);
             y += 5;
         }
     }
