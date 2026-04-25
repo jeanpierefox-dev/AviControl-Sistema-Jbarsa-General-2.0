@@ -547,17 +547,25 @@ const WeighingStation: React.FC = () => {
 
         const allRecords = order.records || [];
         if (allRecords.length > 0) {
-            const types: ('FULL' | 'EMPTY' | 'MORTALITY')[] = ['FULL', 'EMPTY', 'MORTALITY'];
+            const types = [
+                { id: 'FULL', label: mode === WeighingType.SOLO_POLLO ? 'SACOS' : 'LLENAS' },
+                { id: 'EMPTY', label: 'VACÍAS' },
+                { id: 'MORTALITY_GALPON', label: 'MUERTOS GALPÓN' },
+                { id: 'MORTALITY_ACOPIO', label: 'MUERTOS ACOPIO' }
+            ];
             
-            types.forEach(type => {
-                const filtered = allRecords.filter(r => r.type === type).sort((a,b) => a.timestamp - b.timestamp);
+            types.forEach(tSpec => {
+                const filtered = allRecords.filter(r => {
+                    if (tSpec.id === 'MORTALITY_GALPON') return r.type === 'MORTALITY' && (r.origin || 'GALPON') === 'GALPON';
+                    if (tSpec.id === 'MORTALITY_ACOPIO') return r.type === 'MORTALITY' && r.origin === 'ACOPIO';
+                    return r.type === tSpec.id;
+                }).sort((a,b) => a.timestamp - b.timestamp);
+                
                 if (filtered.length === 0) return;
 
-                const title = type === 'FULL' ? (mode === WeighingType.SOLO_POLLO ? 'SACOS' : 'LLENAS') : type === 'EMPTY' ? 'VACÍAS' : 'MUERTOS';
-                
                 autoTable(doc, {
                     startY: y,
-                    head: [[{ content: title, colSpan: 4, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0, fontSize: 6.5 } }]],
+                    head: [[{ content: tSpec.label, colSpan: 4, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0, fontSize: 6.5 } }]],
                     body: chunkArray(filtered.flatMap(r => {
                         let suffix = '';
                         if (r.type === 'FULL') suffix = mode === WeighingType.SOLO_POLLO ? `${r.birds}p` : `${r.quantity}j, ${r.birds}p`;

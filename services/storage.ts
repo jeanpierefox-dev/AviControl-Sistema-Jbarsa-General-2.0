@@ -286,7 +286,8 @@ export const uploadLocalToCloud = async () => {
     if (!db) return;
     const upload = async (col: string, data: any[]) => {
         for (const item of data) {
-            await set(ref(db!, `${col}/${item.id}`), item);
+            const cleaned = cleanData(item);
+            await set(ref(db!, `${col}/${item.id}`), cleaned);
         }
     };
     await upload('users', getUsers());
@@ -342,7 +343,8 @@ const startListeners = () => {
               // If cloud is empty but local has data, upload local data
               if (cloudDataArray.length === 0 && currentLocal.length > 0) {
                   currentLocal.forEach(item => {
-                      set(ref(db!, `${colName}/${item.id}`), item).catch(err => {
+                      const cleaned = cleanData(item);
+                      set(ref(db!, `${colName}/${item.id}`), cleaned).catch(err => {
                           console.error(`Upload error for ${colName}:`, err);
                       });
                   });

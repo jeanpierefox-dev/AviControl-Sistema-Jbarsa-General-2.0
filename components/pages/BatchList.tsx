@@ -259,17 +259,24 @@ const BatchList: React.FC = () => {
 
             const records = o.records || [];
             if (records.length > 0) {
-                const types: ('FULL' | 'EMPTY' | 'MORTALITY')[] = ['FULL', 'EMPTY', 'MORTALITY'];
+                const types = [
+                    { id: 'FULL', label: o.weighingMode === WeighingType.SOLO_POLLO ? 'SACOS' : 'LLENAS' },
+                    { id: 'EMPTY', label: 'VACÍAS' },
+                    { id: 'MORTALITY_GALPON', label: 'MUERTOS GALPÓN' },
+                    { id: 'MORTALITY_ACOPIO', label: 'MUERTOS ACOPIO' }
+                ];
                 
-                types.forEach(type => {
-                    const filtered = records.filter(r => r.type === type);
+                types.forEach(tSpec => {
+                    const filtered = records.filter(r => {
+                        if (tSpec.id === 'MORTALITY_GALPON') return r.type === 'MORTALITY' && (r.origin || 'GALPON') === 'GALPON';
+                        if (tSpec.id === 'MORTALITY_ACOPIO') return r.type === 'MORTALITY' && r.origin === 'ACOPIO';
+                        return r.type === tSpec.id;
+                    });
                     if (filtered.length === 0) return;
 
-                    const title = type === 'FULL' ? (o.weighingMode === WeighingType.SOLO_POLLO ? 'SACOS' : 'LLENAS') : type === 'EMPTY' ? 'VACÍAS' : 'MUERTOS';
-                    
                     autoTable(doc, {
                         startY: y,
-                        head: [[{ content: title, colSpan: 4, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0, fontSize: 6.5 } }]],
+                        head: [[{ content: tSpec.label, colSpan: 4, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0, fontSize: 6.5 } }]],
                         body: chunkArray(filtered.flatMap(r => {
                             let suffix = '';
                             if (r.type === 'FULL') suffix = o.weighingMode === WeighingType.SOLO_POLLO ? `${r.birds}p` : `${r.quantity}j, ${r.birds}p`;

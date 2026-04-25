@@ -206,32 +206,51 @@ const Reports: React.FC = () => {
         });
         y = (doc as any).lastAutoTable.finalY + 5;
 
-        // DETAILED RECORDS TABLE - CONSOLIDATED
+        // DETAILED RECORDS - GROUPED
         doc.setFontSize(10).setFont("helvetica", "bold");
         doc.text("DETALLE DE PESOS", 40, y, { align: 'center' });
         y += 2;
 
-        const allRecords = [...(order.records || [])].sort((a, b) => a.timestamp - b.timestamp);
-        
+        const allRecords = order.records || [];
         if (allRecords.length > 0) {
-            autoTable(doc, {
-                startY: y,
-                head: [['PESO', 'DETALLE', 'PESO', 'DETALLE']],
-                body: chunkArray(allRecords.flatMap(r => {
-                    let suffix = '';
-                    if (r.type === 'FULL') suffix = `${r.quantity}j, ${r.birds}p`;
-                    else if (r.type === 'EMPTY') suffix = `${r.quantity}j (V)`;
-                    else if (r.type === 'MORTALITY') suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''} (M)`;
-                    return [r.weight.toFixed(2), suffix];
-                }), 4),
-                theme: 'grid',
-                styles: { fontSize: 6.5, cellPadding: 1, halign: 'center', minCellHeight: 5 },
-                headStyles: { fillColor: [220, 226, 230], textColor: 0, fontSize: 6.5 },
-                margin: { left: 5, right: 5 },
-                tableWidth: 70
-            });
-            y = (doc as any).lastAutoTable.finalY + 3;
+            const types = [
+                { id: 'FULL', label: order.weighingMode === WeighingType.SOLO_POLLO ? 'SACOS' : 'LLENAS' },
+                { id: 'EMPTY', label: 'VACÍAS' },
+                { id: 'MORTALITY_GALPON', label: 'MUERTOS GALPÓN' },
+                { id: 'MORTALITY_ACOPIO', label: 'MUERTOS ACOPIO' }
+            ];
             
+            types.forEach(tSpec => {
+                const filtered = allRecords.filter(r => {
+                    if (tSpec.id === 'MORTALITY_GALPON') return r.type === 'MORTALITY' && (r.origin || 'GALPON') === 'GALPON';
+                    if (tSpec.id === 'MORTALITY_ACOPIO') return r.type === 'MORTALITY' && r.origin === 'ACOPIO';
+                    return r.type === tSpec.id;
+                }).sort((a,b) => a.timestamp - b.timestamp);
+                
+                if (filtered.length === 0) return;
+
+                autoTable(doc, {
+                    startY: y,
+                    head: [[{ content: tSpec.label, colSpan: 4, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0, fontSize: 6.5 } }]],
+                    body: chunkArray(filtered.flatMap(r => {
+                        let suffix = '';
+                        if (r.type === 'FULL') suffix = order.weighingMode === WeighingType.SOLO_POLLO ? `${r.birds}p` : `${r.quantity}j, ${r.birds}p`;
+                        else if (r.type === 'EMPTY') suffix = `${r.quantity}j (V)`;
+                        else if (r.type === 'MORTALITY') {
+                            const originLabel = (r.origin || 'GALPON') === 'ACOPIO' ? ' (AC)' : ' (GL)';
+                            suffix = `${r.quantity}p${r.isLame ? ' (PC)' : ''}${originLabel} (M)`;
+                        }
+                        return [r.weight.toFixed(2), suffix];
+                    }), 4),
+                    theme: 'grid',
+                    styles: { fontSize: 6, cellPadding: 0.8, halign: 'center' },
+                    margin: { left: 5, right: 5 },
+                    tableWidth: 70
+                });
+                y = (doc as any).lastAutoTable.finalY + 2;
+            });
+            
+            // Short category summaries
             doc.setFontSize(8).setFont("helvetica", "bold");
             if (t.wF > 0) { doc.text(`TOTAL LLENAS: ${t.wF.toFixed(2)} kg`, 5, y); y += 4; }
             if (t.wE > 0) { doc.text(`TOTAL VACÍAS: ${t.wE.toFixed(2)} kg`, 5, y); y += 4; }
@@ -240,7 +259,7 @@ const Reports: React.FC = () => {
 
         if (allRecords.some(r => r.type === 'MORTALITY')) {
             doc.setFontSize(7).setFont("helvetica", "italic");
-            doc.text("* (V)=Vacía, (M)=Muerto, PC = Pollo Cojo", 5, y + 2);
+            doc.text("* (V)=Vacía, (M)=Muerto, PC=Cojo, GL=Galpón, AC=Acopio", 5, y + 2);
             y += 5;
         }
     } else {
@@ -311,8 +330,8 @@ const Reports: React.FC = () => {
   };
 
   const generateTicketPDF = (order: ClientOrder, preview: boolean = false) => {
-    // Pass 1: Calculate height
-    const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 1000] });
+    // Pass 1: Calculate height on a very tall dummy doc
+    const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 15000] });
     const finalY = renderTicketContent(dummyDoc, order, false);
     
     // Pass 2: Render with exact height
@@ -322,8 +341,8 @@ const Reports: React.FC = () => {
   };
 
   const generateSalesTicketPDF = (order: ClientOrder, preview: boolean = false) => {
-    // Pass 1: Calculate height
-    const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 1000] });
+    // Pass 1: Calculate height on a very tall dummy doc
+    const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 15000] });
     const finalY = renderTicketContent(dummyDoc, order, true);
     
     // Pass 2: Render with exact height
