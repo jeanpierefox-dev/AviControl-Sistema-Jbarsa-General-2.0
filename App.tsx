@@ -118,6 +118,7 @@ const App: React.FC = () => {
     const [user, setUserState] = useState<User | null>(null);
 
     const [syncError, setSyncError] = useState<string | null>(null);
+    const [isWeighing, setIsWeighing] = useState(false);
 
     useEffect(() => {
         // 1. Check Login with Safe Parse
@@ -142,8 +143,16 @@ const App: React.FC = () => {
         };
         window.addEventListener('avi_sync_error', handleSyncError);
 
+        // Track if we are in weighing station to avoid blocking the user
+        const checkPath = () => {
+            setIsWeighing(window.location.hash.includes('/weigh/'));
+        };
+        checkPath();
+        window.addEventListener('hashchange', checkPath);
+
         return () => {
             window.removeEventListener('avi_sync_error', handleSyncError);
+            window.removeEventListener('hashchange', checkPath);
         };
     }, []);
 
@@ -161,7 +170,7 @@ const App: React.FC = () => {
     return (
         <ErrorBoundary>
             <AuthContext.Provider value={{ user, setUser, logout }}>
-                {syncError && (
+                {syncError && !isWeighing && (
                     <div className="fixed top-0 left-0 right-0 z-[100] bg-red-600 text-white p-3 text-center text-xs font-bold shadow-lg flex flex-col sm:flex-row items-center justify-center gap-3">
                         <div className="flex items-center gap-2">
                             <Database size={14} className="animate-pulse" />

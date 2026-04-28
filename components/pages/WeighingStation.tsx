@@ -2,11 +2,11 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { WeighingType, ClientOrder, WeighingRecord, UserRole } from '../../types';
-import { getOrders, saveOrder, getConfig, deleteOrder, getBatches, getVisibleUserIds } from '../../services/storage';
+import { getOrders, saveOrder, getConfig, deleteOrder, getBatches, getVisibleUserIds, initCloudSync } from '../../services/storage';
 import { 
   ArrowLeft, Save, X, Eye, Package, PackageOpen, 
   User, Trash2, Box, UserPlus, Bird, Printer, Receipt, 
-  Activity, Download, List, ChevronRight, Scale, ChevronDown, FileText, Edit2
+  Activity, Download, List, ChevronRight, Scale, ChevronDown, FileText, Edit2, CloudOff
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -32,6 +32,7 @@ const WeighingStation: React.FC = () => {
 
   const [activeOrder, setActiveOrder] = useState<ClientOrder | null>(null);
   const [orders, setOrders] = useState<ClientOrder[]>([]);
+  const isLocked = activeOrder?.status === 'CLOSED';
   
   const [showClientModal, setShowClientModal] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState<ClientOrder | null>(null);
@@ -48,6 +49,7 @@ const WeighingStation: React.FC = () => {
   const [birdsPerCrate, setBirdsPerCrate] = useState('10'); // Default 10 birds per crate
   const [activeTab, setActiveTab] = useState<'FULL' | 'EMPTY' | 'MORTALITY'>('FULL');
   const weightInputRef = useRef<HTMLInputElement>(null);
+  const [sessionSyncError, setSessionSyncError] = useState<string | null>(null);
 
   const [pricePerKg, setPricePerKg] = useState<number | string>('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CREDIT'>('CASH');
@@ -118,8 +120,30 @@ const WeighingStation: React.FC = () => {
   useEffect(() => {
     loadOrders();
     window.addEventListener('avi_data_orders', loadOrders);
-    return () => window.removeEventListener('avi_data_orders', loadOrders);
-  }, [loadOrders]);
+    
+    const handleLocalSyncError = (e: any) => {
+        setSessionSyncError(e.detail);
+    };
+    window.addEventListener('avi_sync_error', handleLocalSyncError);
+
+    // Monitor for focus loss - keep the cursor ready for the next weight
+    const keepFocus = () => {
+        const isModalOpen = showClientModal || showPaymentModal || showDetailModal || !!orderToDelete;
+        const activeTag = document.activeElement?.tagName;
+        const isInteractive = ['INPUT', 'BUTTON', 'SELECT', 'TEXTAREA', 'A'].includes(activeTag || '');
+        
+        if (!isLocked && activeOrder && !isModalOpen && !isInteractive) {
+            weightInputRef.current?.focus();
+        }
+    };
+    window.addEventListener('click', () => setTimeout(keepFocus, 100));
+
+    return () => {
+        window.removeEventListener('avi_data_orders', loadOrders);
+        window.removeEventListener('avi_sync_error', handleLocalSyncError);
+        window.removeEventListener('click', keepFocus);
+    }
+  }, [loadOrders, activeOrder, isLocked]);
 
   useEffect(() => {
     if (mode === WeighingType.BATCH && batchId) {
@@ -1150,7 +1174,6 @@ const WeighingStation: React.FC = () => {
   };
 
   const totals = getTotals(activeOrder || { records: [] } as any);
-  const isLocked = activeOrder?.status === 'CLOSED';
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
@@ -1163,7 +1186,13 @@ const WeighingStation: React.FC = () => {
                   <Activity size={12} className="text-blue-600"/> Modo: {mode === WeighingType.BATCH ? 'Pesaje por Lote' : mode === WeighingType.SOLO_POLLO ? 'Solo Pollos (Sacos)' : 'Pollos Muertos'}
               </p>
             </div>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3 items-center">
+              {sessionSyncError && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-red-100 text-red-600 rounded-xl border border-red-200 animate-pulse" title={sessionSyncError}>
+                      <CloudOff size={14} />
+                      <span className="text-[9px] font-black uppercase">Error de Sinc.</span>
+                  </div>
+              )}
               <div className="bg-white border-2 border-slate-200 rounded-2xl px-4 py-2 flex items-center gap-3 shadow-sm">
                 <FileText size={18} className="text-slate-400" />
                 <input 
@@ -1597,6 +1626,24 @@ const WeighingStation: React.FC = () => {
             </div>
             
             <div className="space-y-6">
+                {sessionSyncError && (
+                    <div className="bg-red-50 border border-red-200 p-4 rounded-xl flex items-start gap-3">
+                        <CloudOff className="text-red-500 shrink-0" size={18} />
+                        <div>
+                            <p className="text-[10px] font-black text-red-700 uppercase">Error de Sincronización</p>
+                            <p className="text-[9px] text-red-600 font-bold leading-tight">{sessionSyncError}</p>
+                            <button 
+                                onClick={() => {
+                                    setSessionSyncError(null);
+                                    initCloudSync();
+                                }} 
+                                className="mt-2 text-[9px] font-black text-white bg-red-600 px-3 py-1 rounded-full uppercase"
+                            >
+                                Reintentar Ahora
+                            </button>
+                        </div>
+                    </div>
+                )}
                 <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 shadow-inner">
                     <div className="grid grid-cols-2 gap-4 mb-6">
                         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 text-center">
