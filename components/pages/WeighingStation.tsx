@@ -49,7 +49,8 @@ const WeighingStation: React.FC = () => {
   const [birdsPerCrate, setBirdsPerCrate] = useState('10'); // Default 10 birds per crate
   const [activeTab, setActiveTab] = useState<'FULL' | 'EMPTY' | 'MORTALITY'>('FULL');
   const weightInputRef = useRef<HTMLInputElement>(null);
-  const [sessionSyncError, setSessionSyncError] = useState<string | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
+  const [hasErrorsInSession, setHasErrorsInSession] = useState(false);
 
   const [pricePerKg, setPricePerKg] = useState<number | string>('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CREDIT'>('CASH');
@@ -122,7 +123,8 @@ const WeighingStation: React.FC = () => {
     window.addEventListener('avi_data_orders', loadOrders);
     
     const handleLocalSyncError = (e: any) => {
-        setSessionSyncError(e.detail);
+        setLastError(e.detail);
+        setHasErrorsInSession(true);
     };
     window.addEventListener('avi_sync_error', handleLocalSyncError);
 
@@ -143,7 +145,7 @@ const WeighingStation: React.FC = () => {
         window.removeEventListener('avi_sync_error', handleLocalSyncError);
         window.removeEventListener('click', keepFocus);
     }
-  }, [loadOrders, activeOrder, isLocked]);
+  }, [loadOrders, activeOrder, isLocked, showClientModal, showPaymentModal, showDetailModal, orderToDelete]);
 
   useEffect(() => {
     if (mode === WeighingType.BATCH && batchId) {
@@ -1171,6 +1173,11 @@ const WeighingStation: React.FC = () => {
     generateSalesTicketPDF(updatedOrder); // Default to Sales Ticket on payment
     setShowPaymentModal(false);
     loadOrders();
+    
+    // Notify about errors at the end
+    if (hasErrorsInSession) {
+        alert("El pesaje se completó localmente, pero hubo errores de sincronización con la nube. Los datos se subirán automáticamente cuando se restablezca la conexión.");
+    }
   };
 
   const totals = getTotals(activeOrder || { records: [] } as any);
@@ -1187,12 +1194,6 @@ const WeighingStation: React.FC = () => {
               </p>
             </div>
             <div className="flex flex-wrap gap-3 items-center">
-              {sessionSyncError && (
-                  <div className="flex items-center gap-2 px-3 py-2 bg-red-100 text-red-600 rounded-xl border border-red-200 animate-pulse" title={sessionSyncError}>
-                      <CloudOff size={14} />
-                      <span className="text-[9px] font-black uppercase">Error de Sinc.</span>
-                  </div>
-              )}
               <div className="bg-white border-2 border-slate-200 rounded-2xl px-4 py-2 flex items-center gap-3 shadow-sm">
                 <FileText size={18} className="text-slate-400" />
                 <input 
@@ -1626,24 +1627,6 @@ const WeighingStation: React.FC = () => {
             </div>
             
             <div className="space-y-6">
-                {sessionSyncError && (
-                    <div className="bg-red-50 border border-red-200 p-4 rounded-xl flex items-start gap-3">
-                        <CloudOff className="text-red-500 shrink-0" size={18} />
-                        <div>
-                            <p className="text-[10px] font-black text-red-700 uppercase">Error de Sincronización</p>
-                            <p className="text-[9px] text-red-600 font-bold leading-tight">{sessionSyncError}</p>
-                            <button 
-                                onClick={() => {
-                                    setSessionSyncError(null);
-                                    initCloudSync();
-                                }} 
-                                className="mt-2 text-[9px] font-black text-white bg-red-600 px-3 py-1 rounded-full uppercase"
-                            >
-                                Reintentar Ahora
-                            </button>
-                        </div>
-                    </div>
-                )}
                 <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 shadow-inner">
                     <div className="grid grid-cols-2 gap-4 mb-6">
                         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 text-center">

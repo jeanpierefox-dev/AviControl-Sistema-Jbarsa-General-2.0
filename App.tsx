@@ -118,7 +118,7 @@ const App: React.FC = () => {
     const [user, setUserState] = useState<User | null>(null);
 
     const [syncError, setSyncError] = useState<string | null>(null);
-    const [isWeighing, setIsWeighing] = useState(false);
+    const [pathHasErrorSuppression, setPathHasErrorSuppression] = useState(false);
 
     useEffect(() => {
         // 1. Check Login with Safe Parse
@@ -138,21 +138,23 @@ const App: React.FC = () => {
         }
 
         const handleSyncError = (e: any) => {
-            console.error("Sync error caught in App:", e.detail);
             setSyncError(e.detail);
         };
         window.addEventListener('avi_sync_error', handleSyncError);
 
-        // Track if we are in weighing station to avoid blocking the user
         const checkPath = () => {
-            setIsWeighing(window.location.hash.includes('/weigh/'));
+            setPathHasErrorSuppression(window.location.hash.includes('/weigh/') || window.location.hash.includes('/reports'));
         };
         checkPath();
+        
+        // Frequent check to ensure it stays in sync with Router
+        const interval = setInterval(checkPath, 500); 
         window.addEventListener('hashchange', checkPath);
 
         return () => {
             window.removeEventListener('avi_sync_error', handleSyncError);
             window.removeEventListener('hashchange', checkPath);
+            clearInterval(interval);
         };
     }, []);
 
@@ -170,7 +172,7 @@ const App: React.FC = () => {
     return (
         <ErrorBoundary>
             <AuthContext.Provider value={{ user, setUser, logout }}>
-                {syncError && !isWeighing && (
+                {syncError && !pathHasErrorSuppression && (
                     <div className="fixed top-0 left-0 right-0 z-[100] bg-red-600 text-white p-3 text-center text-xs font-bold shadow-lg flex flex-col sm:flex-row items-center justify-center gap-3">
                         <div className="flex items-center gap-2">
                             <Database size={14} className="animate-pulse" />
