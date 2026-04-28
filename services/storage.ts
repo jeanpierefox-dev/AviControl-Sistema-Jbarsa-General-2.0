@@ -356,8 +356,8 @@ const startListeners = () => {
           }
         }, (error) => {
             console.error(`Error en listener en tiempo real (${colName}):`, error);
-            const msg = error.message.toLowerCase().includes('permission') 
-                ? "Error de Permisos: Asegúrate que las reglas de tu base de datos permitan lectura/escritura."
+            const msg = (error.message.toLowerCase().includes('permission') || error.message.toLowerCase().includes('denied'))
+                ? "ERROR DE PERMISOS: Debes configurar las Reglas de tu Realtime Database en Firebase Console a '.read': true, '.write': true."
                 : error.message;
             window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: msg }));
         });
