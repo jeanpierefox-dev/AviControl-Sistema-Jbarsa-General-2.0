@@ -547,7 +547,7 @@ const WeighingStation: React.FC = () => {
 
         const allRecords = order.records || [];
         if (allRecords.length > 0) {
-            const types = [
+            const types: {id: string, label: string}[] = [
                 { id: 'FULL', label: mode === WeighingType.SOLO_POLLO ? 'SACOS' : 'LLENAS' },
                 { id: 'EMPTY', label: 'VACÍAS' },
                 { id: 'MORTALITY_GALPON', label: 'MUERTOS GALPÓN' },
@@ -698,7 +698,7 @@ const WeighingStation: React.FC = () => {
     doc.line(5, y, 75, y);
     y += 5;
 
-    // Batch & Client Info
+    // Batch & Client Info (Sales Ticket)
     doc.setFontSize(9).setFont("helvetica", "bold");
     doc.text(`LOTE:`, 5, y);
     doc.setFont("helvetica", "normal");

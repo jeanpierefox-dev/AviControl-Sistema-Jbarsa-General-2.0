@@ -259,7 +259,7 @@ const BatchList: React.FC = () => {
 
             const records = o.records || [];
             if (records.length > 0) {
-                const types = [
+                const types: {id: string, label: string}[] = [
                     { id: 'FULL', label: o.weighingMode === WeighingType.SOLO_POLLO ? 'SACOS' : 'LLENAS' },
                     { id: 'EMPTY', label: 'VACÍAS' },
                     { id: 'MORTALITY_GALPON', label: 'MUERTOS GALPÓN' },
@@ -457,7 +457,7 @@ const BatchList: React.FC = () => {
             <h3 className="text-2xl font-black mb-6 text-slate-900">{currentBatch.id ? 'Editar Lote' : 'Crear Nuevo Lote'}</h3>
             <div className="space-y-5">
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Nombre Identificador</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Nombre Identificador (Lote)</label>
                 <input 
                   className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all"
                   value={currentBatch.name || ''}

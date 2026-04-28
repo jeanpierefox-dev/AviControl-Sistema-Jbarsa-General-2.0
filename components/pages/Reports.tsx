@@ -213,7 +213,7 @@ const Reports: React.FC = () => {
 
         const allRecords = order.records || [];
         if (allRecords.length > 0) {
-            const types = [
+            const types: {id: string, label: string}[] = [
                 { id: 'FULL', label: order.weighingMode === WeighingType.SOLO_POLLO ? 'SACOS' : 'LLENAS' },
                 { id: 'EMPTY', label: 'VACÍAS' },
                 { id: 'MORTALITY_GALPON', label: 'MUERTOS GALPÓN' },
