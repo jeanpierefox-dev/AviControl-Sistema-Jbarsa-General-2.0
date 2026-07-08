@@ -34,8 +34,9 @@ const Collections: React.FC = () => {
     const empty = records.filter(r => r.type === 'EMPTY').reduce((a,b)=>a+b.weight,0);
     const mort = records.filter(r => r.type === 'MORTALITY').reduce((a,b)=>a+b.weight,0);
     let net = order.weighingMode === WeighingType.SOLO_POLLO ? full : full - empty - mort;
-    const totalDue = net * order.pricePerKg;
-    const totalPaid = order.payments.reduce((a,b) => a + b.amount, 0);
+    const totalDue = net * (order.pricePerKg || 0);
+    const payments = order.payments || [];
+    const totalPaid = payments.reduce((a,b) => a + b.amount, 0);
     return { totalDue, totalPaid, balance: totalDue - totalPaid };
   };
 
@@ -120,6 +121,9 @@ const Collections: React.FC = () => {
     };
 
     const updatedOrder = { ...selectedOrder };
+    if (!updatedOrder.payments) {
+      updatedOrder.payments = [];
+    }
     updatedOrder.payments.push(payment);
     const bal = calculateBalance(updatedOrder);
     

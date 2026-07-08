@@ -244,7 +244,13 @@ export const deleteBatch = (id: string) => {
     if (db) remove(ref(db, `batches/${id}`)).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
 
-export const getOrders = (): ClientOrder[] => safeParse(KEYS.ORDERS, []);
+export const getOrders = (): ClientOrder[] => {
+    const orders = safeParse(KEYS.ORDERS, []);
+    return orders.map((o: any) => ({
+        ...o,
+        payments: o.payments || []
+    }));
+};
 
 export const getOrdersByBatch = (batchId: string): ClientOrder[] => 
     getOrders().filter(o => o.batchId === batchId);

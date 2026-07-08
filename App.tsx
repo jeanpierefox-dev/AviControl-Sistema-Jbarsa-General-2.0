@@ -172,31 +172,6 @@ const App: React.FC = () => {
     return (
         <ErrorBoundary>
             <AuthContext.Provider value={{ user, setUser, logout }}>
-                {syncError && !pathHasErrorSuppression && (
-                    <div className="fixed top-0 left-0 right-0 z-[100] bg-red-600 text-white p-3 text-center text-xs font-bold shadow-lg flex flex-col sm:flex-row items-center justify-center gap-3">
-                        <div className="flex items-center gap-2">
-                            <Database size={14} className="animate-pulse" />
-                            <span>Error de sincronización: {syncError}</span>
-                        </div>
-                        <div className="flex gap-2">
-                            <button 
-                                onClick={() => {
-                                    setSyncError(null);
-                                    initCloudSync();
-                                }} 
-                                className="bg-white text-red-600 px-3 py-1 rounded-lg hover:bg-slate-100 transition-all uppercase tracking-tighter"
-                            >
-                                Reintentar
-                            </button>
-                            <button 
-                                onClick={() => setSyncError(null)} 
-                                className="bg-red-800 text-white px-3 py-1 rounded-lg hover:bg-red-900 transition-all uppercase tracking-tighter"
-                            >
-                                Ignorar
-                            </button>
-                        </div>
-                    </div>
-                )}
                 <HashRouter>
                     <Routes>
                         <Route path="/login" element={<LoginPage />} />
