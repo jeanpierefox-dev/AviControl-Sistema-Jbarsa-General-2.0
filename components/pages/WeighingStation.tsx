@@ -891,7 +891,7 @@ const WeighingStation: React.FC = () => {
             { content: 'PROMEDIOS CALCULADOS', colSpan: 2, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0 } }
         ]],
         body: [
-            ['Prom. Peso Vivo (Llenas-Vacías):', `${t.avgNet.toFixed(2)} kg/p`],
+            ['Prom. Peso Pollo Vivo:', `${t.avgNet.toFixed(2)} kg/p`],
             ['Prom. Peso Pollo Muerto:', `${t.avgMort.toFixed(2)} kg/p`]
         ],
         theme: 'grid',
@@ -917,10 +917,15 @@ const WeighingStation: React.FC = () => {
         doc.text("Merma Muertos:", 8, y); doc.text(`-${t.wM.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
     }
 
+    doc.setFillColor(241, 245, 249);
+    doc.rect(5, y, 70, 9, 'F');
+    doc.setFontSize(9).setFont("helvetica", "bold");
+    doc.setTextColor(15, 23, 42);
+    doc.text("PESO NETO VIVO:", 8, y + 6);
     doc.setFontSize(11).setFont("helvetica", "bold");
-    doc.text("PESO NETO VIVO:", 8, y + 2);
-    doc.text(`${t.net.toFixed(2)} kg`, 72, y + 2, { align: 'right' });
-    y += 10;
+    doc.text(`${t.net.toFixed(2)} kg`, 72, y + 6, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+    y += 13;
 
     // Financials
     if (order.pricePerKg > 0) {

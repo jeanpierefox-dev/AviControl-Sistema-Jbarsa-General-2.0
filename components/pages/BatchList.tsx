@@ -222,12 +222,6 @@ const BatchList: React.FC = () => {
             ['Pollos Vivos:', `${totalBirds}`, `${netWeight.toFixed(2)} kg`],
             ['Pollos Muertos:', `${totalMort}`, `-${totalMortWeight.toFixed(2)} kg`]
         ];
-        if (qM_Galpon > 0) {
-            pollosBody.push(['  - Muertos Galpón:', `${qM_Galpon}`, `-${wM_Galpon.toFixed(2)} kg`]);
-        }
-        if (qM_Acopio > 0) {
-            pollosBody.push(['  - Muertos Acopio:', `${qM_Acopio}`, `-${wM_Acopio.toFixed(2)} kg`]);
-        }
 
         autoTable(doc, {
             startY: y,
@@ -255,7 +249,7 @@ const BatchList: React.FC = () => {
                 { content: 'PROMEDIOS CALCULADOS', colSpan: 2, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0 } }
             ]],
             body: [
-                ['Prom. Peso Vivo (Llenas-Vacías):', `${avgNet.toFixed(2)} kg/p`],
+                ['Prom. Peso Pollo Vivo:', `${avgNet.toFixed(2)} kg/p`],
                 ['Prom. Peso Pollo Muerto:', `${avgMort.toFixed(2)} kg/p`]
             ],
             theme: 'grid',
@@ -281,10 +275,15 @@ const BatchList: React.FC = () => {
             doc.text("Merma Muertos:", 8, y); doc.text(`-${totalMortWeight.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
         }
 
+        doc.setFillColor(241, 245, 249);
+        doc.rect(5, y, 70, 9, 'F');
+        doc.setFontSize(9).setFont("helvetica", "bold");
+        doc.setTextColor(15, 23, 42);
+        doc.text("PESO NETO TOTAL:", 8, y + 6);
         doc.setFontSize(11).setFont("helvetica", "bold");
-        doc.text("PESO NETO VIVO TOTAL:", 8, y + 2);
-        doc.text(`${netWeight.toFixed(2)} kg`, 72, y + 2, { align: 'right' });
-        y += 10;
+        doc.text(`${netWeight.toFixed(2)} kg`, 72, y + 6, { align: 'right' });
+        doc.setTextColor(0, 0, 0);
+        y += 13;
 
         // Financials
         if (totalAmount > 0) {
