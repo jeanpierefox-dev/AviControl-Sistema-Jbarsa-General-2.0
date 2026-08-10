@@ -64,6 +64,9 @@ const BatchList: React.FC = () => {
       name: currentBatch.name,
       date: dateStr,
       totalCratesLimit: Number(currentBatch.totalCratesLimit),
+      emptyCrates: currentBatch.emptyCrates ? Number(currentBatch.emptyCrates) : undefined,
+      birdType: currentBatch.birdType || 'Pollo de Carne',
+      birdSex: currentBatch.birdSex || 'Mixto',
       createdAt: timestamp,
       status: 'ACTIVE',
       createdBy: currentBatch.createdBy || user?.id // Attach User ID
@@ -192,105 +195,82 @@ const BatchList: React.FC = () => {
         });
 
         const avgBirdsPerCrate = totalFullCrates > 0 ? (totalBirds / totalFullCrates) : 10;
-        const promJabasLlenas = totalFullCrates > 0 ? totalFullWeight / totalFullCrates : 0;
-        const promJabasVacias = totalEmptyCrates > 0 ? totalEmptyWeight / totalEmptyCrates : 0;
-        const promPolloBrutoTara = totalBirds > 0 ? (totalFullWeight - totalEmptyWeight) / totalBirds : 0;
+        const pollosVivos = Math.max(0, totalBirds - totalMort);
+        const promJabaLlena = totalBirds > 0 ? totalFullWeight / totalBirds : 0;
+        const promJabaVacia = totalEmptyCrates > 0 ? totalEmptyWeight / totalEmptyCrates : 0;
+        const promPolloTotal = totalBirds > 0 ? (totalFullWeight - totalEmptyWeight) / totalBirds : 0;
         const promPolloMuerto = totalMort > 0 ? totalMortWeight / totalMort : 0;
-        const pollosRestantes = Math.max(0, totalBirds - totalMort);
-        const promPesoNetoVivo = pollosRestantes > 0 ? netWeight / pollosRestantes : 0;
+        const promPesoNetoVivo = pollosVivos > 0 ? netWeight / pollosVivos : 0;
 
-        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8.5).setFont("helvetica", "bold");
         doc.text(`TIPO DE AVE:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text((batch.birdType || 'POLLO DE CARNE').toUpperCase(), 27, y);
-        y += 5;
+        doc.text((batch.birdType || 'POLLO DE CARNE').toUpperCase(), 26, y);
+        y += 4.5;
 
         doc.setFont("helvetica", "bold");
         doc.text(`SEXO DE AVE:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text((batch.birdSex || 'MIXTO').toUpperCase(), 27, y);
-        y += 5;
+        doc.text((batch.birdSex || 'MIXTO').toUpperCase(), 26, y);
+        y += 4.5;
 
         doc.setFont("helvetica", "bold");
         doc.text(`POLLOS X JABA:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text(`${avgBirdsPerCrate.toFixed(0)} pollos/jaba (prom)`, 30, y);
-        y += 5;
+        doc.text(`${avgBirdsPerCrate.toFixed(0)} pollos/jaba (prom)`, 29, y);
+        y += 4.5;
 
         doc.setFont("helvetica", "bold");
         doc.text(`JABAS VACÍAS (TARAS):`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text(`${totalEmptyCrates} jabas`, 42, y);
-        y += 6;
+        doc.text(`${totalEmptyCrates} jabas`, 40, y);
+        y += 5.5;
 
-        // 1. Table for JABAS / CONTENEDORES
+        // Single Table for DETALLE DE CARGA
         autoTable(doc, {
             startY: y,
             head: [[
-                { content: 'JABAS / CONTENEDORES', styles: { halign: 'left', fillColor: [220, 226, 230], textColor: 0 } },
+                { content: 'CONCEPTO', styles: { halign: 'left', fillColor: [220, 226, 230], textColor: 0 } },
                 { content: 'JABAS', styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } },
                 { content: 'POLLOS', styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } },
                 { content: 'PESO (KG)', styles: { halign: 'right', fillColor: [220, 226, 230], textColor: 0 } }
             ]],
             body: [
                 ['Jabas Llenas:', `${totalFullCrates}`, `${totalBirds}`, `${totalFullWeight.toFixed(2)} kg`],
-                ['Jabas Vacías:', `${totalEmptyCrates}`, `-`, `-${totalEmptyWeight.toFixed(2)} kg`]
+                ['Jabas Vacías:', `${totalEmptyCrates}`, `-`, `-${totalEmptyWeight.toFixed(2)} kg`],
+                ['Pollos Muertos:', `-`, `${totalMort}`, `-${totalMortWeight.toFixed(2)} kg`],
+                ['Pollos Vivos:', `-`, `${pollosVivos}`, `${netWeight.toFixed(2)} kg`]
             ],
             theme: 'grid',
-            styles: { fontSize: 8, cellPadding: 2 },
+            styles: { fontSize: 7.5, cellPadding: 1.8 },
             columnStyles: {
-                0: { fontStyle: 'bold', cellWidth: 26 },
+                0: { fontStyle: 'bold', cellWidth: 24 },
                 1: { halign: 'center', cellWidth: 12 },
                 2: { halign: 'center', cellWidth: 14 },
-                3: { halign: 'right', cellWidth: 18 }
+                3: { halign: 'right', cellWidth: 20 }
             },
             margin: { left: 5, right: 5 }
         });
         y = (doc as any).lastAutoTable.finalY + 4;
 
-        // 2. Table for POLLOS (CANT Y PESO)
-        const pollosBody = [
-            ['Pollos Vivos:', `${totalBirds}`, `${netWeight.toFixed(2)} kg`],
-            ['Pollos Muertos:', `${totalMort}`, `-${totalMortWeight.toFixed(2)} kg`]
-        ];
-
-        autoTable(doc, {
-            startY: y,
-            head: [[
-                { content: 'POLLOS (CANT Y PESO)', styles: { halign: 'left', fillColor: [220, 226, 230], textColor: 0 } },
-                { content: 'CANT.', styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } },
-                { content: 'PESO (KG)', styles: { halign: 'right', fillColor: [220, 226, 230], textColor: 0 } }
-            ]],
-            body: pollosBody,
-            theme: 'grid',
-            styles: { fontSize: 8, cellPadding: 2 },
-            columnStyles: {
-                0: { fontStyle: 'bold', cellWidth: 32 },
-                1: { halign: 'center', cellWidth: 18 },
-                2: { halign: 'right', cellWidth: 20 }
-            },
-            margin: { left: 5, right: 5 }
-        });
-        y = (doc as any).lastAutoTable.finalY + 4;
-
-        // 3. Table for PROMEDIOS CALCULADOS
+        // Table for PROMEDIOS CALCULADOS
         autoTable(doc, {
             startY: y,
             head: [[
                 { content: 'PROMEDIOS CALCULADOS', colSpan: 2, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0 } }
             ]],
             body: [
-                ['Prom. Jaba Llena:', `${promJabasLlenas.toFixed(2)} kg/j`],
-                ['Prom. Jaba Vacía:', `${promJabasVacias.toFixed(2)} kg/j`],
-                ['Prom. Pollo (Llenas - Vacías):', `${promPolloBrutoTara.toFixed(2)} kg/p`],
+                ['Prom. Jaba Llena:', `${promJabaLlena.toFixed(2)} kg/p`],
+                ['Prom. Jaba Vacía:', `${promJabaVacia.toFixed(2)} kg/j`],
+                ['Prom. Pollo Total:', `${promPolloTotal.toFixed(2)} kg/p`],
                 ['Prom. Pollo Muerto:', `${promPolloMuerto.toFixed(2)} kg/p`],
-                [`Prom. Neto (${pollosRestantes}p rest.):`, `${promPesoNetoVivo.toFixed(2)} kg/p`]
+                ['Prom. Peso Neto Vivo:', `${promPesoNetoVivo.toFixed(2)} kg/p`]
             ],
             theme: 'grid',
-            styles: { fontSize: 8, cellPadding: 2 },
+            styles: { fontSize: 7.5, cellPadding: 1.8 },
             columnStyles: {
-                0: { fontStyle: 'bold', cellWidth: 46 },
-                1: { halign: 'right', cellWidth: 24 }
+                0: { fontStyle: 'bold', cellWidth: 44 },
+                1: { halign: 'right', cellWidth: 26 }
             },
             margin: { left: 5, right: 5 }
         });
@@ -704,35 +684,74 @@ const BatchList: React.FC = () => {
 
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm border border-gray-100">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-md border border-gray-100 max-h-[90vh] overflow-y-auto">
             <h3 className="text-2xl font-black mb-6 text-slate-900">{currentBatch.id ? 'Editar Lote' : 'Crear Nuevo Lote'}</h3>
-            <div className="space-y-5">
+            <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Nombre Identificador (Lote)</label>
                 <input 
-                  className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all"
+                  className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-2.5 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm"
                   value={currentBatch.name || ''}
                   onChange={e => setCurrentBatch({...currentBatch, name: e.target.value})}
                   placeholder="Ej. Lote 25-A"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Meta de Jabas (Límite)</label>
-                <input 
-                  type="number"
-                  inputMode="numeric"
-                  className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all"
-                  value={currentBatch.totalCratesLimit || ''}
-                  onChange={e => setCurrentBatch({...currentBatch, totalCratesLimit: Number(e.target.value)})}
-                  placeholder="Ej. 5000"
-                />
-                <p className="text-xs text-slate-400 mt-2 flex items-center"><Activity size={12} className="mr-1"/> Se bloqueará la creación de clientes si se supera.</p>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Tipo de Ave</label>
+                  <input 
+                    type="text"
+                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2.5 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm"
+                    value={currentBatch.birdType || ''}
+                    onChange={e => setCurrentBatch({...currentBatch, birdType: e.target.value})}
+                    placeholder="Pollo de Carne"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Sexo de Ave</label>
+                  <select 
+                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2.5 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm"
+                    value={currentBatch.birdSex || 'Mixto'}
+                    onChange={e => setCurrentBatch({...currentBatch, birdSex: e.target.value})}
+                  >
+                    <option value="Mixto">Mixto</option>
+                    <option value="Macho">Macho</option>
+                    <option value="Hembra">Hembra</option>
+                  </select>
+                </div>
               </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Meta Jabas Llenas</label>
+                  <input 
+                    type="number"
+                    inputMode="numeric"
+                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2.5 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm"
+                    value={currentBatch.totalCratesLimit || ''}
+                    onChange={e => setCurrentBatch({...currentBatch, totalCratesLimit: Number(e.target.value)})}
+                    placeholder="Ej. 5000"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Jabas Vacías</label>
+                  <input 
+                    type="number"
+                    inputMode="numeric"
+                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2.5 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm"
+                    value={currentBatch.emptyCrates !== undefined ? currentBatch.emptyCrates : ''}
+                    onChange={e => setCurrentBatch({...currentBatch, emptyCrates: e.target.value === '' ? undefined : Number(e.target.value)})}
+                    placeholder="Ej. 500"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Fecha del Lote</label>
                 <input 
                   type="date"
-                  className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all"
+                  className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-2.5 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm"
                   value={currentBatch.createdAt ? (() => {
                     const d = new Date(currentBatch.createdAt);
                     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -746,8 +765,8 @@ const BatchList: React.FC = () => {
               </div>
             </div>
             <div className="mt-8 flex justify-end space-x-3">
-              <button onClick={() => setShowModal(false)} className="text-slate-500 font-bold hover:text-slate-800 px-4 py-2 hover:bg-slate-100 rounded-lg transition-colors">Cancelar</button>
-              <button onClick={handleSave} className="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition-colors">Guardar</button>
+              <button onClick={() => setShowModal(false)} className="text-slate-500 font-bold hover:text-slate-800 px-4 py-2 hover:bg-slate-100 rounded-lg transition-colors text-sm">Cancelar</button>
+              <button onClick={handleSave} className="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition-colors text-sm">Guardar</button>
             </div>
           </div>
         </div>

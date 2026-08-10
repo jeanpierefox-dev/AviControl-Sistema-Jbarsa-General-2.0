@@ -63,6 +63,7 @@ export interface Batch {
   date?: string; // Format YYYY-MM-DD for easier display and filtering
   createdAt: number;
   totalCratesLimit: number; // Estimated capacity
+  emptyCrates?: number; // Estimated empty crates
   birdType?: string;
   birdSex?: string;
   status: 'ACTIVE' | 'ARCHIVED';
