@@ -388,35 +388,54 @@ const Reports: React.FC = () => {
     y += 5;
 
     // Batch & Client Info
-    doc.setFontSize(8.5).setFont("helvetica", "bold");
-    doc.text(`LOTE:`, 5, y);
+    doc.setFontSize(7.5);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text(`ORIGEN DE CARGA:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text(batchName.toUpperCase(), 18, y);
-    y += 4.5;
+    doc.text((batch?.origin || 'GRANJA / GALPÓN').toUpperCase(), 32, y);
+    y += 4;
+
+    doc.setFont("helvetica", "bold");
+    doc.text(`NRO PLACA CAMIÓN:`, 5, y);
+    doc.setFont("helvetica", "normal");
+    doc.text((batch?.truckPlate || 'S/N').toUpperCase(), 32, y);
+    y += 4;
+
     doc.setFont("helvetica", "bold");
     doc.text(`CLIENTE:`, 5, y);
     doc.setFont("helvetica", "normal");
     doc.text(order.clientName.toUpperCase(), 20, y);
-    y += 4.5;
+    y += 4;
+
     doc.setFont("helvetica", "bold");
-    doc.text(`TIPO DE AVE:`, 5, y);
+    doc.text(`JABAS LLENAS:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text((order.birdType || batch?.birdType || 'POLLO DE CARNE').toUpperCase(), 26, y);
-    y += 4.5;
+    doc.text(`${t.qF} jabas`, 28, y);
+    y += 4;
+
     doc.setFont("helvetica", "bold");
-    doc.text(`SEXO DE AVE:`, 5, y);
+    doc.text(`JABAS VACÍAS:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text((order.birdSex || batch?.birdSex || 'MIXTO').toUpperCase(), 26, y);
-    y += 4.5;
+    doc.text(`${t.qE} jabas`, 28, y);
+    y += 4;
+
     doc.setFont("helvetica", "bold");
     doc.text(`POLLOS X JABA:`, 5, y);
     doc.setFont("helvetica", "normal");
     doc.text(`${order.birdsPerCrate || 10} pollos/jaba`, 29, y);
-    y += 4.5;
+    y += 4;
+
     doc.setFont("helvetica", "bold");
-    doc.text(`JABAS VACÍAS (TARAS):`, 5, y);
+    doc.text(`TIPO DE AVE:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text(`${t.qE} jabas`, 40, y);
+    doc.text((order.birdType || batch?.birdType || 'POLLO DE CARNE').toUpperCase(), 27, y);
+    y += 4;
+
+    doc.setFont("helvetica", "bold");
+    doc.text(`SEXO DE AVE:`, 5, y);
+    doc.setFont("helvetica", "normal");
+    doc.text((order.birdSex || batch?.birdSex || 'MIXTO').toUpperCase(), 27, y);
     y += 5.5;
 
     // Single Table for DETALLE DE CARGA
@@ -517,10 +536,37 @@ const Reports: React.FC = () => {
         y += 20;
     }
 
+    // Signatures Block
+    y += 12;
+    doc.setLineWidth(0.3);
+    doc.setDrawColor(0);
+
+    // Firma Responsable Despacho (Left)
+    doc.line(5, y, 36, y);
+    doc.setFontSize(6.5).setFont("helvetica", "bold");
+    doc.text("RESPONSABLE DESPACHO", 20.5, y + 3, { align: 'center' });
+    doc.setFont("helvetica", "normal");
+    const dispName = batch?.dispatcherName || '..............................';
+    const dispDni = batch?.dispatcherDni ? `DNI: ${batch.dispatcherDni}` : 'DNI: ....................';
+    doc.text(doc.splitTextToSize(dispName.toUpperCase(), 31), 20.5, y + 6, { align: 'center' });
+    doc.text(dispDni, 20.5, y + 9.5, { align: 'center' });
+
+    // Firma Cliente (Right)
+    doc.line(44, y, 75, y);
+    doc.setFontSize(6.5).setFont("helvetica", "bold");
+    doc.text("FIRMA DEL CLIENTE", 59.5, y + 3, { align: 'center' });
+    doc.setFont("helvetica", "normal");
+    const cliName = order.clientName || '..............................';
+    const cliDni = order.clientDni || batch?.clientDni ? `DNI: ${order.clientDni || batch?.clientDni}` : 'DNI: ....................';
+    doc.text(doc.splitTextToSize(cliName.toUpperCase(), 31), 59.5, y + 6, { align: 'center' });
+    doc.text(cliDni, 59.5, y + 9.5, { align: 'center' });
+
+    y += 15;
+
     doc.setFontSize(8).setFont("helvetica", "italic");
     doc.text("¡Gracias por su preferencia!", 40, y, { align: 'center' });
 
-    return y + 10;
+    return y + 8;
   };
 
   const generateSummaryTicketPDF = (order: ClientOrder, preview: boolean = false) => {

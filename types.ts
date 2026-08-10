@@ -39,6 +39,7 @@ export interface ClientOrder {
   birdsPerCrate?: number; // Default birds per crate for this order
   birdType?: string; // e.g. 'Pollo de Carne'
   birdSex?: string; // e.g. 'Mixto', 'Macho', 'Hembra'
+  clientDni?: string; // N° DNI del cliente
   pricePerKg: number;
   status: 'OPEN' | 'CLOSED';
   records: WeighingRecord[];
@@ -66,6 +67,11 @@ export interface Batch {
   emptyCrates?: number; // Estimated empty crates
   birdType?: string;
   birdSex?: string;
+  origin?: string; // Origen de Carga
+  truckPlate?: string; // NRO de Placa Camión
+  dispatcherName?: string; // Nombre y Apellido Responsable Despacho
+  dispatcherDni?: string; // NRO DNI Responsable Despacho
+  clientDni?: string; // NRO DNI Cliente
   status: 'ACTIVE' | 'ARCHIVED';
   createdBy?: string; // User ID
 }

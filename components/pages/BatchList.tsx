@@ -67,6 +67,11 @@ const BatchList: React.FC = () => {
       emptyCrates: currentBatch.emptyCrates ? Number(currentBatch.emptyCrates) : undefined,
       birdType: currentBatch.birdType || 'Pollo de Carne',
       birdSex: currentBatch.birdSex || 'Mixto',
+      origin: currentBatch.origin || '',
+      truckPlate: currentBatch.truckPlate || '',
+      dispatcherName: currentBatch.dispatcherName || '',
+      dispatcherDni: currentBatch.dispatcherDni || '',
+      clientDni: currentBatch.clientDni || '',
       createdAt: timestamp,
       status: 'ACTIVE',
       createdBy: currentBatch.createdBy || user?.id // Attach User ID
@@ -202,28 +207,54 @@ const BatchList: React.FC = () => {
         const promPolloMuerto = totalMort > 0 ? totalMortWeight / totalMort : 0;
         const promPesoNetoVivo = pollosVivos > 0 ? netWeight / pollosVivos : 0;
 
-        doc.setFontSize(8.5).setFont("helvetica", "bold");
-        doc.text(`TIPO DE AVE:`, 5, y);
-        doc.setFont("helvetica", "normal");
-        doc.text((batch.birdType || 'POLLO DE CARNE').toUpperCase(), 26, y);
-        y += 4.5;
+        doc.setFontSize(7.5);
 
         doc.setFont("helvetica", "bold");
-        doc.text(`SEXO DE AVE:`, 5, y);
+        doc.text(`ORIGEN DE CARGA:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text((batch.birdSex || 'MIXTO').toUpperCase(), 26, y);
-        y += 4.5;
+        doc.text((batch.origin || 'GRANJA / GALPÓN').toUpperCase(), 32, y);
+        y += 4;
+
+        doc.setFont("helvetica", "bold");
+        doc.text(`NRO PLACA CAMIÓN:`, 5, y);
+        doc.setFont("helvetica", "normal");
+        doc.text((batch.truckPlate || 'S/N').toUpperCase(), 32, y);
+        y += 4;
+
+        doc.setFont("helvetica", "bold");
+        doc.text(`LOTE / CLIENTE:`, 5, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(batch.name.toUpperCase(), 26, y);
+        y += 4;
+
+        doc.setFont("helvetica", "bold");
+        doc.text(`JABAS LLENAS:`, 5, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(`${totalFullCrates} jabas`, 28, y);
+        y += 4;
+
+        doc.setFont("helvetica", "bold");
+        doc.text(`JABAS VACÍAS:`, 5, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(`${totalEmptyCrates} jabas`, 28, y);
+        y += 4;
 
         doc.setFont("helvetica", "bold");
         doc.text(`POLLOS X JABA:`, 5, y);
         doc.setFont("helvetica", "normal");
         doc.text(`${avgBirdsPerCrate.toFixed(0)} pollos/jaba (prom)`, 29, y);
-        y += 4.5;
+        y += 4;
 
         doc.setFont("helvetica", "bold");
-        doc.text(`JABAS VACÍAS (TARAS):`, 5, y);
+        doc.text(`TIPO DE AVE:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text(`${totalEmptyCrates} jabas`, 40, y);
+        doc.text((batch.birdType || 'POLLO DE CARNE').toUpperCase(), 27, y);
+        y += 4;
+
+        doc.setFont("helvetica", "bold");
+        doc.text(`SEXO DE AVE:`, 5, y);
+        doc.setFont("helvetica", "normal");
+        doc.text((batch.birdSex || 'MIXTO').toUpperCase(), 27, y);
         y += 5.5;
 
         // Single Table for DETALLE DE CARGA
@@ -312,10 +343,37 @@ const BatchList: React.FC = () => {
             y += 20;
         }
 
+        // Signatures Block
+        y += 12;
+        doc.setLineWidth(0.3);
+        doc.setDrawColor(0);
+
+        // Firma Responsable Despacho (Left)
+        doc.line(5, y, 36, y);
+        doc.setFontSize(6.5).setFont("helvetica", "bold");
+        doc.text("RESPONSABLE DESPACHO", 20.5, y + 3, { align: 'center' });
+        doc.setFont("helvetica", "normal");
+        const dispName = batch.dispatcherName || '..............................';
+        const dispDni = batch.dispatcherDni ? `DNI: ${batch.dispatcherDni}` : 'DNI: ....................';
+        doc.text(doc.splitTextToSize(dispName.toUpperCase(), 31), 20.5, y + 6, { align: 'center' });
+        doc.text(dispDni, 20.5, y + 9.5, { align: 'center' });
+
+        // Firma Cliente (Right)
+        doc.line(44, y, 75, y);
+        doc.setFontSize(6.5).setFont("helvetica", "bold");
+        doc.text("FIRMA DEL CLIENTE", 59.5, y + 3, { align: 'center' });
+        doc.setFont("helvetica", "normal");
+        const cliName = batch.name || '..............................';
+        const cliDni = batch.clientDni ? `DNI: ${batch.clientDni}` : 'DNI: ....................';
+        doc.text(doc.splitTextToSize(cliName.toUpperCase(), 31), 59.5, y + 6, { align: 'center' });
+        doc.text(cliDni, 59.5, y + 9.5, { align: 'center' });
+
+        y += 15;
+
         doc.setFontSize(8).setFont("helvetica", "italic");
         doc.text("Resumen General de Lote", 40, y, { align: 'center' });
 
-        return y + 10;
+        return y + 8;
     };
 
     const generateBatchTicket = () => {
@@ -699,6 +757,29 @@ const BatchList: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Origen de Carga</label>
+                  <input 
+                    type="text"
+                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2.5 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm"
+                    value={currentBatch.origin || ''}
+                    onChange={e => setCurrentBatch({...currentBatch, origin: e.target.value})}
+                    placeholder="Ej. Galpón 1 / Chiclayo"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">N° Placa Camión</label>
+                  <input 
+                    type="text"
+                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2.5 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm"
+                    value={currentBatch.truckPlate || ''}
+                    onChange={e => setCurrentBatch({...currentBatch, truckPlate: e.target.value})}
+                    placeholder="Ej. ABC-123"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Tipo de Ave</label>
                   <input 
                     type="text"
@@ -743,6 +824,45 @@ const BatchList: React.FC = () => {
                     value={currentBatch.emptyCrates !== undefined ? currentBatch.emptyCrates : ''}
                     onChange={e => setCurrentBatch({...currentBatch, emptyCrates: e.target.value === '' ? undefined : Number(e.target.value)})}
                     placeholder="Ej. 500"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100 pt-3 mt-2">
+                <p className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2">Datos de Firmas</p>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Responsable (Nombre y Apellido)</label>
+                    <input 
+                      type="text"
+                      className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-xs"
+                      value={currentBatch.dispatcherName || ''}
+                      onChange={e => setCurrentBatch({...currentBatch, dispatcherName: e.target.value})}
+                      placeholder="Juan Pérez"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Responsable (DNI)</label>
+                    <input 
+                      type="text"
+                      inputMode="numeric"
+                      className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-xs"
+                      value={currentBatch.dispatcherDni || ''}
+                      onChange={e => setCurrentBatch({...currentBatch, dispatcherDni: e.target.value})}
+                      placeholder="12345678"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Cliente (DNI)</label>
+                  <input 
+                    type="text"
+                    inputMode="numeric"
+                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-xs"
+                    value={currentBatch.clientDni || ''}
+                    onChange={e => setCurrentBatch({...currentBatch, clientDni: e.target.value})}
+                    placeholder="87654321"
                   />
                 </div>
               </div>
