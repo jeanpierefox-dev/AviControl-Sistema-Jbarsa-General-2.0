@@ -40,6 +40,10 @@ export interface ClientOrder {
   birdType?: string; // e.g. 'Pollo de Carne'
   birdSex?: string; // e.g. 'Mixto', 'Macho', 'Hembra'
   clientDni?: string; // N° DNI del cliente
+  recipientName?: string; // Nombre de quien recibe la carga
+  recipientDni?: string; // DNI de quien recibe la carga
+  clientSignature?: string; // Base64 digital signature
+  dispatcherSignature?: string; // Base64 digital signature
   pricePerKg: number;
   status: 'OPEN' | 'CLOSED';
   records: WeighingRecord[];
@@ -72,6 +76,10 @@ export interface Batch {
   dispatcherName?: string; // Nombre y Apellido Responsable Despacho
   dispatcherDni?: string; // NRO DNI Responsable Despacho
   clientDni?: string; // NRO DNI Cliente
+  recipientName?: string; // Nombre de quien recibe la carga
+  recipientDni?: string; // DNI de quien recibe la carga
+  clientSignature?: string; // Base64 digital signature
+  dispatcherSignature?: string; // Base64 digital signature
   status: 'ACTIVE' | 'ARCHIVED';
   createdBy?: string; // User ID
 }

@@ -6,6 +6,7 @@ import { Plus, Trash2, Edit, Scale, Calendar, Box, Activity, FileText, Receipt }
 import { AuthContext } from '../../App';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { SignatureModal } from '../common/SignatureModal';
 
 const BatchList: React.FC = () => {
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -15,6 +16,11 @@ const BatchList: React.FC = () => {
   });
   const [showModal, setShowModal] = useState(false);
   const [currentBatch, setCurrentBatch] = useState<Partial<Batch>>({});
+  
+  // Signature Modal states
+  const [sigModalOpen, setSigModalOpen] = useState(false);
+  const [sigTarget, setSigTarget] = useState<'dispatcher' | 'client'>('dispatcher');
+  
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
 
@@ -72,6 +78,10 @@ const BatchList: React.FC = () => {
       dispatcherName: currentBatch.dispatcherName || '',
       dispatcherDni: currentBatch.dispatcherDni || '',
       clientDni: currentBatch.clientDni || '',
+      recipientName: currentBatch.recipientName || '',
+      recipientDni: currentBatch.recipientDni || '',
+      clientSignature: currentBatch.clientSignature || '',
+      dispatcherSignature: currentBatch.dispatcherSignature || '',
       createdAt: timestamp,
       status: 'ACTIVE',
       createdBy: currentBatch.createdBy || user?.id // Attach User ID
@@ -212,37 +222,51 @@ const BatchList: React.FC = () => {
         doc.setFont("helvetica", "bold");
         doc.text(`ORIGEN DE CARGA:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text((batch.origin || 'GRANJA / GALPÓN').toUpperCase(), 32, y);
+        doc.text((batch.origin || 'GRANJA / GALPÓN').toUpperCase(), 34, y);
         y += 4;
 
         doc.setFont("helvetica", "bold");
         doc.text(`NRO PLACA CAMIÓN:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text((batch.truckPlate || 'S/N').toUpperCase(), 32, y);
+        doc.text((batch.truckPlate || 'S/N').toUpperCase(), 34, y);
         y += 4;
 
         doc.setFont("helvetica", "bold");
-        doc.text(`LOTE / CLIENTE:`, 5, y);
+        doc.text(`CLIENTE / RECIBE:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text(batch.name.toUpperCase(), 26, y);
+        const clientOrRecipName = batch.recipientName || batch.name || 'PUBLICO GENERAL';
+        doc.text(clientOrRecipName.toUpperCase(), 34, y);
         y += 4;
 
         doc.setFont("helvetica", "bold");
         doc.text(`JABAS LLENAS:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text(`${totalFullCrates} jabas`, 28, y);
+        doc.text(`${totalFullCrates} jabas`, 34, y);
         y += 4;
 
         doc.setFont("helvetica", "bold");
         doc.text(`JABAS VACÍAS:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text(`${totalEmptyCrates} jabas`, 28, y);
+        doc.text(`${totalEmptyCrates} jabas`, 34, y);
         y += 4;
 
         doc.setFont("helvetica", "bold");
         doc.text(`POLLOS X JABA:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text(`${avgBirdsPerCrate.toFixed(0)} pollos/jaba (prom)`, 29, y);
+        doc.text(`${avgBirdsPerCrate.toFixed(0)} pollos/jaba (prom)`, 34, y);
+        y += 4;
+
+        doc.setFont("helvetica", "bold");
+        doc.text(`TIPO DE AVE:`, 5, y);
+        doc.setFont("helvetica", "normal");
+        doc.text((batch.birdType || 'POLLO DE CARNE').toUpperCase(), 34, y);
+        y += 4;
+
+        doc.setFont("helvetica", "bold");
+        doc.text(`SEXO DE AVE:`, 5, y);
+        doc.setFont("helvetica", "normal");
+        doc.text((batch.birdSex || 'MIXTO').toUpperCase(), 34, y);
+        y += 5.5;
         y += 4;
 
         doc.setFont("helvetica", "bold");
@@ -344,29 +368,50 @@ const BatchList: React.FC = () => {
         }
 
         // Signatures Block
-        y += 12;
+        y += 8;
+
+        const dispSig = batch.dispatcherSignature;
+        const clientSig = batch.clientSignature;
+
+        if (dispSig) {
+          try {
+            doc.addImage(dispSig, 'PNG', 6, y - 9, 28, 9);
+          } catch (e) {
+            console.error("Error drawing dispatcher signature", e);
+          }
+        }
+        if (clientSig) {
+          try {
+            doc.addImage(clientSig, 'PNG', 45, y - 9, 28, 9);
+          } catch (e) {
+            console.error("Error drawing client signature", e);
+          }
+        }
+
         doc.setLineWidth(0.3);
         doc.setDrawColor(0);
 
         // Firma Responsable Despacho (Left)
         doc.line(5, y, 36, y);
-        doc.setFontSize(6.5).setFont("helvetica", "bold");
+        doc.setFontSize(6).setFont("helvetica", "bold");
         doc.text("RESPONSABLE DESPACHO", 20.5, y + 3, { align: 'center' });
         doc.setFont("helvetica", "normal");
         const dispName = batch.dispatcherName || '..............................';
         const dispDni = batch.dispatcherDni ? `DNI: ${batch.dispatcherDni}` : 'DNI: ....................';
-        doc.text(doc.splitTextToSize(dispName.toUpperCase(), 31), 20.5, y + 6, { align: 'center' });
-        doc.text(dispDni, 20.5, y + 9.5, { align: 'center' });
+        doc.text(doc.splitTextToSize(dispName.toUpperCase(), 31), 20.5, y + 5.8, { align: 'center' });
+        doc.text(dispDni, 20.5, y + 9, { align: 'center' });
 
-        // Firma Cliente (Right)
+        // Firma Cliente / Recibió (Right)
         doc.line(44, y, 75, y);
-        doc.setFontSize(6.5).setFont("helvetica", "bold");
-        doc.text("FIRMA DEL CLIENTE", 59.5, y + 3, { align: 'center' });
+        doc.setFontSize(6).setFont("helvetica", "bold");
+        const labelFirma = batch.recipientName ? "RECIBIDO POR" : "FIRMA DEL CLIENTE";
+        doc.text(labelFirma, 59.5, y + 3, { align: 'center' });
         doc.setFont("helvetica", "normal");
-        const cliName = batch.name || '..............................';
-        const cliDni = batch.clientDni ? `DNI: ${batch.clientDni}` : 'DNI: ....................';
-        doc.text(doc.splitTextToSize(cliName.toUpperCase(), 31), 59.5, y + 6, { align: 'center' });
-        doc.text(cliDni, 59.5, y + 9.5, { align: 'center' });
+        const cliName = batch.recipientName || batch.name || '..............................';
+        const cliDniVal = batch.recipientDni || batch.clientDni;
+        const cliDni = cliDniVal ? `DNI: ${cliDniVal}` : 'DNI: ....................';
+        doc.text(doc.splitTextToSize(cliName.toUpperCase(), 31), 59.5, y + 5.8, { align: 'center' });
+        doc.text(cliDni, 59.5, y + 9, { align: 'center' });
 
         y += 15;
 
@@ -828,42 +873,90 @@ const BatchList: React.FC = () => {
                 </div>
               </div>
 
-              <div className="border-t border-slate-100 pt-3 mt-2">
-                <p className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2">Datos de Firmas</p>
-                <div className="grid grid-cols-2 gap-3 mb-3">
+              <div className="border-t border-slate-100 pt-3 mt-2 space-y-3">
+                <p className="text-xs font-black text-slate-800 uppercase tracking-wider">Datos de Responsable y Firmas</p>
+                
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Responsable (Nombre y Apellido)</label>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Responsable Despacho</label>
                     <input 
                       type="text"
                       className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-xs"
                       value={currentBatch.dispatcherName || ''}
                       onChange={e => setCurrentBatch({...currentBatch, dispatcherName: e.target.value})}
-                      placeholder="Juan Pérez"
+                      placeholder="Nombre del despachador"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Responsable (DNI)</label>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">DNI Responsable</label>
                     <input 
                       type="text"
                       inputMode="numeric"
                       className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-xs"
                       value={currentBatch.dispatcherDni || ''}
                       onChange={e => setCurrentBatch({...currentBatch, dispatcherDni: e.target.value})}
-                      placeholder="12345678"
+                      placeholder="DNI despachador"
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Cliente (DNI)</label>
-                  <input 
-                    type="text"
-                    inputMode="numeric"
-                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-xs"
-                    value={currentBatch.clientDni || ''}
-                    onChange={e => setCurrentBatch({...currentBatch, clientDni: e.target.value})}
-                    placeholder="87654321"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Recibido Por (Nombre)</label>
+                    <input 
+                      type="text"
+                      className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-xs"
+                      value={currentBatch.recipientName || ''}
+                      onChange={e => setCurrentBatch({...currentBatch, recipientName: e.target.value})}
+                      placeholder="Nombre de quien recibe"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">DNI de quien recibe</label>
+                    <input 
+                      type="text"
+                      inputMode="numeric"
+                      className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-xs"
+                      value={currentBatch.recipientDni || currentBatch.clientDni || ''}
+                      onChange={e => setCurrentBatch({...currentBatch, recipientDni: e.target.value, clientDni: e.target.value})}
+                      placeholder="DNI de quien recibe"
+                    />
+                  </div>
+                </div>
+
+                {/* Digital Signature Action Buttons */}
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSigTarget('dispatcher');
+                      setSigModalOpen(true);
+                    }}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                      currentBatch.dispatcherSignature 
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700' 
+                        : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <FileText size={14} />
+                    {currentBatch.dispatcherSignature ? 'Firma Despacho ✓' : 'Firmar Despacho'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSigTarget('client');
+                      setSigModalOpen(true);
+                    }}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                      currentBatch.clientSignature 
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700' 
+                        : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <FileText size={14} />
+                    {currentBatch.clientSignature ? 'Firma Recibió ✓' : 'Firmar Recibió'}
+                  </button>
                 </div>
               </div>
 
@@ -891,6 +984,21 @@ const BatchList: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Digital Signature Modal */}
+      <SignatureModal
+        isOpen={sigModalOpen}
+        onClose={() => setSigModalOpen(false)}
+        title={sigTarget === 'dispatcher' ? "Firma Responsable Despacho" : "Firma Recibió / Cliente"}
+        initialSignature={sigTarget === 'dispatcher' ? currentBatch.dispatcherSignature : currentBatch.clientSignature}
+        onSave={(dataUrl) => {
+          if (sigTarget === 'dispatcher') {
+            setCurrentBatch(prev => ({ ...prev, dispatcherSignature: dataUrl }));
+          } else {
+            setCurrentBatch(prev => ({ ...prev, clientSignature: dataUrl }));
+          }
+        }}
+      />
     </div>
   );
 };

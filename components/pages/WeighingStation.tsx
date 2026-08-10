@@ -11,6 +11,7 @@ import {
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { AuthContext } from '../../App';
+import { SignatureModal } from '../common/SignatureModal';
 
 const WeighingStation: React.FC = () => {
   const { mode, batchId } = useParams<{ mode: string; batchId?: string }>();
@@ -43,6 +44,10 @@ const WeighingStation: React.FC = () => {
   const [newClientName, setNewClientName] = useState('');
   const [targetCrates, setTargetCrates] = useState<string>(''); 
   const [newClientBirdsPerCrate, setNewClientBirdsPerCrate] = useState('10');
+  const [newRecipientName, setNewRecipientName] = useState('');
+  const [newRecipientDni, setNewRecipientDni] = useState('');
+  const [newClientSignature, setNewClientSignature] = useState('');
+  const [sigModalOpen, setSigModalOpen] = useState(false);
 
   const [weightInput, setWeightInput] = useState('');
   const [qtyInput, setQtyInput] = useState('');
@@ -221,11 +226,17 @@ const WeighingStation: React.FC = () => {
       setNewClientName(order.clientName);
       setTargetCrates(order.targetCrates?.toString() || '');
       setNewClientBirdsPerCrate(order.birdsPerCrate?.toString() || '10');
+      setNewRecipientName(order.recipientName || '');
+      setNewRecipientDni(order.recipientDni || order.clientDni || '');
+      setNewClientSignature(order.clientSignature || '');
     } else {
       setEditingOrderId(null);
       setNewClientName('');
       setTargetCrates('');
       setNewClientBirdsPerCrate('10');
+      setNewRecipientName('');
+      setNewRecipientDni('');
+      setNewClientSignature('');
     }
     setShowClientModal(true);
   };
@@ -301,6 +312,10 @@ const WeighingStation: React.FC = () => {
               clientName: newClientName, 
               targetCrates: target, 
               birdsPerCrate: birds, 
+              recipientName: newRecipientName,
+              recipientDni: newRecipientDni,
+              clientDni: newRecipientDni || existing.clientDni,
+              clientSignature: newClientSignature || existing.clientSignature,
               records: updatedRecords,
               date: existing.date || selectedDate 
           };
@@ -322,6 +337,10 @@ const WeighingStation: React.FC = () => {
         date: selectedDate, // Store explicit selected date
         targetCrates: target, 
         birdsPerCrate: birds,
+        recipientName: newRecipientName,
+        recipientDni: newRecipientDni,
+        clientDni: newRecipientDni,
+        clientSignature: newClientSignature,
         pricePerKg: 0, 
         status: 'OPEN', 
         records: [], 
@@ -832,49 +851,50 @@ const WeighingStation: React.FC = () => {
     doc.setFont("helvetica", "bold");
     doc.text(`ORIGEN DE CARGA:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text((batch?.origin || 'GRANJA / GALPÓN').toUpperCase(), 32, y);
+    doc.text((batch?.origin || 'GRANJA / GALPÓN').toUpperCase(), 34, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`NRO PLACA CAMIÓN:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text((batch?.truckPlate || 'S/N').toUpperCase(), 32, y);
+    doc.text((batch?.truckPlate || 'S/N').toUpperCase(), 34, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
-    doc.text(`CLIENTE:`, 5, y);
+    doc.text(`CLIENTE / RECIBE:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text(order.clientName.toUpperCase(), 20, y);
+    const cliDisplayName = order.recipientName || batch?.recipientName || order.clientName || 'PUBLICO GENERAL';
+    doc.text(cliDisplayName.toUpperCase(), 34, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`JABAS LLENAS:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text(`${t.qF} jabas`, 28, y);
+    doc.text(`${t.qF} jabas`, 34, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`JABAS VACÍAS:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text(`${t.qE} jabas`, 28, y);
+    doc.text(`${t.qE} jabas`, 34, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`POLLOS X JABA:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text(`${order.birdsPerCrate || 10} pollos/jaba`, 29, y);
+    doc.text(`${order.birdsPerCrate || 10} pollos/jaba`, 34, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`TIPO DE AVE:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text((order.birdType || batch?.birdType || 'POLLO DE CARNE').toUpperCase(), 27, y);
+    doc.text((order.birdType || batch?.birdType || 'POLLO DE CARNE').toUpperCase(), 34, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`SEXO DE AVE:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text((order.birdSex || batch?.birdSex || 'MIXTO').toUpperCase(), 27, y);
+    doc.text((order.birdSex || batch?.birdSex || 'MIXTO').toUpperCase(), 34, y);
     y += 5.5;
 
     // Single Table for DETALLE DE CARGA
@@ -976,29 +996,50 @@ const WeighingStation: React.FC = () => {
     }
 
     // Signatures Block
-    y += 12;
+    y += 8;
+
+    const dispSig = batch?.dispatcherSignature;
+    const clientSig = order.clientSignature || batch?.clientSignature;
+
+    if (dispSig) {
+      try {
+        doc.addImage(dispSig, 'PNG', 6, y - 9, 28, 9);
+      } catch (e) {
+        console.error("Error drawing dispatcher signature", e);
+      }
+    }
+    if (clientSig) {
+      try {
+        doc.addImage(clientSig, 'PNG', 45, y - 9, 28, 9);
+      } catch (e) {
+        console.error("Error drawing client signature", e);
+      }
+    }
+
     doc.setLineWidth(0.3);
     doc.setDrawColor(0);
 
     // Firma Responsable Despacho (Left)
     doc.line(5, y, 36, y);
-    doc.setFontSize(6.5).setFont("helvetica", "bold");
+    doc.setFontSize(6).setFont("helvetica", "bold");
     doc.text("RESPONSABLE DESPACHO", 20.5, y + 3, { align: 'center' });
     doc.setFont("helvetica", "normal");
     const dispName = batch?.dispatcherName || '..............................';
     const dispDni = batch?.dispatcherDni ? `DNI: ${batch.dispatcherDni}` : 'DNI: ....................';
-    doc.text(doc.splitTextToSize(dispName.toUpperCase(), 31), 20.5, y + 6, { align: 'center' });
-    doc.text(dispDni, 20.5, y + 9.5, { align: 'center' });
+    doc.text(doc.splitTextToSize(dispName.toUpperCase(), 31), 20.5, y + 5.8, { align: 'center' });
+    doc.text(dispDni, 20.5, y + 9, { align: 'center' });
 
-    // Firma Cliente (Right)
+    // Firma Cliente / Recibió (Right)
     doc.line(44, y, 75, y);
-    doc.setFontSize(6.5).setFont("helvetica", "bold");
-    doc.text("FIRMA DEL CLIENTE", 59.5, y + 3, { align: 'center' });
+    doc.setFontSize(6).setFont("helvetica", "bold");
+    const labelFirma = (order.recipientName || batch?.recipientName) ? "RECIBIDO POR" : "FIRMA DEL CLIENTE";
+    doc.text(labelFirma, 59.5, y + 3, { align: 'center' });
     doc.setFont("helvetica", "normal");
-    const cliName = order.clientName || '..............................';
-    const cliDni = order.clientDni || batch?.clientDni ? `DNI: ${order.clientDni || batch?.clientDni}` : 'DNI: ....................';
-    doc.text(doc.splitTextToSize(cliName.toUpperCase(), 31), 59.5, y + 6, { align: 'center' });
-    doc.text(cliDni, 59.5, y + 9.5, { align: 'center' });
+    const cliName = order.recipientName || batch?.recipientName || order.clientName || '..............................';
+    const cliDniVal = order.recipientDni || batch?.recipientDni || order.clientDni || batch?.clientDni;
+    const cliDni = cliDniVal ? `DNI: ${cliDniVal}` : 'DNI: ....................';
+    doc.text(doc.splitTextToSize(cliName.toUpperCase(), 31), 59.5, y + 5.8, { align: 'center' });
+    doc.text(cliDni, 59.5, y + 9, { align: 'center' });
 
     y += 15;
 
@@ -1996,6 +2037,46 @@ const WeighingStation: React.FC = () => {
                         inputMode="numeric"
                     />
                 </div>
+
+                <div className="border-t border-slate-100 pt-3 space-y-3">
+                  <p className="text-xs font-black text-slate-800 uppercase tracking-wider">Recibe Carga / Firma Digital</p>
+                  
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Quien recibe la carga (Si difiere del cliente)</label>
+                    <input 
+                      type="text"
+                      className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-xs"
+                      value={newRecipientName}
+                      onChange={e => setNewRecipientName(e.target.value)}
+                      placeholder="Nombre de quien recibe"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">DNI de quien recibe / cliente</label>
+                    <input 
+                      type="text"
+                      inputMode="numeric"
+                      className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-900 focus:border-blue-500 focus:bg-white outline-none transition-all text-xs"
+                      value={newRecipientDni}
+                      onChange={e => setNewRecipientDni(e.target.value)}
+                      placeholder="DNI de quien recibe"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setSigModalOpen(true)}
+                    className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border text-xs font-bold transition-all ${
+                      newClientSignature 
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700' 
+                        : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <FileText size={16} />
+                    {newClientSignature ? 'Firma Digital de Cliente Guardada ✓' : 'Capturar Firma Digital del Cliente'}
+                  </button>
+                </div>
               </div>
               <div className="mt-8 flex justify-end space-x-3">
                 <button onClick={() => setShowClientModal(false)} className="text-slate-500 font-bold hover:text-slate-800 px-4 py-2 hover:bg-slate-100 rounded-lg transition-colors">Cancelar</button>
@@ -2178,6 +2259,15 @@ const WeighingStation: React.FC = () => {
                 </div>
             </div>
         )}
+
+        {/* Digital Signature Modal for Client/Recipient */}
+        <SignatureModal
+          isOpen={sigModalOpen}
+          onClose={() => setSigModalOpen(false)}
+          title="Firma Digital - Cliente / Recibe"
+          initialSignature={newClientSignature}
+          onSave={(dataUrl) => setNewClientSignature(dataUrl)}
+        />
     </div>
   );
 };
