@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState, useContext } from 'react';
 import { getBatches, getOrders, getConfig, saveOrder, resetApp, getVisibleUserIds } from '../../services/storage';
+import { addLogoToPdf } from '../../services/pdfHelper';
 import { Batch, ClientOrder, WeighingType, UserRole, WeighingRecord } from '../../types';
 import { 
   ChevronDown, ChevronUp, Package, ShoppingCart, List, Printer, 
@@ -148,8 +149,7 @@ const Reports: React.FC = () => {
     
     // Header
     if (config.logoUrl) {
-        doc.addImage(config.logoUrl, 'PNG', 25, y, 30, 30);
-        y += 35;
+        y = addLogoToPdf(doc, config.logoUrl, { maxWidth: 35, maxHeight: 22, y });
     }
 
     doc.setFontSize(14).setFont("helvetica", "bold");
@@ -362,10 +362,9 @@ const Reports: React.FC = () => {
     
     let y = 10;
     
-    // Header Logo
+    // Header Logo in natural aspect ratio
     if (config.logoUrl) {
-        doc.addImage(config.logoUrl, 'PNG', 25, y, 30, 30);
-        y += 35;
+        y = addLogoToPdf(doc, config.logoUrl, { maxWidth: 35, maxHeight: 22, y });
     }
 
     doc.setFontSize(14).setFont("helvetica", "bold");
@@ -393,50 +392,50 @@ const Reports: React.FC = () => {
     doc.setFont("helvetica", "bold");
     doc.text(`ORIGEN DE CARGA:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text((batch?.origin || 'GRANJA / GALPÓN').toUpperCase(), 32, y);
+    doc.text((batch?.origin || 'GRANJA / GALPÓN').toUpperCase(), 36, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`NRO PLACA CAMIÓN:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text((batch?.truckPlate || 'S/N').toUpperCase(), 32, y);
+    doc.text((batch?.truckPlate || 'S/N').toUpperCase(), 36, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`CLIENTE:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text(order.clientName.toUpperCase(), 20, y);
+    doc.text(order.clientName.toUpperCase(), 36, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`JABAS LLENAS:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text(`${t.qF} jabas`, 28, y);
+    doc.text(`${t.qF} jabas`, 36, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`JABAS VACÍAS:`, 5, y);
     doc.setFont("helvetica", "normal");
     const displayEmptyCrates = (batch?.emptyCrates !== undefined && batch?.emptyCrates !== null) ? batch.emptyCrates : t.qE;
-    doc.text(`${displayEmptyCrates} jabas`, 34, y);
+    doc.text(`${displayEmptyCrates} jabas`, 36, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`POLLOS X JABA:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text(`${order.birdsPerCrate || 10} pollos/jaba`, 34, y);
+    doc.text(`${order.birdsPerCrate || 10} pollos/jaba`, 36, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`TIPO DE AVE:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text((order.birdType || batch?.birdType || 'POLLO DE CARNE').toUpperCase(), 34, y);
+    doc.text((order.birdType || batch?.birdType || 'POLLO DE CARNE').toUpperCase(), 36, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`SEXO DE AVE:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text((order.birdSex || batch?.birdSex || 'MIXTO').toUpperCase(), 34, y);
+    doc.text((order.birdSex || batch?.birdSex || 'MIXTO').toUpperCase(), 36, y);
     y += 5.5;
 
     // Single Table for DETALLE DE CARGA
@@ -459,9 +458,9 @@ const Reports: React.FC = () => {
         theme: 'grid',
         styles: { fontSize: 7, cellPadding: 1.2 },
         columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: 28 },
-            1: { halign: 'center', cellWidth: 11 },
-            2: { halign: 'center', cellWidth: 12 },
+            0: { fontStyle: 'bold', cellWidth: 30 },
+            1: { halign: 'center', cellWidth: 10 },
+            2: { halign: 'center', cellWidth: 11 },
             3: { halign: 'right', cellWidth: 19 }
         },
         margin: { left: 5, right: 5 }
@@ -490,8 +489,8 @@ const Reports: React.FC = () => {
         theme: 'grid',
         styles: { fontSize: 7, cellPadding: 1.2 },
         columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: 44 },
-            1: { halign: 'right', cellWidth: 26 }
+            0: { fontStyle: 'bold', cellWidth: 46 },
+            1: { halign: 'right', cellWidth: 24 }
         },
         margin: { left: 5, right: 5 }
     });
@@ -591,7 +590,7 @@ const Reports: React.FC = () => {
     
     // Header Text
     if (config.logoUrl) {
-        doc.addImage(config.logoUrl, 'PNG', 14, 10, 25, 25);
+        addLogoToPdf(doc, config.logoUrl, { maxWidth: 28, maxHeight: 28, defaultX: 14, y: 8 });
     }
 
     doc.setTextColor(255, 255, 255);
@@ -714,8 +713,7 @@ const Reports: React.FC = () => {
     let y = 10;
     
     if (config.logoUrl) {
-        doc.addImage(config.logoUrl, 'PNG', 25, y, 30, 30);
-        y += 35;
+        y = addLogoToPdf(doc, config.logoUrl, { maxWidth: 35, maxHeight: 22, y });
     }
 
     doc.setFontSize(14).setFont("helvetica", "bold");
@@ -808,7 +806,7 @@ Gracias por su preferencia!`;
     
     // Header Text
     if (config.logoUrl) {
-        doc.addImage(config.logoUrl, 'PNG', 14, 8, 24, 24);
+        addLogoToPdf(doc, config.logoUrl, { maxWidth: 28, maxHeight: 28, defaultX: 14, y: 6 });
     }
 
     doc.setTextColor(255, 255, 255);

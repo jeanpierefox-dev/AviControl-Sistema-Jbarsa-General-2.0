@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Batch, WeighingType, UserRole, ClientOrder } from '../../types';
 import { getBatches, saveBatch, deleteBatch, getOrdersByBatch, getVisibleUserIds, getConfig } from '../../services/storage';
+import { addLogoToPdf } from '../../services/pdfHelper';
 import { Plus, Trash2, Edit, Scale, Calendar, Box, Activity, FileText, Receipt } from 'lucide-react';
 import { AuthContext } from '../../App';
 import { jsPDF } from 'jspdf';
@@ -70,7 +71,7 @@ const BatchList: React.FC = () => {
       name: currentBatch.name,
       date: dateStr,
       totalCratesLimit: Number(currentBatch.totalCratesLimit),
-      emptyCrates: currentBatch.emptyCrates ? Number(currentBatch.emptyCrates) : undefined,
+      emptyCrates: (currentBatch.emptyCrates !== undefined && currentBatch.emptyCrates !== null && (currentBatch.emptyCrates as any) !== '') ? Number(currentBatch.emptyCrates) : undefined,
       birdType: currentBatch.birdType || 'Pollo de Carne',
       birdSex: currentBatch.birdSex || 'Mixto',
       origin: currentBatch.origin || '',
@@ -146,10 +147,9 @@ const BatchList: React.FC = () => {
         const config = getConfig();
         let y = 10;
         
-        // Header Logo
+        // Header Logo in natural aspect ratio
         if (config.logoUrl) {
-            doc.addImage(config.logoUrl, 'PNG', 25, y, 30, 30);
-            y += 35;
+            y = addLogoToPdf(doc, config.logoUrl, { maxWidth: 35, maxHeight: 22, y });
         }
 
         doc.setFontSize(14).setFont("helvetica", "bold");
@@ -222,51 +222,51 @@ const BatchList: React.FC = () => {
         doc.setFont("helvetica", "bold");
         doc.text(`ORIGEN DE CARGA:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text((batch.origin || 'GRANJA / GALPÓN').toUpperCase(), 34, y);
+        doc.text((batch.origin || 'GRANJA / GALPÓN').toUpperCase(), 36, y);
         y += 4;
 
         doc.setFont("helvetica", "bold");
         doc.text(`NRO PLACA CAMIÓN:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text((batch.truckPlate || 'S/N').toUpperCase(), 34, y);
+        doc.text((batch.truckPlate || 'S/N').toUpperCase(), 36, y);
         y += 4;
 
         doc.setFont("helvetica", "bold");
         doc.text(`CLIENTE / RECIBE:`, 5, y);
         doc.setFont("helvetica", "normal");
         const clientOrRecipName = batch.recipientName || batch.name || 'PUBLICO GENERAL';
-        doc.text(clientOrRecipName.toUpperCase(), 34, y);
+        doc.text(clientOrRecipName.toUpperCase(), 36, y);
         y += 4;
 
         doc.setFont("helvetica", "bold");
         doc.text(`JABAS LLENAS:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text(`${totalFullCrates} jabas`, 34, y);
+        doc.text(`${totalFullCrates} jabas`, 36, y);
         y += 4;
 
         doc.setFont("helvetica", "bold");
         doc.text(`JABAS VACÍAS:`, 5, y);
         doc.setFont("helvetica", "normal");
         const displayEmptyCrates = (batch.emptyCrates !== undefined && batch.emptyCrates !== null) ? batch.emptyCrates : totalEmptyCrates;
-        doc.text(`${displayEmptyCrates} jabas`, 34, y);
+        doc.text(`${displayEmptyCrates} jabas`, 36, y);
         y += 4;
 
         doc.setFont("helvetica", "bold");
         doc.text(`POLLOS X JABA:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text(`${avgBirdsPerCrate.toFixed(1)} pollos/jaba (prom)`, 34, y);
+        doc.text(`${avgBirdsPerCrate.toFixed(1)} pollos/jaba (prom)`, 36, y);
         y += 4;
 
         doc.setFont("helvetica", "bold");
         doc.text(`TIPO DE AVE:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text((batch.birdType || 'POLLO DE CARNE').toUpperCase(), 34, y);
+        doc.text((batch.birdType || 'POLLO DE CARNE').toUpperCase(), 36, y);
         y += 4;
 
         doc.setFont("helvetica", "bold");
         doc.text(`SEXO DE AVE:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text((batch.birdSex || 'MIXTO').toUpperCase(), 34, y);
+        doc.text((batch.birdSex || 'MIXTO').toUpperCase(), 36, y);
         y += 5.5;
 
         // Single Table for DETALLE DE CARGA
@@ -287,9 +287,9 @@ const BatchList: React.FC = () => {
             theme: 'grid',
             styles: { fontSize: 7, cellPadding: 1.2 },
             columnStyles: {
-                0: { fontStyle: 'bold', cellWidth: 28 },
-                1: { halign: 'center', cellWidth: 11 },
-                2: { halign: 'center', cellWidth: 12 },
+                0: { fontStyle: 'bold', cellWidth: 30 },
+                1: { halign: 'center', cellWidth: 10 },
+                2: { halign: 'center', cellWidth: 11 },
                 3: { halign: 'right', cellWidth: 19 }
             },
             margin: { left: 5, right: 5 }
@@ -312,8 +312,8 @@ const BatchList: React.FC = () => {
             theme: 'grid',
             styles: { fontSize: 7, cellPadding: 1.2 },
             columnStyles: {
-                0: { fontStyle: 'bold', cellWidth: 44 },
-                1: { halign: 'right', cellWidth: 26 }
+                0: { fontStyle: 'bold', cellWidth: 46 },
+                1: { halign: 'right', cellWidth: 24 }
             },
             margin: { left: 5, right: 5 }
         });
@@ -430,10 +430,9 @@ const BatchList: React.FC = () => {
         const config = getConfig();
         let y = 10;
         
-        // Header
+        // Header Logo in natural aspect ratio
         if (config.logoUrl) {
-            doc.addImage(config.logoUrl, 'PNG', 25, y, 30, 30);
-            y += 35;
+            y = addLogoToPdf(doc, config.logoUrl, { maxWidth: 35, maxHeight: 22, y });
         }
 
         doc.setFontSize(14).setFont("helvetica", "bold");
@@ -510,8 +509,8 @@ const BatchList: React.FC = () => {
                 ['PESO NETO TOTAL:', `${netWeight.toFixed(2)} kg`]
             ],
             theme: 'grid',
-            styles: { fontSize: 8, cellPadding: 1.5 },
-            columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40 }, 1: { halign: 'right', cellWidth: 30 } },
+            styles: { fontSize: 7.5, cellPadding: 1.2 },
+            columnStyles: { 0: { fontStyle: 'bold', cellWidth: 42 }, 1: { halign: 'right', cellWidth: 28 } },
             margin: { left: 5, right: 5 }
         });
         y = (doc as any).lastAutoTable.finalY + 8;

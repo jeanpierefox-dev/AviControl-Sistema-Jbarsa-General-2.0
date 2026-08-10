@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { WeighingType, ClientOrder, WeighingRecord, UserRole } from '../../types';
 import { getOrders, saveOrder, getConfig, deleteOrder, getBatches, getVisibleUserIds, initCloudSync } from '../../services/storage';
+import { addLogoToPdf } from '../../services/pdfHelper';
 import { 
   ArrowLeft, Save, X, Eye, Package, PackageOpen, 
   User, Trash2, Box, UserPlus, Bird, Printer, Receipt, 
@@ -525,8 +526,7 @@ const WeighingStation: React.FC = () => {
     
     // Header
     if (config.logoUrl) {
-        doc.addImage(config.logoUrl, 'PNG', 25, y, 30, 30);
-        y += 35;
+        y = addLogoToPdf(doc, config.logoUrl, { maxWidth: 35, maxHeight: 22, y });
     }
 
     doc.setFontSize(14).setFont("helvetica", "bold");
@@ -720,8 +720,7 @@ const WeighingStation: React.FC = () => {
     
     // Header
     if (config.logoUrl) {
-        doc.addImage(config.logoUrl, 'PNG', 25, y, 30, 30);
-        y += 35;
+        y = addLogoToPdf(doc, config.logoUrl, { maxWidth: 35, maxHeight: 22, y });
     }
 
     doc.setFontSize(14).setFont("helvetica", "bold");
@@ -820,10 +819,9 @@ const WeighingStation: React.FC = () => {
     
     let y = 10;
     
-    // Header Logo
+    // Header Logo in natural aspect ratio
     if (config.logoUrl) {
-        doc.addImage(config.logoUrl, 'PNG', 25, y, 30, 30);
-        y += 35;
+        y = addLogoToPdf(doc, config.logoUrl, { maxWidth: 35, maxHeight: 22, y });
     }
 
     doc.setFontSize(14).setFont("helvetica", "bold");
@@ -851,51 +849,51 @@ const WeighingStation: React.FC = () => {
     doc.setFont("helvetica", "bold");
     doc.text(`ORIGEN DE CARGA:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text((batch?.origin || 'GRANJA / GALPÓN').toUpperCase(), 34, y);
+    doc.text((batch?.origin || 'GRANJA / GALPÓN').toUpperCase(), 36, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`NRO PLACA CAMIÓN:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text((batch?.truckPlate || 'S/N').toUpperCase(), 34, y);
+    doc.text((batch?.truckPlate || 'S/N').toUpperCase(), 36, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`CLIENTE / RECIBE:`, 5, y);
     doc.setFont("helvetica", "normal");
     const cliDisplayName = order.recipientName || batch?.recipientName || order.clientName || 'PUBLICO GENERAL';
-    doc.text(cliDisplayName.toUpperCase(), 34, y);
+    doc.text(cliDisplayName.toUpperCase(), 36, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`JABAS LLENAS:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text(`${t.qF} jabas`, 34, y);
+    doc.text(`${t.qF} jabas`, 36, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`JABAS VACÍAS:`, 5, y);
     doc.setFont("helvetica", "normal");
     const displayEmptyCrates = (batch?.emptyCrates !== undefined && batch?.emptyCrates !== null) ? batch.emptyCrates : t.qE;
-    doc.text(`${displayEmptyCrates} jabas`, 34, y);
+    doc.text(`${displayEmptyCrates} jabas`, 36, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`POLLOS X JABA:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text(`${order.birdsPerCrate || 10} pollos/jaba`, 34, y);
+    doc.text(`${order.birdsPerCrate || 10} pollos/jaba`, 36, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`TIPO DE AVE:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text((order.birdType || batch?.birdType || 'POLLO DE CARNE').toUpperCase(), 34, y);
+    doc.text((order.birdType || batch?.birdType || 'POLLO DE CARNE').toUpperCase(), 36, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`SEXO DE AVE:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text((order.birdSex || batch?.birdSex || 'MIXTO').toUpperCase(), 34, y);
+    doc.text((order.birdSex || batch?.birdSex || 'MIXTO').toUpperCase(), 36, y);
     y += 5.5;
 
     // Single Table for DETALLE DE CARGA
@@ -918,9 +916,9 @@ const WeighingStation: React.FC = () => {
         theme: 'grid',
         styles: { fontSize: 7, cellPadding: 1.2 },
         columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: 28 },
-            1: { halign: 'center', cellWidth: 11 },
-            2: { halign: 'center', cellWidth: 12 },
+            0: { fontStyle: 'bold', cellWidth: 30 },
+            1: { halign: 'center', cellWidth: 10 },
+            2: { halign: 'center', cellWidth: 11 },
             3: { halign: 'right', cellWidth: 19 }
         },
         margin: { left: 5, right: 5 }
@@ -949,8 +947,8 @@ const WeighingStation: React.FC = () => {
         theme: 'grid',
         styles: { fontSize: 7, cellPadding: 1.2 },
         columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: 44 },
-            1: { halign: 'right', cellWidth: 26 }
+            0: { fontStyle: 'bold', cellWidth: 46 },
+            1: { halign: 'right', cellWidth: 24 }
         },
         margin: { left: 5, right: 5 }
     });
@@ -1071,7 +1069,7 @@ const WeighingStation: React.FC = () => {
     
     // Header Text
     if (config.logoUrl) {
-        doc.addImage(config.logoUrl, 'PNG', 14, 10, 25, 25);
+        addLogoToPdf(doc, config.logoUrl, { maxWidth: 28, maxHeight: 28, defaultX: 14, y: 8 });
     }
 
     doc.setTextColor(255, 255, 255);
@@ -1196,8 +1194,7 @@ const WeighingStation: React.FC = () => {
     let y = 10;
     
     if (config.logoUrl) {
-        doc.addImage(config.logoUrl, 'PNG', 25, y, 30, 30);
-        y += 35;
+        y = addLogoToPdf(doc, config.logoUrl, { maxWidth: 35, maxHeight: 22, y });
     }
 
     doc.setFontSize(14).setFont("helvetica", "bold");
@@ -1286,7 +1283,7 @@ const WeighingStation: React.FC = () => {
     
     // Header Text
     if (config.logoUrl) {
-        doc.addImage(config.logoUrl, 'PNG', 14, 8, 24, 24);
+        addLogoToPdf(doc, config.logoUrl, { maxWidth: 28, maxHeight: 28, defaultX: 14, y: 6 });
     }
 
     doc.setTextColor(255, 255, 255);
