@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Batch, WeighingType, UserRole, ClientOrder } from '../../types';
 import { getBatches, saveBatch, deleteBatch, getOrdersByBatch, getVisibleUserIds, getConfig } from '../../services/storage';
-import { Plus, Trash2, Edit, Scale, Calendar, Box, Activity, FileText } from 'lucide-react';
+import { Plus, Trash2, Edit, Scale, Calendar, Box, Activity, FileText, Receipt } from 'lucide-react';
 import { AuthContext } from '../../App';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -107,6 +107,202 @@ const BatchList: React.FC = () => {
             chunked.push(array.slice(i, i + size));
         }
         return chunked;
+    };
+
+    const generateBatchSummaryTicket = () => {
+        const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 15000] }); 
+        const finalHeight = renderSummaryTicketContent(dummyDoc);
+        
+        const doc = new jsPDF({ unit: 'mm', format: [80, finalHeight] });
+        renderSummaryTicketContent(doc);
+        
+        const blob = doc.output('blob');
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Resumen_Lote_${batch.name}_${new Date().getTime()}.pdf`;
+        link.click();
+    };
+
+    const renderSummaryTicketContent = (doc: jsPDF) => {
+        const config = getConfig();
+        let y = 10;
+        
+        // Header Logo
+        if (config.logoUrl) {
+            doc.addImage(config.logoUrl, 'PNG', 25, y, 30, 30);
+            y += 35;
+        }
+
+        doc.setFontSize(14).setFont("helvetica", "bold");
+        const splitTitle = doc.splitTextToSize(config.companyName.toUpperCase(), 70);
+        splitTitle.forEach((line: string) => {
+            doc.text(line, 40, y, { align: 'center' });
+            y += 6;
+        });
+        
+        doc.setFontSize(10).setFont("helvetica", "bold");
+        doc.text("TICKET DE RESUMEN DE LOTE", 40, y, { align: 'center' });
+        y += 5;
+        
+        doc.setFontSize(8).setFont("helvetica", "italic");
+        doc.text(`FECHA: ${new Date().toLocaleString()}`, 40, y, { align: 'center' });
+        y += 5;
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.5);
+        doc.line(5, y, 75, y);
+        y += 5;
+
+        // Batch Info
+        doc.setFontSize(9).setFont("helvetica", "bold");
+        doc.text(`LOTE:`, 5, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(batch.name.toUpperCase(), 20, y);
+        y += 6;
+
+        // Calculate Totals by origin for mortality
+        let qM_Galpon = 0; let wM_Galpon = 0;
+        let qM_Acopio = 0; let wM_Acopio = 0;
+        let totalBirds = 0;
+        let totalAmount = 0;
+
+        orders.forEach(o => {
+            const records = o.records || [];
+            records.forEach(r => {
+                if (r.type === 'MORTALITY') {
+                    if ((r.origin || 'GALPON') === 'GALPON') {
+                        qM_Galpon += r.quantity; wM_Galpon += r.weight;
+                    } else {
+                        qM_Acopio += r.quantity; wM_Acopio += r.weight;
+                    }
+                }
+                if (r.type === 'FULL') {
+                    totalBirds += (r.birds !== undefined ? r.birds : (o.weighingMode === WeighingType.SOLO_POLLO ? r.quantity : r.quantity * 10));
+                }
+            });
+            
+            const fR = records.filter(r => r.type === 'FULL');
+            const eR = records.filter(r => r.type === 'EMPTY');
+            const mR = records.filter(r => r.type === 'MORTALITY');
+            const netO = o.weighingMode === WeighingType.SOLO_POLLO ? 
+                fR.reduce((a, b) => a + b.weight, 0) : 
+                fR.reduce((a, b) => a + b.weight, 0) - eR.reduce((a, b) => a + b.weight, 0) - mR.reduce((a, b) => a + b.weight, 0);
+            
+            totalAmount += netO * (o.pricePerKg || 0);
+        });
+
+        const avgNet = totalBirds > 0 ? netWeight / totalBirds : 0;
+        const avgMort = totalMort > 0 ? totalMortWeight / totalMort : 0;
+
+        // 1. Table for JABAS / CONTENEDORES
+        autoTable(doc, {
+            startY: y,
+            head: [[
+                { content: 'JABAS / CONTENEDORES', styles: { halign: 'left', fillColor: [220, 226, 230], textColor: 0 } },
+                { content: 'CANT.', styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } },
+                { content: 'PESO (KG)', styles: { halign: 'right', fillColor: [220, 226, 230], textColor: 0 } }
+            ]],
+            body: [
+                ['Jabas Llenas:', `${totalFullCrates}`, `${totalFullWeight.toFixed(2)} kg`],
+                ['Jabas Vacías:', `${totalEmptyCrates}`, `-${totalEmptyWeight.toFixed(2)} kg`]
+            ],
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 2 },
+            columnStyles: {
+                0: { fontStyle: 'bold', cellWidth: 32 },
+                1: { halign: 'center', cellWidth: 18 },
+                2: { halign: 'right', cellWidth: 20 }
+            },
+            margin: { left: 5, right: 5 }
+        });
+        y = (doc as any).lastAutoTable.finalY + 4;
+
+        // 2. Table for POLLOS (CANT Y PESO)
+        const pollosBody = [
+            ['Pollos Vivos:', `${totalBirds}`, `${netWeight.toFixed(2)} kg`],
+            ['Pollos Muertos:', `${totalMort}`, `-${totalMortWeight.toFixed(2)} kg`]
+        ];
+        if (qM_Galpon > 0) {
+            pollosBody.push(['  - Muertos Galpón:', `${qM_Galpon}`, `-${wM_Galpon.toFixed(2)} kg`]);
+        }
+        if (qM_Acopio > 0) {
+            pollosBody.push(['  - Muertos Acopio:', `${qM_Acopio}`, `-${wM_Acopio.toFixed(2)} kg`]);
+        }
+
+        autoTable(doc, {
+            startY: y,
+            head: [[
+                { content: 'POLLOS (CANT Y PESO)', styles: { halign: 'left', fillColor: [220, 226, 230], textColor: 0 } },
+                { content: 'CANT.', styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } },
+                { content: 'PESO (KG)', styles: { halign: 'right', fillColor: [220, 226, 230], textColor: 0 } }
+            ]],
+            body: pollosBody,
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 2 },
+            columnStyles: {
+                0: { fontStyle: 'bold', cellWidth: 32 },
+                1: { halign: 'center', cellWidth: 18 },
+                2: { halign: 'right', cellWidth: 20 }
+            },
+            margin: { left: 5, right: 5 }
+        });
+        y = (doc as any).lastAutoTable.finalY + 4;
+
+        // 3. Table for PROMEDIOS CALCULADOS
+        autoTable(doc, {
+            startY: y,
+            head: [[
+                { content: 'PROMEDIOS CALCULADOS', colSpan: 2, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0 } }
+            ]],
+            body: [
+                ['Prom. Peso Vivo (Llenas-Vacías):', `${avgNet.toFixed(2)} kg/p`],
+                ['Prom. Peso Pollo Muerto:', `${avgMort.toFixed(2)} kg/p`]
+            ],
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 2 },
+            columnStyles: {
+                0: { fontStyle: 'bold', cellWidth: 46 },
+                1: { halign: 'right', cellWidth: 24 }
+            },
+            margin: { left: 5, right: 5 }
+        });
+        y = (doc as any).lastAutoTable.finalY + 6;
+
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.5);
+        doc.line(5, y, 75, y);
+        y += 5;
+
+        // Totals Box
+        doc.setFontSize(9).setFont("helvetica", "normal");
+        doc.text("Peso Bruto Total:", 8, y); doc.text(`${totalFullWeight.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+        doc.text("Tara Total:", 8, y); doc.text(`-${totalEmptyWeight.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+        if (totalMortWeight > 0) {
+            doc.text("Merma Muertos:", 8, y); doc.text(`-${totalMortWeight.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+        }
+
+        doc.setFontSize(11).setFont("helvetica", "bold");
+        doc.text("PESO NETO VIVO TOTAL:", 8, y + 2);
+        doc.text(`${netWeight.toFixed(2)} kg`, 72, y + 2, { align: 'right' });
+        y += 10;
+
+        // Financials
+        if (totalAmount > 0) {
+            doc.setFillColor(15, 23, 42); // Slate 900
+            doc.rect(5, y, 70, 14, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(9).setFont("helvetica", "bold");
+            doc.text("VALOR TOTAL LOTE", 35, y + 8, { align: 'right' });
+            doc.setFontSize(12);
+            doc.text(`S/. ${totalAmount.toFixed(2)}`, 72, y + 9, { align: 'right' });
+            doc.setTextColor(0, 0, 0);
+            y += 20;
+        }
+
+        doc.setFontSize(8).setFont("helvetica", "italic");
+        doc.text("Resumen General de Lote", 40, y, { align: 'center' });
+
+        return y + 10;
     };
 
     const generateBatchTicket = () => {
@@ -347,13 +543,16 @@ const BatchList: React.FC = () => {
                      </p>
                  </div>
              </div>
-             {canEdit && (
-                <div className="flex space-x-2">
-                    <button onClick={generateBatchTicket} className="bg-slate-800 p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition-colors" title="Ticket Total Carga"><FileText size={14} /></button>
-                    <button onClick={() => { setCurrentBatch(batch); setShowModal(true); }} className="bg-slate-800 p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"><Edit size={14} /></button>
-                    <button onClick={() => handleDelete(batch.id)} className="bg-slate-800 p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-slate-700 transition-colors"><Trash2 size={14} /></button>
-                </div>
-             )}
+              <div className="flex space-x-1.5 items-center">
+                  <button onClick={generateBatchSummaryTicket} className="bg-indigo-600 p-1.5 rounded-lg text-white hover:bg-indigo-500 transition-colors" title="Ticket Resumen (General Lote)"><Receipt size={14} /></button>
+                  <button onClick={generateBatchTicket} className="bg-slate-800 p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition-colors" title="Ticket Carga (Detallado)"><FileText size={14} /></button>
+                  {canEdit && (
+                      <>
+                          <button onClick={() => { setCurrentBatch(batch); setShowModal(true); }} className="bg-slate-800 p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition-colors" title="Editar Lote"><Edit size={14} /></button>
+                          <button onClick={() => handleDelete(batch.id)} className="bg-slate-800 p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-slate-700 transition-colors" title="Eliminar Lote"><Trash2 size={14} /></button>
+                      </>
+                  )}
+              </div>
           </div>
 
           {/* Body */}
@@ -395,13 +594,32 @@ const BatchList: React.FC = () => {
                   </div>
               </div>
 
-              <button 
-                onClick={() => navigate(`/weigh/${WeighingType.BATCH}/${batch.id}`)}
-                className="w-full mt-6 bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl text-sm font-bold flex items-center justify-center transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-              >
-                <Scale size={18} className="mr-2" />
-                INGRESAR AL PESAJE
-              </button>
+              <div className="space-y-2 mt-4">
+                  <div className="grid grid-cols-2 gap-2">
+                      <button 
+                          onClick={generateBatchSummaryTicket}
+                          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 py-2.5 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95"
+                          title="Descargar Ticket de Resumen General del Lote"
+                      >
+                          <Receipt size={14} /> Ticket Resumen
+                      </button>
+                      <button 
+                          onClick={generateBatchTicket}
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 py-2.5 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95"
+                          title="Descargar Ticket Detallado de Carga"
+                      >
+                          <FileText size={14} /> Ticket Carga
+                      </button>
+                  </div>
+
+                  <button 
+                    onClick={() => navigate(`/weigh/${WeighingType.BATCH}/${batch.id}`)}
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl text-sm font-bold flex items-center justify-center transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                  >
+                    <Scale size={18} className="mr-2" />
+                    INGRESAR AL PESAJE
+                  </button>
+              </div>
           </div>
       </div>
     );
