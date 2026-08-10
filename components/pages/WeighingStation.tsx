@@ -568,7 +568,7 @@ const WeighingStation: React.FC = () => {
             body: [
                 mode !== WeighingType.SOLO_JABAS ? [mode === WeighingType.SOLO_POLLO ? 'Cant. Sacos:' : 'Jabas Llenas:', t.qF.toString()] : null,
                 mode !== WeighingType.SOLO_JABAS ? ['Total Pollos:', t.bF.toString()] : null,
-                mode === WeighingType.BATCH ? ['Jabas Vacías:', t.qE.toString()] : null,
+                mode === WeighingType.BATCH ? ['Jabas Vacías:', ((batch?.emptyCrates !== undefined && batch?.emptyCrates !== null) ? batch.emptyCrates : t.qE).toString()] : null,
                 t.qM_Galpon > 0 ? ['Muertos Galpón:', t.qM_Galpon.toString()] : null,
                 t.qM_Acopio > 0 ? ['Muertos Acopio:', t.qM_Acopio.toString()] : null,
                 mode !== WeighingType.SOLO_POLLO ? ['TOTAL MUERTOS:', t.qM.toString()] : null,
@@ -576,10 +576,10 @@ const WeighingStation: React.FC = () => {
                 mode !== WeighingType.SOLO_POLLO ? ['Prom. P. Muerto:', `${t.avgMort.toFixed(1)} kg`] : null
             ].filter(Boolean) as any,
             theme: 'grid',
-            styles: { fontSize: 8, cellPadding: 1.5 },
+            styles: { fontSize: 7.5, cellPadding: 1.2 },
             columnStyles: {
-                0: { fontStyle: 'bold', cellWidth: 40 },
-                1: { halign: 'right', cellWidth: 30 }
+                0: { fontStyle: 'bold', cellWidth: 42 },
+                1: { halign: 'right', cellWidth: 28 }
             },
             margin: { left: 5, right: 5 }
         });
@@ -876,7 +876,7 @@ const WeighingStation: React.FC = () => {
     doc.setFont("helvetica", "bold");
     doc.text(`JABAS VACÍAS:`, 5, y);
     doc.setFont("helvetica", "normal");
-    const displayEmptyCrates = (batch?.emptyCrates !== undefined && batch.emptyCrates > 0) ? batch.emptyCrates : t.qE;
+    const displayEmptyCrates = (batch?.emptyCrates !== undefined && batch?.emptyCrates !== null) ? batch.emptyCrates : t.qE;
     doc.text(`${displayEmptyCrates} jabas`, 34, y);
     y += 4;
 
@@ -916,12 +916,12 @@ const WeighingStation: React.FC = () => {
             ['Pollos Vivos:', `-`, `${pollosVivos}`, `${t.net.toFixed(2)} kg`]
         ],
         theme: 'grid',
-        styles: { fontSize: 7.5, cellPadding: 1.8 },
+        styles: { fontSize: 7, cellPadding: 1.2 },
         columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: 24 },
-            1: { halign: 'center', cellWidth: 12 },
-            2: { halign: 'center', cellWidth: 14 },
-            3: { halign: 'right', cellWidth: 20 }
+            0: { fontStyle: 'bold', cellWidth: 28 },
+            1: { halign: 'center', cellWidth: 11 },
+            2: { halign: 'center', cellWidth: 12 },
+            3: { halign: 'right', cellWidth: 19 }
         },
         margin: { left: 5, right: 5 }
     });
@@ -947,7 +947,7 @@ const WeighingStation: React.FC = () => {
             ['Prom. Peso Neto Vivo:', `${promPesoNetoVivo.toFixed(1)} kg/p`]
         ],
         theme: 'grid',
-        styles: { fontSize: 7.5, cellPadding: 1.8 },
+        styles: { fontSize: 7, cellPadding: 1.2 },
         columnStyles: {
             0: { fontStyle: 'bold', cellWidth: 44 },
             1: { halign: 'right', cellWidth: 26 }

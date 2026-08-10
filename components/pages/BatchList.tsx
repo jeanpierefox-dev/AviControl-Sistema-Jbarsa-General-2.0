@@ -247,7 +247,7 @@ const BatchList: React.FC = () => {
         doc.setFont("helvetica", "bold");
         doc.text(`JABAS VACÍAS:`, 5, y);
         doc.setFont("helvetica", "normal");
-        const displayEmptyCrates = (batch.emptyCrates !== undefined && batch.emptyCrates > 0) ? batch.emptyCrates : totalEmptyCrates;
+        const displayEmptyCrates = (batch.emptyCrates !== undefined && batch.emptyCrates !== null) ? batch.emptyCrates : totalEmptyCrates;
         doc.text(`${displayEmptyCrates} jabas`, 34, y);
         y += 4;
 
@@ -285,12 +285,12 @@ const BatchList: React.FC = () => {
                 ['Pollos Vivos:', `-`, `${pollosVivos}`, `${netWeight.toFixed(2)} kg`]
             ],
             theme: 'grid',
-            styles: { fontSize: 7.5, cellPadding: 1.8 },
+            styles: { fontSize: 7, cellPadding: 1.2 },
             columnStyles: {
-                0: { fontStyle: 'bold', cellWidth: 24 },
-                1: { halign: 'center', cellWidth: 12 },
-                2: { halign: 'center', cellWidth: 14 },
-                3: { halign: 'right', cellWidth: 20 }
+                0: { fontStyle: 'bold', cellWidth: 28 },
+                1: { halign: 'center', cellWidth: 11 },
+                2: { halign: 'center', cellWidth: 12 },
+                3: { halign: 'right', cellWidth: 19 }
             },
             margin: { left: 5, right: 5 }
         });
@@ -310,7 +310,7 @@ const BatchList: React.FC = () => {
                 ['Prom. Peso Neto Vivo:', `${promPesoNetoVivo.toFixed(1)} kg/p`]
             ],
             theme: 'grid',
-            styles: { fontSize: 7.5, cellPadding: 1.8 },
+            styles: { fontSize: 7, cellPadding: 1.2 },
             columnStyles: {
                 0: { fontStyle: 'bold', cellWidth: 44 },
                 1: { halign: 'right', cellWidth: 26 }
@@ -501,7 +501,7 @@ const BatchList: React.FC = () => {
             body: [
                 ['Total Jabas Llenas:', totalFullCrates.toString()],
                 ['Total Pollos:', totalBirds.toString()],
-                ['Total Jabas Vacías:', (batch.emptyCrates !== undefined && batch.emptyCrates > 0 ? batch.emptyCrates : totalEmptyCrates).toString()],
+                ['Total Jabas Vacías:', (batch.emptyCrates !== undefined && batch.emptyCrates !== null ? batch.emptyCrates : totalEmptyCrates).toString()],
                 ['Total Muertos:', totalMort.toString()],
                 ['  - Galpón:', qM_Galpon.toString()],
                 ['  - Acopio:', qM_Acopio.toString()],
@@ -682,7 +682,7 @@ const BatchList: React.FC = () => {
                       </div>
                       <div className="bg-orange-50 p-2 rounded-xl border border-orange-100">
                           <p className="text-[10px] font-bold text-orange-400 uppercase">Vacías</p>
-                          <p className="font-black text-slate-800 text-lg leading-none">{batch.emptyCrates !== undefined && batch.emptyCrates > 0 ? batch.emptyCrates : totalEmptyCrates}</p>
+                          <p className="font-black text-slate-800 text-lg leading-none">{batch.emptyCrates !== undefined && batch.emptyCrates !== null ? batch.emptyCrates : totalEmptyCrates}</p>
                            <p className="text-[10px] text-slate-500 font-bold mt-1">{totalEmptyWeight.toFixed(2)} kg</p>
                       </div>
                       <div className="bg-red-50 p-2 rounded-xl border border-red-100">

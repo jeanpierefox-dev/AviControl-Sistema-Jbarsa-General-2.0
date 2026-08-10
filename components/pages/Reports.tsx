@@ -191,7 +191,7 @@ const Reports: React.FC = () => {
             body: [
                 ['Jabas Llenas:', t.qF.toString()],
                 ['Total Pollos:', t.bF.toString()],
-                ['Jabas Vacías:', t.qE.toString()],
+                ['Jabas Vacías:', ((batch?.emptyCrates !== undefined && batch?.emptyCrates !== null) ? batch.emptyCrates : t.qE).toString()],
                 ['Pollos Muertos:', t.qM.toString()],
                 ['Prom. Peso Neto:', `${t.avgNet.toFixed(1)} kg`],
                 ['Prom. P. Muerto:', `${t.avgMort.toFixed(1)} kg`]
@@ -417,26 +417,26 @@ const Reports: React.FC = () => {
     doc.setFont("helvetica", "bold");
     doc.text(`JABAS VACÍAS:`, 5, y);
     doc.setFont("helvetica", "normal");
-    const displayEmptyCrates = (batch?.emptyCrates !== undefined && batch.emptyCrates > 0) ? batch.emptyCrates : t.qE;
-    doc.text(`${displayEmptyCrates} jabas`, 28, y);
+    const displayEmptyCrates = (batch?.emptyCrates !== undefined && batch?.emptyCrates !== null) ? batch.emptyCrates : t.qE;
+    doc.text(`${displayEmptyCrates} jabas`, 34, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`POLLOS X JABA:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text(`${order.birdsPerCrate || 10} pollos/jaba`, 29, y);
+    doc.text(`${order.birdsPerCrate || 10} pollos/jaba`, 34, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`TIPO DE AVE:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text((order.birdType || batch?.birdType || 'POLLO DE CARNE').toUpperCase(), 27, y);
+    doc.text((order.birdType || batch?.birdType || 'POLLO DE CARNE').toUpperCase(), 34, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
     doc.text(`SEXO DE AVE:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text((order.birdSex || batch?.birdSex || 'MIXTO').toUpperCase(), 27, y);
+    doc.text((order.birdSex || batch?.birdSex || 'MIXTO').toUpperCase(), 34, y);
     y += 5.5;
 
     // Single Table for DETALLE DE CARGA
@@ -457,12 +457,12 @@ const Reports: React.FC = () => {
             ['Pollos Vivos:', `-`, `${pollosVivos}`, `${t.net.toFixed(2)} kg`]
         ],
         theme: 'grid',
-        styles: { fontSize: 7.5, cellPadding: 1.8 },
+        styles: { fontSize: 7, cellPadding: 1.2 },
         columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: 24 },
-            1: { halign: 'center', cellWidth: 12 },
-            2: { halign: 'center', cellWidth: 14 },
-            3: { halign: 'right', cellWidth: 20 }
+            0: { fontStyle: 'bold', cellWidth: 28 },
+            1: { halign: 'center', cellWidth: 11 },
+            2: { halign: 'center', cellWidth: 12 },
+            3: { halign: 'right', cellWidth: 19 }
         },
         margin: { left: 5, right: 5 }
     });
@@ -488,7 +488,7 @@ const Reports: React.FC = () => {
             ['Prom. Peso Neto Vivo:', `${promPesoNetoVivo.toFixed(1)} kg/p`]
         ],
         theme: 'grid',
-        styles: { fontSize: 7.5, cellPadding: 1.8 },
+        styles: { fontSize: 7, cellPadding: 1.2 },
         columnStyles: {
             0: { fontStyle: 'bold', cellWidth: 44 },
             1: { halign: 'right', cellWidth: 26 }
@@ -633,7 +633,7 @@ const Reports: React.FC = () => {
         head: [['CONCEPTO', 'CANTIDAD', 'DETALLE', 'PESO TOTAL (KG)']],
         body: [
             ['Jabas Llenas (Bruto)', t.qF, `${t.bF} Pollos`, t.wF.toFixed(2)],
-            ['Jabas Vacías (Tara)', (batch?.emptyCrates !== undefined && batch.emptyCrates > 0 ? batch.emptyCrates : t.qE), '-', `-${t.wE.toFixed(2)}`],
+            ['Jabas Vacías (Tara)', (batch?.emptyCrates !== undefined && batch?.emptyCrates !== null ? batch.emptyCrates : t.qE), '-', `-${t.wE.toFixed(2)}`],
             ['Mortalidad (Pollos Muertos)', t.qM, '-', `-${t.wM.toFixed(2)}`],
             ['Promedio Peso Neto', '-', '-', `${t.avgNet.toFixed(1)} kg`],
             ['Promedio Peso Muerto', '-', '-', `${t.avgMort.toFixed(1)} kg`],
