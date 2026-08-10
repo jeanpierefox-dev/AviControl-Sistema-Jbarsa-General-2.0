@@ -267,19 +267,6 @@ const BatchList: React.FC = () => {
         doc.setFont("helvetica", "normal");
         doc.text((batch.birdSex || 'MIXTO').toUpperCase(), 34, y);
         y += 5.5;
-        y += 4;
-
-        doc.setFont("helvetica", "bold");
-        doc.text(`TIPO DE AVE:`, 5, y);
-        doc.setFont("helvetica", "normal");
-        doc.text((batch.birdType || 'POLLO DE CARNE').toUpperCase(), 27, y);
-        y += 4;
-
-        doc.setFont("helvetica", "bold");
-        doc.text(`SEXO DE AVE:`, 5, y);
-        doc.setFont("helvetica", "normal");
-        doc.text((batch.birdSex || 'MIXTO').toUpperCase(), 27, y);
-        y += 5.5;
 
         // Single Table for DETALLE DE CARGA
         autoTable(doc, {

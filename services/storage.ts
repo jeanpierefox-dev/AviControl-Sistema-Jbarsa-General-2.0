@@ -346,48 +346,52 @@ const startListeners = () => {
           const currentLocalRaw = localStorage.getItem(storageKey);
           const currentLocal: any[] = currentLocalRaw ? JSON.parse(currentLocalRaw) : [];
           
-          // Use cloud as the base, but look for fresher local items
-          const mergedData = cloudDataArray.map(cloudItem => {
-              const localItem = currentLocal.find(li => li.id === cloudItem.id);
-              if (!localItem) return cloudItem;
+          let mergedData: any[] = [];
 
-              // Check updatedAt if available (added to ensure reliability)
-              if (localItem.updatedAt && cloudItem.updatedAt) {
-                  if (localItem.updatedAt > cloudItem.updatedAt) return localItem;
-              }
+          if (cloudDataArray.length === 0 && currentLocal.length > 0) {
+              // Initial seed: if cloud is empty, upload local items to cloud
+              currentLocal.forEach(item => {
+                  const cleaned = cleanData(item);
+                  set(ref(db!, `${colName}/${item.id}`), cleaned).catch(err => {
+                      console.error(`Upload error for ${colName}:`, err);
+                  });
+              });
+              mergedData = currentLocal;
+          } else {
+              // Cloud has data: use cloud items as the source of truth
+              mergedData = cloudDataArray.map(cloudItem => {
+                  const localItem = currentLocal.find(li => li.id === cloudItem.id);
+                  if (!localItem) return cloudItem;
 
-              // Fallback records count heuristic for orders
-              if (colName === 'orders') {
-                  const cloudRC = (cloudItem.records || []).length;
-                  const localRC = (localItem.records || []).length;
-                  if (localRC > cloudRC) return localItem;
-              }
-              
-              return cloudItem;
-          });
+                  if (localItem.updatedAt && cloudItem.updatedAt && localItem.updatedAt > cloudItem.updatedAt) {
+                      return localItem;
+                  }
 
-          // Check if we have local-only items (initial upload scenario)
-          currentLocal.forEach(localItem => {
-              if (!cloudDataArray.some(ci => ci.id === localItem.id)) {
-                  mergedData.push(localItem);
-              }
-          });
+                  if (colName === 'orders') {
+                      const cloudRC = (cloudItem.records || []).length;
+                      const localRC = (localItem.records || []).length;
+                      if (localRC > cloudRC) return localItem;
+                  }
+                  
+                  return cloudItem;
+              });
+
+              // Also preserve local items that were created offline recently and not yet present in cloud
+              const now = Date.now();
+              currentLocal.forEach(localItem => {
+                  if (!cloudDataArray.some(ci => ci.id === localItem.id)) {
+                      if (localItem.updatedAt && (now - localItem.updatedAt < 120000)) {
+                          mergedData.push(localItem);
+                          set(ref(db!, `${colName}/${localItem.id}`), cleanData(localItem)).catch(() => {});
+                      }
+                  }
+              });
+          }
 
           const sortedMerged = [...mergedData].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
           const sortedLocal = [...currentLocal].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
           
           if (JSON.stringify(sortedMerged) !== JSON.stringify(sortedLocal)) {
-              // If cloud is empty but local has data, upload local data
-              if (cloudDataArray.length === 0 && currentLocal.length > 0) {
-                  currentLocal.forEach(item => {
-                      const cleaned = cleanData(item);
-                      set(ref(db!, `${colName}/${item.id}`), cleaned).catch(err => {
-                          console.error(`Upload error for ${colName}:`, err);
-                      });
-                  });
-                  return;
-              }
-
               localStorage.setItem(storageKey, JSON.stringify(mergedData));
               window.dispatchEvent(new Event(eventName));
           }
