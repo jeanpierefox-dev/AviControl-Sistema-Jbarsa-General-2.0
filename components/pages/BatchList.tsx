@@ -247,13 +247,14 @@ const BatchList: React.FC = () => {
         doc.setFont("helvetica", "bold");
         doc.text(`JABAS VACÍAS:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text(`${totalEmptyCrates} jabas`, 34, y);
+        const displayEmptyCrates = (batch.emptyCrates !== undefined && batch.emptyCrates > 0) ? batch.emptyCrates : totalEmptyCrates;
+        doc.text(`${displayEmptyCrates} jabas`, 34, y);
         y += 4;
 
         doc.setFont("helvetica", "bold");
         doc.text(`POLLOS X JABA:`, 5, y);
         doc.setFont("helvetica", "normal");
-        doc.text(`${avgBirdsPerCrate.toFixed(0)} pollos/jaba (prom)`, 34, y);
+        doc.text(`${avgBirdsPerCrate.toFixed(1)} pollos/jaba (prom)`, 34, y);
         y += 4;
 
         doc.setFont("helvetica", "bold");
@@ -279,7 +280,7 @@ const BatchList: React.FC = () => {
             ]],
             body: [
                 ['Jabas Llenas:', `${totalFullCrates}`, `${totalBirds}`, `${totalFullWeight.toFixed(2)} kg`],
-                ['Jabas Vacías:', `${totalEmptyCrates}`, `-`, `-${totalEmptyWeight.toFixed(2)} kg`],
+                ['Jabas Vacías:', `${displayEmptyCrates}`, `-`, `-${totalEmptyWeight.toFixed(2)} kg`],
                 ['Pollos Muertos:', `-`, `${totalMort}`, `-${totalMortWeight.toFixed(2)} kg`],
                 ['Pollos Vivos:', `-`, `${pollosVivos}`, `${netWeight.toFixed(2)} kg`]
             ],
@@ -302,11 +303,11 @@ const BatchList: React.FC = () => {
                 { content: 'PROMEDIOS CALCULADOS', colSpan: 2, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0 } }
             ]],
             body: [
-                ['Prom. Jaba Llena:', `${promJabaLlena.toFixed(2)} kg/p`],
-                ['Prom. Jaba Vacía:', `${promJabaVacia.toFixed(2)} kg/j`],
-                ['Prom. Pollo Total:', `${promPolloTotal.toFixed(2)} kg/p`],
-                ['Prom. Pollo Muerto:', `${promPolloMuerto.toFixed(2)} kg/p`],
-                ['Prom. Peso Neto Vivo:', `${promPesoNetoVivo.toFixed(2)} kg/p`]
+                ['Prom. Jaba Llena:', `${promJabaLlena.toFixed(1)} kg/p`],
+                ['Prom. Jaba Vacía:', `${promJabaVacia.toFixed(1)} kg/j`],
+                ['Prom. Pollo Total:', `${promPolloTotal.toFixed(1)} kg/p`],
+                ['Prom. Pollo Muerto:', `${promPolloMuerto.toFixed(1)} kg/p`],
+                ['Prom. Peso Neto Vivo:', `${promPesoNetoVivo.toFixed(1)} kg/p`]
             ],
             theme: 'grid',
             styles: { fontSize: 7.5, cellPadding: 1.8 },
@@ -500,12 +501,12 @@ const BatchList: React.FC = () => {
             body: [
                 ['Total Jabas Llenas:', totalFullCrates.toString()],
                 ['Total Pollos:', totalBirds.toString()],
-                ['Total Jabas Vacías:', totalEmptyCrates.toString()],
+                ['Total Jabas Vacías:', (batch.emptyCrates !== undefined && batch.emptyCrates > 0 ? batch.emptyCrates : totalEmptyCrates).toString()],
                 ['Total Muertos:', totalMort.toString()],
                 ['  - Galpón:', qM_Galpon.toString()],
                 ['  - Acopio:', qM_Acopio.toString()],
-                ['Prom. Peso Neto:', `${(totalBirds > 0 ? netWeight / totalBirds : 0).toFixed(2)} kg`],
-                ['Prom. P. Muerto:', `${(totalMort > 0 ? totalMortWeight / totalMort : 0).toFixed(2)} kg`],
+                ['Prom. Peso Neto:', `${(totalBirds > 0 ? netWeight / totalBirds : 0).toFixed(1)} kg`],
+                ['Prom. P. Muerto:', `${(totalMort > 0 ? totalMortWeight / totalMort : 0).toFixed(1)} kg`],
                 ['PESO NETO TOTAL:', `${netWeight.toFixed(2)} kg`]
             ],
             theme: 'grid',
@@ -681,7 +682,7 @@ const BatchList: React.FC = () => {
                       </div>
                       <div className="bg-orange-50 p-2 rounded-xl border border-orange-100">
                           <p className="text-[10px] font-bold text-orange-400 uppercase">Vacías</p>
-                          <p className="font-black text-slate-800 text-lg leading-none">{totalEmptyCrates}</p>
+                          <p className="font-black text-slate-800 text-lg leading-none">{batch.emptyCrates !== undefined && batch.emptyCrates > 0 ? batch.emptyCrates : totalEmptyCrates}</p>
                            <p className="text-[10px] text-slate-500 font-bold mt-1">{totalEmptyWeight.toFixed(2)} kg</p>
                       </div>
                       <div className="bg-red-50 p-2 rounded-xl border border-red-100">

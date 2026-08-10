@@ -193,8 +193,8 @@ const Reports: React.FC = () => {
                 ['Total Pollos:', t.bF.toString()],
                 ['Jabas Vacías:', t.qE.toString()],
                 ['Pollos Muertos:', t.qM.toString()],
-                ['Prom. Peso Neto:', `${t.avgNet.toFixed(2)} kg`],
-                ['Prom. P. Muerto:', `${t.avgMort.toFixed(2)} kg`]
+                ['Prom. Peso Neto:', `${t.avgNet.toFixed(1)} kg`],
+                ['Prom. P. Muerto:', `${t.avgMort.toFixed(1)} kg`]
             ],
             theme: 'grid',
             styles: { fontSize: 8, cellPadding: 1.5 },
@@ -275,8 +275,8 @@ const Reports: React.FC = () => {
                 ['Peso Bruto:', `${t.wF.toFixed(2)} kg`],
                 ['Tara Total:', `-${t.wE.toFixed(2)} kg`],
                 ['Mortalidad:', `-${t.wM.toFixed(2)} kg`],
-                ['Prom. P. Neto:', `${t.avgNet.toFixed(2)} kg`],
-                ['Prom. P. Muerto:', `${t.avgMort.toFixed(2)} kg`],
+                ['Prom. P. Neto:', `${t.avgNet.toFixed(1)} kg`],
+                ['Prom. P. Muerto:', `${t.avgMort.toFixed(1)} kg`],
                 ['PESO NETO:', `${t.net.toFixed(2)} kg`]
             ],
             theme: 'grid',
@@ -302,8 +302,8 @@ const Reports: React.FC = () => {
     doc.text("Tara Total:", 8, y); doc.text(`-${t.wE.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
     doc.text("Mortalidad:", 8, y); doc.text(`-${t.wM.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
     doc.setFontSize(8).setFont("helvetica", "italic");
-    doc.text("Prom. Peso Neto:", 8, y); doc.text(`${t.avgNet.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 4;
-    doc.text("Prom. P. Muerto:", 8, y); doc.text(`${t.avgMort.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+    doc.text("Prom. Peso Neto:", 8, y); doc.text(`${t.avgNet.toFixed(1)} kg`, 72, y, { align: 'right' }); y += 4;
+    doc.text("Prom. P. Muerto:", 8, y); doc.text(`${t.avgMort.toFixed(1)} kg`, 72, y, { align: 'right' }); y += 5;
     
     doc.setFontSize(11).setFont("helvetica", "bold");
     doc.text("PESO NETO:", 8, y + 2);
@@ -417,7 +417,8 @@ const Reports: React.FC = () => {
     doc.setFont("helvetica", "bold");
     doc.text(`JABAS VACÍAS:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text(`${t.qE} jabas`, 28, y);
+    const displayEmptyCrates = (batch?.emptyCrates !== undefined && batch.emptyCrates > 0) ? batch.emptyCrates : t.qE;
+    doc.text(`${displayEmptyCrates} jabas`, 28, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
@@ -451,7 +452,7 @@ const Reports: React.FC = () => {
         ]],
         body: [
             ['Jabas Llenas:', `${t.qF}`, `${t.bF}`, `${t.wF.toFixed(2)} kg`],
-            ['Jabas Vacías:', `${t.qE}`, `-`, `-${t.wE.toFixed(2)} kg`],
+            ['Jabas Vacías:', `${displayEmptyCrates}`, `-`, `-${t.wE.toFixed(2)} kg`],
             ['Pollos Muertos:', `-`, `${t.qM}`, `-${t.wM.toFixed(2)} kg`],
             ['Pollos Vivos:', `-`, `${pollosVivos}`, `${t.net.toFixed(2)} kg`]
         ],
@@ -480,11 +481,11 @@ const Reports: React.FC = () => {
             { content: 'PROMEDIOS CALCULADOS', colSpan: 2, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0 } }
         ]],
         body: [
-            ['Prom. Jaba Llena:', `${promJabaLlena.toFixed(2)} kg/p`],
-            ['Prom. Jaba Vacía:', `${promJabaVacia.toFixed(2)} kg/j`],
-            ['Prom. Pollo Total:', `${promPolloTotal.toFixed(2)} kg/p`],
-            ['Prom. Pollo Muerto:', `${promPolloMuerto.toFixed(2)} kg/p`],
-            ['Prom. Peso Neto Vivo:', `${promPesoNetoVivo.toFixed(2)} kg/p`]
+            ['Prom. Jaba Llena:', `${promJabaLlena.toFixed(1)} kg/p`],
+            ['Prom. Jaba Vacía:', `${promJabaVacia.toFixed(1)} kg/j`],
+            ['Prom. Pollo Total:', `${promPolloTotal.toFixed(1)} kg/p`],
+            ['Prom. Pollo Muerto:', `${promPolloMuerto.toFixed(1)} kg/p`],
+            ['Prom. Peso Neto Vivo:', `${promPesoNetoVivo.toFixed(1)} kg/p`]
         ],
         theme: 'grid',
         styles: { fontSize: 7.5, cellPadding: 1.8 },
@@ -632,10 +633,10 @@ const Reports: React.FC = () => {
         head: [['CONCEPTO', 'CANTIDAD', 'DETALLE', 'PESO TOTAL (KG)']],
         body: [
             ['Jabas Llenas (Bruto)', t.qF, `${t.bF} Pollos`, t.wF.toFixed(2)],
-            ['Jabas Vacías (Tara)', t.qE, '-', `-${t.wE.toFixed(2)}`],
+            ['Jabas Vacías (Tara)', (batch?.emptyCrates !== undefined && batch.emptyCrates > 0 ? batch.emptyCrates : t.qE), '-', `-${t.wE.toFixed(2)}`],
             ['Mortalidad (Pollos Muertos)', t.qM, '-', `-${t.wM.toFixed(2)}`],
-            ['Promedio Peso Neto', '-', '-', `${t.avgNet.toFixed(2)} kg`],
-            ['Promedio Peso Muerto', '-', '-', `${t.avgMort.toFixed(2)} kg`],
+            ['Promedio Peso Neto', '-', '-', `${t.avgNet.toFixed(1)} kg`],
+            ['Promedio Peso Muerto', '-', '-', `${t.avgMort.toFixed(1)} kg`],
             [{ content: 'PESO NETO FINAL', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold', fontSize: 11 } }, { content: t.net.toFixed(2), styles: { fontStyle: 'bold', fontSize: 11, fillColor: [240, 253, 244], textColor: [21, 128, 61] } }]
         ],
         theme: 'grid',

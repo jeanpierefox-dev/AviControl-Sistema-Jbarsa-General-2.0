@@ -572,8 +572,8 @@ const WeighingStation: React.FC = () => {
                 t.qM_Galpon > 0 ? ['Muertos Galpón:', t.qM_Galpon.toString()] : null,
                 t.qM_Acopio > 0 ? ['Muertos Acopio:', t.qM_Acopio.toString()] : null,
                 mode !== WeighingType.SOLO_POLLO ? ['TOTAL MUERTOS:', t.qM.toString()] : null,
-                mode !== WeighingType.SOLO_JABAS ? ['Prom. Peso Neto:', `${t.avgNet.toFixed(2)} kg`] : null,
-                mode !== WeighingType.SOLO_POLLO ? ['Prom. P. Muerto:', `${t.avgMort.toFixed(2)} kg`] : null
+                mode !== WeighingType.SOLO_JABAS ? ['Prom. Peso Neto:', `${t.avgNet.toFixed(1)} kg`] : null,
+                mode !== WeighingType.SOLO_POLLO ? ['Prom. P. Muerto:', `${t.avgMort.toFixed(1)} kg`] : null
             ].filter(Boolean) as any,
             theme: 'grid',
             styles: { fontSize: 8, cellPadding: 1.5 },
@@ -765,8 +765,8 @@ const WeighingStation: React.FC = () => {
             t.wM_Galpon > 0 ? ['Merma Galpón:', `-${t.wM_Galpon.toFixed(2)} kg`] : null,
             t.wM_Acopio > 0 ? ['Merma Acopio:', `-${t.wM_Acopio.toFixed(2)} kg`] : null,
             mode !== WeighingType.SOLO_POLLO ? ['TOTAL MERMA:', `-${t.wM.toFixed(2)} kg`] : null,
-            mode !== WeighingType.SOLO_JABAS ? ['Prom. P. Neto:', `${t.avgNet.toFixed(2)} kg`] : null,
-            mode !== WeighingType.SOLO_POLLO ? ['Prom. P. Muerto:', `${t.avgMort.toFixed(2)} kg`] : null,
+            mode !== WeighingType.SOLO_JABAS ? ['Prom. P. Neto:', `${t.avgNet.toFixed(1)} kg`] : null,
+            mode !== WeighingType.SOLO_POLLO ? ['Prom. P. Muerto:', `${t.avgMort.toFixed(1)} kg`] : null,
             mode !== WeighingType.SOLO_JABAS ? ['PESO NETO:', `${t.net.toFixed(2)} kg`] : null
         ].filter(Boolean) as any[],
         theme: 'grid',
@@ -876,7 +876,8 @@ const WeighingStation: React.FC = () => {
     doc.setFont("helvetica", "bold");
     doc.text(`JABAS VACÍAS:`, 5, y);
     doc.setFont("helvetica", "normal");
-    doc.text(`${t.qE} jabas`, 34, y);
+    const displayEmptyCrates = (batch?.emptyCrates !== undefined && batch.emptyCrates > 0) ? batch.emptyCrates : t.qE;
+    doc.text(`${displayEmptyCrates} jabas`, 34, y);
     y += 4;
 
     doc.setFont("helvetica", "bold");
@@ -910,7 +911,7 @@ const WeighingStation: React.FC = () => {
         ]],
         body: [
             ['Jabas Llenas:', `${t.qF}`, `${t.bF}`, `${t.wF.toFixed(2)} kg`],
-            ['Jabas Vacías:', `${t.qE}`, `-`, `-${t.wE.toFixed(2)} kg`],
+            ['Jabas Vacías:', `${displayEmptyCrates}`, `-`, `-${t.wE.toFixed(2)} kg`],
             ['Pollos Muertos:', `-`, `${t.qM}`, `-${t.wM.toFixed(2)} kg`],
             ['Pollos Vivos:', `-`, `${pollosVivos}`, `${t.net.toFixed(2)} kg`]
         ],
@@ -939,11 +940,11 @@ const WeighingStation: React.FC = () => {
             { content: 'PROMEDIOS CALCULADOS', colSpan: 2, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0 } }
         ]],
         body: [
-            ['Prom. Jaba Llena:', `${promJabaLlena.toFixed(2)} kg/p`],
-            ['Prom. Jaba Vacía:', `${promJabaVacia.toFixed(2)} kg/j`],
-            ['Prom. Pollo Total:', `${promPolloTotal.toFixed(2)} kg/p`],
-            ['Prom. Pollo Muerto:', `${promPolloMuerto.toFixed(2)} kg/p`],
-            ['Prom. Peso Neto Vivo:', `${promPesoNetoVivo.toFixed(2)} kg/p`]
+            ['Prom. Jaba Llena:', `${promJabaLlena.toFixed(1)} kg/p`],
+            ['Prom. Jaba Vacía:', `${promJabaVacia.toFixed(1)} kg/j`],
+            ['Prom. Pollo Total:', `${promPolloTotal.toFixed(1)} kg/p`],
+            ['Prom. Pollo Muerto:', `${promPolloMuerto.toFixed(1)} kg/p`],
+            ['Prom. Peso Neto Vivo:', `${promPesoNetoVivo.toFixed(1)} kg/p`]
         ],
         theme: 'grid',
         styles: { fontSize: 7.5, cellPadding: 1.8 },
