@@ -836,26 +836,48 @@ const WeighingStation: React.FC = () => {
     doc.text(`CLIENTE:`, 5, y);
     doc.setFont("helvetica", "normal");
     doc.text(order.clientName.toUpperCase(), 22, y);
+    y += 5;
+    doc.setFont("helvetica", "bold");
+    doc.text(`TIPO DE AVE:`, 5, y);
+    doc.setFont("helvetica", "normal");
+    doc.text((order.birdType || batch?.birdType || 'POLLO DE CARNE').toUpperCase(), 27, y);
+    y += 5;
+    doc.setFont("helvetica", "bold");
+    doc.text(`SEXO DE AVE:`, 5, y);
+    doc.setFont("helvetica", "normal");
+    doc.text((order.birdSex || batch?.birdSex || 'MIXTO').toUpperCase(), 27, y);
+    y += 5;
+    doc.setFont("helvetica", "bold");
+    doc.text(`POLLOS X JABA:`, 5, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(`${order.birdsPerCrate || 10} pollos/jaba`, 30, y);
+    y += 5;
+    doc.setFont("helvetica", "bold");
+    doc.text(`JABAS VACÍAS (TARAS):`, 5, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(`${t.qE} jabas`, 42, y);
     y += 6;
 
-    // 1. Table for JABAS & CONTENEDORES (Cantidad y Peso)
+    // 1. Table for JABAS & CONTENEDORES (Cantidad, Pollos y Peso)
     autoTable(doc, {
         startY: y,
         head: [[
             { content: 'JABAS / CONTENEDORES', styles: { halign: 'left', fillColor: [220, 226, 230], textColor: 0 } },
-            { content: 'CANT.', styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } },
+            { content: 'JABAS', styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } },
+            { content: 'POLLOS', styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } },
             { content: 'PESO (KG)', styles: { halign: 'right', fillColor: [220, 226, 230], textColor: 0 } }
         ]],
         body: [
-            ['Jabas Llenas:', `${t.qF}`, `${t.wF.toFixed(2)} kg`],
-            ['Jabas Vacías:', `${t.qE}`, `-${t.wE.toFixed(2)} kg`]
+            ['Jabas Llenas:', `${t.qF}`, `${t.bF}`, `${t.wF.toFixed(2)} kg`],
+            ['Jabas Vacías:', `${t.qE}`, `-`, `-${t.wE.toFixed(2)} kg`]
         ],
         theme: 'grid',
         styles: { fontSize: 8, cellPadding: 2 },
         columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: 32 },
-            1: { halign: 'center', cellWidth: 18 },
-            2: { halign: 'right', cellWidth: 20 }
+            0: { fontStyle: 'bold', cellWidth: 26 },
+            1: { halign: 'center', cellWidth: 12 },
+            2: { halign: 'center', cellWidth: 14 },
+            3: { halign: 'right', cellWidth: 18 }
         },
         margin: { left: 5, right: 5 }
     });
@@ -884,15 +906,25 @@ const WeighingStation: React.FC = () => {
     });
     y = (doc as any).lastAutoTable.finalY + 4;
 
-    // 3. Table for PROMEDIOS DE PESO
+    // 3. Table for PROMEDIOS CALCULADOS
+    const promJabasLlenas = t.qF > 0 ? t.wF / t.qF : 0;
+    const promJabasVacias = t.qE > 0 ? t.wE / t.qE : 0;
+    const promPolloBrutoTara = t.bF > 0 ? (t.wF - t.wE) / t.bF : 0;
+    const promPolloMuerto = t.qM > 0 ? t.wM / t.qM : 0;
+    const pollosRestantes = Math.max(0, t.bF - t.qM);
+    const promPesoNetoVivo = pollosRestantes > 0 ? t.net / pollosRestantes : 0;
+
     autoTable(doc, {
         startY: y,
         head: [[
             { content: 'PROMEDIOS CALCULADOS', colSpan: 2, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0 } }
         ]],
         body: [
-            ['Prom. Peso Pollo Vivo:', `${t.avgNet.toFixed(2)} kg/p`],
-            ['Prom. Peso Pollo Muerto:', `${t.avgMort.toFixed(2)} kg/p`]
+            ['Prom. Jaba Llena:', `${promJabasLlenas.toFixed(2)} kg/j`],
+            ['Prom. Jaba Vacía:', `${promJabasVacias.toFixed(2)} kg/j`],
+            ['Prom. Pollo (Llenas - Vacías):', `${promPolloBrutoTara.toFixed(2)} kg/p`],
+            ['Prom. Pollo Muerto:', `${promPolloMuerto.toFixed(2)} kg/p`],
+            [`Prom. Neto (${pollosRestantes}p rest.):`, `${promPesoNetoVivo.toFixed(2)} kg/p`]
         ],
         theme: 'grid',
         styles: { fontSize: 8, cellPadding: 2 },

@@ -37,6 +37,8 @@ export interface ClientOrder {
   date?: string; // Format YYYY-MM-DD
   targetCrates: number;
   birdsPerCrate?: number; // Default birds per crate for this order
+  birdType?: string; // e.g. 'Pollo de Carne'
+  birdSex?: string; // e.g. 'Mixto', 'Macho', 'Hembra'
   pricePerKg: number;
   status: 'OPEN' | 'CLOSED';
   records: WeighingRecord[];
@@ -61,6 +63,8 @@ export interface Batch {
   date?: string; // Format YYYY-MM-DD for easier display and filtering
   createdAt: number;
   totalCratesLimit: number; // Estimated capacity
+  birdType?: string;
+  birdSex?: string;
   status: 'ACTIVE' | 'ARCHIVED';
   createdBy?: string; // User ID
 }

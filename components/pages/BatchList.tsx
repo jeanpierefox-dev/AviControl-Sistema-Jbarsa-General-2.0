@@ -158,7 +158,7 @@ const BatchList: React.FC = () => {
         doc.text(`LOTE:`, 5, y);
         doc.setFont("helvetica", "normal");
         doc.text(batch.name.toUpperCase(), 20, y);
-        y += 6;
+        y += 5;
 
         // Calculate Totals by origin for mortality
         let qM_Galpon = 0; let wM_Galpon = 0;
@@ -191,27 +191,58 @@ const BatchList: React.FC = () => {
             totalAmount += netO * (o.pricePerKg || 0);
         });
 
-        const avgNet = totalBirds > 0 ? netWeight / totalBirds : 0;
-        const avgMort = totalMort > 0 ? totalMortWeight / totalMort : 0;
+        const avgBirdsPerCrate = totalFullCrates > 0 ? (totalBirds / totalFullCrates) : 10;
+        const promJabasLlenas = totalFullCrates > 0 ? totalFullWeight / totalFullCrates : 0;
+        const promJabasVacias = totalEmptyCrates > 0 ? totalEmptyWeight / totalEmptyCrates : 0;
+        const promPolloBrutoTara = totalBirds > 0 ? (totalFullWeight - totalEmptyWeight) / totalBirds : 0;
+        const promPolloMuerto = totalMort > 0 ? totalMortWeight / totalMort : 0;
+        const pollosRestantes = Math.max(0, totalBirds - totalMort);
+        const promPesoNetoVivo = pollosRestantes > 0 ? netWeight / pollosRestantes : 0;
+
+        doc.setFont("helvetica", "bold");
+        doc.text(`TIPO DE AVE:`, 5, y);
+        doc.setFont("helvetica", "normal");
+        doc.text((batch.birdType || 'POLLO DE CARNE').toUpperCase(), 27, y);
+        y += 5;
+
+        doc.setFont("helvetica", "bold");
+        doc.text(`SEXO DE AVE:`, 5, y);
+        doc.setFont("helvetica", "normal");
+        doc.text((batch.birdSex || 'MIXTO').toUpperCase(), 27, y);
+        y += 5;
+
+        doc.setFont("helvetica", "bold");
+        doc.text(`POLLOS X JABA:`, 5, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(`${avgBirdsPerCrate.toFixed(0)} pollos/jaba (prom)`, 30, y);
+        y += 5;
+
+        doc.setFont("helvetica", "bold");
+        doc.text(`JABAS VACÍAS (TARAS):`, 5, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(`${totalEmptyCrates} jabas`, 42, y);
+        y += 6;
 
         // 1. Table for JABAS / CONTENEDORES
         autoTable(doc, {
             startY: y,
             head: [[
                 { content: 'JABAS / CONTENEDORES', styles: { halign: 'left', fillColor: [220, 226, 230], textColor: 0 } },
-                { content: 'CANT.', styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } },
+                { content: 'JABAS', styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } },
+                { content: 'POLLOS', styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } },
                 { content: 'PESO (KG)', styles: { halign: 'right', fillColor: [220, 226, 230], textColor: 0 } }
             ]],
             body: [
-                ['Jabas Llenas:', `${totalFullCrates}`, `${totalFullWeight.toFixed(2)} kg`],
-                ['Jabas Vacías:', `${totalEmptyCrates}`, `-${totalEmptyWeight.toFixed(2)} kg`]
+                ['Jabas Llenas:', `${totalFullCrates}`, `${totalBirds}`, `${totalFullWeight.toFixed(2)} kg`],
+                ['Jabas Vacías:', `${totalEmptyCrates}`, `-`, `-${totalEmptyWeight.toFixed(2)} kg`]
             ],
             theme: 'grid',
             styles: { fontSize: 8, cellPadding: 2 },
             columnStyles: {
-                0: { fontStyle: 'bold', cellWidth: 32 },
-                1: { halign: 'center', cellWidth: 18 },
-                2: { halign: 'right', cellWidth: 20 }
+                0: { fontStyle: 'bold', cellWidth: 26 },
+                1: { halign: 'center', cellWidth: 12 },
+                2: { halign: 'center', cellWidth: 14 },
+                3: { halign: 'right', cellWidth: 18 }
             },
             margin: { left: 5, right: 5 }
         });
@@ -249,8 +280,11 @@ const BatchList: React.FC = () => {
                 { content: 'PROMEDIOS CALCULADOS', colSpan: 2, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0 } }
             ]],
             body: [
-                ['Prom. Peso Pollo Vivo:', `${avgNet.toFixed(2)} kg/p`],
-                ['Prom. Peso Pollo Muerto:', `${avgMort.toFixed(2)} kg/p`]
+                ['Prom. Jaba Llena:', `${promJabasLlenas.toFixed(2)} kg/j`],
+                ['Prom. Jaba Vacía:', `${promJabasVacias.toFixed(2)} kg/j`],
+                ['Prom. Pollo (Llenas - Vacías):', `${promPolloBrutoTara.toFixed(2)} kg/p`],
+                ['Prom. Pollo Muerto:', `${promPolloMuerto.toFixed(2)} kg/p`],
+                [`Prom. Neto (${pollosRestantes}p rest.):`, `${promPesoNetoVivo.toFixed(2)} kg/p`]
             ],
             theme: 'grid',
             styles: { fontSize: 8, cellPadding: 2 },
