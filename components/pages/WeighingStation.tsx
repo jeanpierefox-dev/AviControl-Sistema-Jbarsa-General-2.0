@@ -794,6 +794,166 @@ const WeighingStation: React.FC = () => {
     handlePDFOutput(doc, `Venta_${order.clientName}_${order.id.slice(-6)}.pdf`);
   };
 
+  const renderSummaryTicketContent = (doc: jsPDF, order: ClientOrder) => {
+    const t = getTotals(order);
+    const batch = getBatches().find(b => b.id === order.batchId);
+    const batchName = batch ? batch.name : (mode === WeighingType.SOLO_POLLO ? 'Venta de Sacos' : (mode === WeighingType.SOLO_JABAS ? 'Control Muertos' : 'Venta Directa'));
+    
+    let y = 10;
+    
+    // Header Logo
+    if (config.logoUrl) {
+        doc.addImage(config.logoUrl, 'PNG', 25, y, 30, 30);
+        y += 35;
+    }
+
+    doc.setFontSize(14).setFont("helvetica", "bold");
+    const splitTitle = doc.splitTextToSize(config.companyName.toUpperCase(), 70);
+    splitTitle.forEach((line: string) => {
+        doc.text(line, 40, y, { align: 'center' });
+        y += 6;
+    });
+    
+    doc.setFontSize(10).setFont("helvetica", "bold");
+    doc.text("TICKET DE RESUMEN", 40, y, { align: 'center' });
+    y += 5;
+    
+    doc.setFontSize(8).setFont("helvetica", "italic");
+    doc.text(`FECHA: ${new Date().toLocaleString()}`, 40, y, { align: 'center' });
+    y += 5;
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.5);
+    doc.line(5, y, 75, y);
+    y += 5;
+
+    // Batch & Client Info
+    doc.setFontSize(9).setFont("helvetica", "bold");
+    doc.text(`LOTE:`, 5, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(batchName.toUpperCase(), 20, y);
+    y += 5;
+    doc.setFont("helvetica", "bold");
+    doc.text(`CLIENTE:`, 5, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(order.clientName.toUpperCase(), 22, y);
+    y += 6;
+
+    // 1. Table for JABAS & CONTENEDORES (Cantidad y Peso)
+    autoTable(doc, {
+        startY: y,
+        head: [[
+            { content: 'JABAS / CONTENEDORES', styles: { halign: 'left', fillColor: [220, 226, 230], textColor: 0 } },
+            { content: 'CANT.', styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } },
+            { content: 'PESO (KG)', styles: { halign: 'right', fillColor: [220, 226, 230], textColor: 0 } }
+        ]],
+        body: [
+            ['Jabas Llenas:', `${t.qF}`, `${t.wF.toFixed(2)} kg`],
+            ['Jabas Vacías:', `${t.qE}`, `-${t.wE.toFixed(2)} kg`]
+        ],
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 2 },
+        columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 32 },
+            1: { halign: 'center', cellWidth: 18 },
+            2: { halign: 'right', cellWidth: 20 }
+        },
+        margin: { left: 5, right: 5 }
+    });
+    y = (doc as any).lastAutoTable.finalY + 4;
+
+    // 2. Table for POLLOS VIVOS Y MUERTOS (Cantidad y Peso)
+    autoTable(doc, {
+        startY: y,
+        head: [[
+            { content: 'POLLOS (CANT Y PESO)', styles: { halign: 'left', fillColor: [220, 226, 230], textColor: 0 } },
+            { content: 'CANT.', styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } },
+            { content: 'PESO (KG)', styles: { halign: 'right', fillColor: [220, 226, 230], textColor: 0 } }
+        ]],
+        body: [
+            ['Pollos Vivos:', `${t.bF}`, `${t.net.toFixed(2)} kg`],
+            ['Pollos Muertos:', `${t.qM}`, `-${t.wM.toFixed(2)} kg`]
+        ],
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 2 },
+        columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 32 },
+            1: { halign: 'center', cellWidth: 18 },
+            2: { halign: 'right', cellWidth: 20 }
+        },
+        margin: { left: 5, right: 5 }
+    });
+    y = (doc as any).lastAutoTable.finalY + 4;
+
+    // 3. Table for PROMEDIOS DE PESO
+    autoTable(doc, {
+        startY: y,
+        head: [[
+            { content: 'PROMEDIOS CALCULADOS', colSpan: 2, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: 0 } }
+        ]],
+        body: [
+            ['Prom. Peso Vivo (Llenas-Vacías):', `${t.avgNet.toFixed(2)} kg/p`],
+            ['Prom. Peso Pollo Muerto:', `${t.avgMort.toFixed(2)} kg/p`]
+        ],
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 2 },
+        columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 46 },
+            1: { halign: 'right', cellWidth: 24 }
+        },
+        margin: { left: 5, right: 5 }
+    });
+    y = (doc as any).lastAutoTable.finalY + 6;
+
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.5);
+    doc.line(5, y, 75, y);
+    y += 5;
+
+    // Totals Box
+    doc.setFontSize(9).setFont("helvetica", "normal");
+    doc.text("Peso Bruto Total:", 8, y); doc.text(`${t.wF.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+    doc.text("Tara Total:", 8, y); doc.text(`-${t.wE.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+    if (t.wM > 0) {
+        doc.text("Merma Muertos:", 8, y); doc.text(`-${t.wM.toFixed(2)} kg`, 72, y, { align: 'right' }); y += 5;
+    }
+
+    doc.setFontSize(11).setFont("helvetica", "bold");
+    doc.text("PESO NETO VIVO:", 8, y + 2);
+    doc.text(`${t.net.toFixed(2)} kg`, 72, y + 2, { align: 'right' });
+    y += 10;
+
+    // Financials
+    if (order.pricePerKg > 0) {
+        doc.setFontSize(9).setFont("helvetica", "bold");
+        doc.text(`PRECIO X KG: S/. ${order.pricePerKg.toFixed(2)}`, 5, y);
+        y += 6;
+        
+        doc.setFillColor(15, 23, 42); // Slate 900
+        doc.rect(5, y, 70, 14, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(9).setFont("helvetica", "bold");
+        doc.text("TOTAL A PAGAR", 35, y + 8, { align: 'right' });
+        doc.setFontSize(12);
+        doc.text(`S/. ${(t.net * order.pricePerKg).toFixed(2)}`, 72, y + 9, { align: 'right' });
+        doc.setTextColor(0, 0, 0);
+        y += 20;
+    }
+
+    doc.setFontSize(8).setFont("helvetica", "italic");
+    doc.text("¡Gracias por su preferencia!", 40, y, { align: 'center' });
+
+    return y + 10;
+  };
+
+  const generateSummaryTicketPDF = (order: ClientOrder) => {
+    const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 15000] });
+    const finalY = renderSummaryTicketContent(dummyDoc, order);
+    
+    const doc = new jsPDF({ unit: 'mm', format: [80, finalY] });
+    renderSummaryTicketContent(doc, order);
+    handlePDFOutput(doc, `Resumen_${order.clientName}_${order.id.slice(-6)}.pdf`);
+  };
+
   const generateDetailPDF = (order: ClientOrder) => {
     const t = getTotals(order);
     const batch = getBatches().find(b => b.id === order.batchId);
@@ -1479,14 +1639,23 @@ const WeighingStation: React.FC = () => {
                     </button>
                 )}
                  {isLocked && (
-                   <button 
-                      type="button"
-                      onClick={() => generateSalesTicketPDF(activeOrder)}
-                      className="flex-[2] bg-emerald-500 text-white p-3 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-xl hover:bg-emerald-400 active:scale-95 transition-all flex items-center justify-center gap-2"
-                   >
-                      <Receipt size={16} /> Ticket Venta
-                   </button>
-                )}
+                   <div className="flex-[2] flex gap-2">
+                     <button 
+                        type="button"
+                        onClick={() => generateSalesTicketPDF(activeOrder)}
+                        className="flex-1 bg-emerald-500 text-white p-3 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-xl hover:bg-emerald-400 active:scale-95 transition-all flex items-center justify-center gap-2"
+                     >
+                        <Receipt size={16} /> Ticket Venta
+                     </button>
+                     <button 
+                        type="button"
+                        onClick={() => generateSummaryTicketPDF(activeOrder)}
+                        className="flex-1 bg-indigo-600 text-white p-3 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-xl hover:bg-indigo-500 active:scale-95 transition-all flex items-center justify-center gap-2"
+                     >
+                        <FileText size={16} /> Resumen
+                     </button>
+                   </div>
+                 )}
               </div>
             </div>
           </div>
@@ -1911,30 +2080,36 @@ const WeighingStation: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="mt-8 flex flex-col md:flex-row gap-4 justify-end border-t border-slate-100 pt-6">
+                    <div className="mt-8 flex flex-col md:flex-row gap-2 md:gap-3 justify-end border-t border-slate-100 pt-6 flex-wrap">
                         <button 
                             onClick={() => generateWeighingTicketPDF(activeOrder)}
-                            className="w-full md:w-auto bg-white text-slate-900 border-2 border-slate-200 px-4 md:px-6 py-3 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-widest flex justify-center items-center gap-2 hover:bg-slate-50 transition-all shadow-sm active:scale-95"
+                            className="w-full md:w-auto bg-white text-slate-900 border-2 border-slate-200 px-3 md:px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest flex justify-center items-center gap-2 hover:bg-slate-50 transition-all shadow-sm active:scale-95"
                         >
-                            <Printer size={16} className="md:w-[18px] md:h-[18px]" /> Ticket Carga
+                            <Printer size={16} /> Ticket Carga
                         </button>
                         <button 
                             onClick={() => generateSalesTicketPDF(activeOrder)}
-                            className="w-full md:w-auto bg-slate-900 text-white px-4 md:px-6 py-3 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-widest flex justify-center items-center gap-2 hover:bg-slate-800 transition-all shadow-lg active:scale-95"
+                            className="w-full md:w-auto bg-slate-900 text-white px-3 md:px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest flex justify-center items-center gap-2 hover:bg-slate-800 transition-all shadow-lg active:scale-95"
                         >
-                            <Receipt size={16} className="md:w-[18px] md:h-[18px]" /> Ticket Venta
+                            <Receipt size={16} /> Ticket Venta
+                        </button>
+                        <button 
+                            onClick={() => generateSummaryTicketPDF(activeOrder)}
+                            className="w-full md:w-auto bg-indigo-600 text-white px-3 md:px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest flex justify-center items-center gap-2 hover:bg-indigo-500 transition-all shadow-lg active:scale-95"
+                        >
+                            <FileText size={16} /> Ticket Resumen
                         </button>
                         <button 
                             onClick={() => generateDetailPDF(activeOrder)}
-                            className="w-full md:w-auto bg-blue-600 text-white px-4 md:px-6 py-3 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-widest flex justify-center items-center gap-2 hover:bg-blue-500 transition-all shadow-lg shadow-blue-200 active:scale-95"
+                            className="w-full md:w-auto bg-blue-600 text-white px-3 md:px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest flex justify-center items-center gap-2 hover:bg-blue-500 transition-all shadow-lg shadow-blue-200 active:scale-95"
                         >
-                            <Download size={16} className="md:w-[18px] md:h-[18px]" /> Reporte A4
+                            <Download size={16} /> Reporte A4
                         </button>
                         <button 
                             onClick={() => generateLameTicketPDF(activeOrder)}
-                            className="w-full md:w-auto bg-orange-500 text-white px-4 md:px-6 py-3 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-widest flex justify-center items-center gap-2 hover:bg-orange-400 transition-all shadow-lg active:scale-95"
+                            className="w-full md:w-auto bg-orange-500 text-white px-3 md:px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest flex justify-center items-center gap-2 hover:bg-orange-400 transition-all shadow-lg active:scale-95"
                         >
-                            <Receipt size={16} className="md:w-[18px] md:h-[18px]" /> Ticket Cojos
+                            <Receipt size={16} /> Ticket Cojos
                         </button>
                     </div>
                 </div>
