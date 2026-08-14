@@ -62,6 +62,10 @@ export interface Payment {
   amount: number;
   timestamp: number;
   note?: string;
+  method?: 'EFECTIVO' | 'TRANSFERENCIA' | 'YAPE_PLIN' | 'DEPOSITO' | 'CHEQUE' | string;
+  operationNumber?: string;
+  registeredBy?: string;
+  registeredByName?: string;
 }
 
 export interface Batch {
