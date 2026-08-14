@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { WeighingType, ClientOrder, WeighingRecord, UserRole } from '../../types';
-import { getOrders, saveOrder, getConfig, deleteOrder, getBatches, getVisibleUserIds, initCloudSync } from '../../services/storage';
-import { addLogoToPdf } from '../../services/pdfHelper';
+import { getOrders, saveOrder, getConfig, deleteOrder, getBatches, getVisibleUserIds, initCloudSync, getEffectiveBranding } from '../../services/storage';
+import { addLogoToPdf, addAppWatermarkToPdf } from '../../services/pdfHelper';
 import { 
   ArrowLeft, Save, X, Eye, Package, PackageOpen, 
   User, Trash2, Box, UserPlus, Bird, Printer, Receipt, 
@@ -518,6 +518,8 @@ const WeighingStation: React.FC = () => {
   };
 
   const renderTicketContent = (doc: jsPDF, order: ClientOrder, isSalesTicket: boolean) => {
+    const branding = getEffectiveBranding(order, user);
+    addAppWatermarkToPdf(doc);
     const t = getTotals(order);
     const batch = getBatches().find(b => b.id === order.batchId);
     const batchName = batch ? batch.name : (mode === WeighingType.SOLO_POLLO ? 'Venta de Sacos' : (mode === WeighingType.SOLO_JABAS ? 'Control Muertos' : 'Venta Directa'));
@@ -525,12 +527,12 @@ const WeighingStation: React.FC = () => {
     let y = 10;
     
     // Header
-    if (config.logoUrl) {
-        y = addLogoToPdf(doc, config.logoUrl, { maxWidth: 35, maxHeight: 22, y });
+    if (branding.logoUrl) {
+        y = addLogoToPdf(doc, branding.logoUrl, { maxWidth: 35, maxHeight: 22, y });
     }
 
     doc.setFontSize(14).setFont("helvetica", "bold");
-    const splitTitle = doc.splitTextToSize(config.companyName.toUpperCase(), 70);
+    const splitTitle = doc.splitTextToSize(branding.companyName.toUpperCase(), 70);
     splitTitle.forEach((line: string) => {
         doc.text(line, 40, y, { align: 'center' });
         y += 6;
@@ -712,6 +714,8 @@ const WeighingStation: React.FC = () => {
   };
 
   const renderSalesTicketContent = (doc: jsPDF, order: ClientOrder) => {
+    const branding = getEffectiveBranding(order, user);
+    addAppWatermarkToPdf(doc);
     const t = getTotals(order);
     const batch = getBatches().find(b => b.id === order.batchId);
     const batchName = batch ? batch.name : (mode === WeighingType.SOLO_POLLO ? 'Venta de Sacos' : (mode === WeighingType.SOLO_JABAS ? 'Control Muertos' : 'Venta Directa'));
@@ -719,12 +723,12 @@ const WeighingStation: React.FC = () => {
     let y = 10;
     
     // Header
-    if (config.logoUrl) {
-        y = addLogoToPdf(doc, config.logoUrl, { maxWidth: 35, maxHeight: 22, y });
+    if (branding.logoUrl) {
+        y = addLogoToPdf(doc, branding.logoUrl, { maxWidth: 35, maxHeight: 22, y });
     }
 
     doc.setFontSize(14).setFont("helvetica", "bold");
-    const splitTitleVenta = doc.splitTextToSize(config.companyName.toUpperCase(), 70);
+    const splitTitleVenta = doc.splitTextToSize(branding.companyName.toUpperCase(), 70);
     splitTitleVenta.forEach((line: string) => {
         doc.text(line, 40, y, { align: 'center' });
         y += 6;
@@ -813,6 +817,8 @@ const WeighingStation: React.FC = () => {
   };
 
   const renderSummaryTicketContent = (doc: jsPDF, order: ClientOrder) => {
+    const branding = getEffectiveBranding(order, user);
+    addAppWatermarkToPdf(doc);
     const t = getTotals(order);
     const batch = getBatches().find(b => b.id === order.batchId);
     const batchName = batch ? batch.name : (mode === WeighingType.SOLO_POLLO ? 'Venta de Sacos' : (mode === WeighingType.SOLO_JABAS ? 'Control Muertos' : 'Venta Directa'));
@@ -820,12 +826,12 @@ const WeighingStation: React.FC = () => {
     let y = 10;
     
     // Header Logo in natural aspect ratio
-    if (config.logoUrl) {
-        y = addLogoToPdf(doc, config.logoUrl, { maxWidth: 35, maxHeight: 22, y });
+    if (branding.logoUrl) {
+        y = addLogoToPdf(doc, branding.logoUrl, { maxWidth: 35, maxHeight: 22, y });
     }
 
     doc.setFontSize(14).setFont("helvetica", "bold");
-    const splitTitle = doc.splitTextToSize(config.companyName.toUpperCase(), 70);
+    const splitTitle = doc.splitTextToSize(branding.companyName.toUpperCase(), 70);
     splitTitle.forEach((line: string) => {
         doc.text(line, 40, y, { align: 'center' });
         y += 6;
@@ -1058,23 +1064,25 @@ const WeighingStation: React.FC = () => {
   };
 
   const generateDetailPDF = (order: ClientOrder) => {
+    const branding = getEffectiveBranding(order, user);
     const t = getTotals(order);
     const batch = getBatches().find(b => b.id === order.batchId);
     const batchName = batch ? batch.name : 'Venta Directa';
     const doc = new jsPDF();
+    addAppWatermarkToPdf(doc);
     
     // Header Background
     doc.setFillColor(15, 23, 42); // Slate 900
     doc.rect(0, 0, 210, 45, 'F');
     
     // Header Text
-    if (config.logoUrl) {
-        addLogoToPdf(doc, config.logoUrl, { maxWidth: 28, maxHeight: 28, defaultX: 14, y: 8 });
+    if (branding.logoUrl) {
+        addLogoToPdf(doc, branding.logoUrl, { maxWidth: 28, maxHeight: 28, defaultX: 14, y: 8 });
     }
 
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(22).setFont("helvetica", "bold");
-    const splitTitle = doc.splitTextToSize(config.companyName.toUpperCase(), 180);
+    const splitTitle = doc.splitTextToSize(branding.companyName.toUpperCase(), 180);
     splitTitle.forEach((line: string, i: number) => {
         doc.text(line, 105, 20 + (i * 8), { align: 'center' });
     });
@@ -1276,19 +1284,22 @@ const WeighingStation: React.FC = () => {
     });
 
     const doc = new jsPDF('landscape');
+    addAppWatermarkToPdf(doc);
+    const currentBatch = getBatches().find(b => b.id === batchId);
+    const branding = getEffectiveBranding(currentBatch, user);
     
     // Header Background
     doc.setFillColor(15, 23, 42); // Slate 900
     doc.rect(0, 0, 297, 40, 'F');
     
     // Header Text
-    if (config.logoUrl) {
-        addLogoToPdf(doc, config.logoUrl, { maxWidth: 28, maxHeight: 28, defaultX: 14, y: 6 });
+    if (branding.logoUrl) {
+        addLogoToPdf(doc, branding.logoUrl, { maxWidth: 28, maxHeight: 28, defaultX: 14, y: 6 });
     }
 
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(20).setFont("helvetica", "bold");
-    doc.text(config.companyName.toUpperCase(), 148.5, 18, { align: 'center' });
+    doc.text(branding.companyName.toUpperCase(), 148.5, 18, { align: 'center' });
     
     doc.setFontSize(12).setFont("helvetica", "normal");
     doc.text("ESTADO DE CUENTA GENERAL DEL LOTE", 148.5, 28, { align: 'center' });
@@ -1298,8 +1309,7 @@ const WeighingStation: React.FC = () => {
     let y = 50;
     
     // Batch Info
-    const batch = getBatches().find(b => b.id === batchId);
-    const batchName = batch ? batch.name : 'Venta Directa';
+    const batchName = currentBatch ? currentBatch.name : 'Venta Directa';
 
     doc.setFontSize(10).setFont("helvetica", "bold");
     doc.text(`LOTE:`, 14, y);

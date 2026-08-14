@@ -100,6 +100,46 @@ export const saveConfig = (config: AppConfig) => {
   window.dispatchEvent(new Event('avi_data_config'));
 };
 
+export const getEffectiveBranding = (
+  creatorUserIdOrEntity?: string | Batch | ClientOrder | null, 
+  fallbackUser?: User | null
+): { companyName: string; logoUrl: string } => {
+  const config = getConfig();
+  let companyName = config.companyName || 'AVI CONTROL';
+  let logoUrl = config.logoUrl || '';
+
+  let creatorId: string | undefined;
+  if (typeof creatorUserIdOrEntity === 'string') {
+    creatorId = creatorUserIdOrEntity;
+  } else if (creatorUserIdOrEntity && typeof creatorUserIdOrEntity === 'object' && 'createdBy' in creatorUserIdOrEntity) {
+    creatorId = (creatorUserIdOrEntity as any).createdBy;
+  }
+
+  if (!creatorId && fallbackUser) {
+    creatorId = fallbackUser.id;
+  }
+
+  if (creatorId) {
+    const allUsers = getUsers();
+    const user = allUsers.find(u => u.id === creatorId);
+    if (user) {
+      if (user.logoUrl) logoUrl = user.logoUrl;
+      if (user.companyName) companyName = user.companyName;
+
+      // If user is an operator under a supervisor with parentId
+      if ((!user.logoUrl || !user.companyName) && user.parentId) {
+        const parent = allUsers.find(u => u.id === user.parentId);
+        if (parent) {
+          if (!user.logoUrl && parent.logoUrl) logoUrl = parent.logoUrl;
+          if (!user.companyName && parent.companyName) companyName = parent.companyName;
+        }
+      }
+    }
+  }
+
+  return { companyName, logoUrl };
+};
+
 export const isFirebaseConfigured = (): boolean => {
   return true;
 };

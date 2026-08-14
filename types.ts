@@ -12,6 +12,8 @@ export interface User {
   role: UserRole;
   parentId?: string; // Who created this user (for GENERAL users managing OPERATORS)
   allowedModes?: WeighingType[]; // Specific permissions
+  logoUrl?: string; // Supervisor custom logo for tickets
+  companyName?: string; // Supervisor custom business name for tickets
 }
 
 export enum WeighingType {

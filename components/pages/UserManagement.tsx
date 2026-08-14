@@ -1,14 +1,15 @@
 
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, useRef } from 'react';
 import { AuthContext } from '../../App';
 import { User, UserRole, WeighingType } from '../../types';
 import { getUsers, saveUser, deleteUser } from '../../services/storage';
-import { Trash2, Plus, Shield, Edit, User as UserIcon, Database, X } from 'lucide-react';
+import { Trash2, Plus, Shield, Edit, User as UserIcon, Database, X, FolderOpen } from 'lucide-react';
 
 const UserManagement: React.FC = () => {
   const { user: currentUser } = useContext(AuthContext);
   const [users, setUsers] = useState<User[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   
   // Form State
   const [newUser, setNewUser] = useState<Partial<User>>({ 
@@ -34,6 +35,17 @@ const UserManagement: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewUser(prev => ({ ...prev, logoUrl: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSave = () => {
     if (!newUser.username || !newUser.name || !newUser.password) return;
     
@@ -44,7 +56,9 @@ const UserManagement: React.FC = () => {
       name: newUser.name,
       role: newUser.role as UserRole,
       parentId: newUser.parentId || currentUser?.id,
-      allowedModes: newUser.allowedModes || []
+      allowedModes: newUser.allowedModes || [],
+      companyName: newUser.companyName || '',
+      logoUrl: newUser.logoUrl || ''
     };
     saveUser(u);
     setIsModalOpen(false);
@@ -98,12 +112,21 @@ const UserManagement: React.FC = () => {
             </div>
 
             <div className="flex items-start space-x-4 mb-4">
-              <div className={`p-3 rounded-2xl mt-1 ${u.role === UserRole.ADMIN ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-500'}`}>
-                {u.role === UserRole.ADMIN ? <Shield size={20} /> : <UserIcon size={20} />}
+              <div className={`p-3 rounded-2xl mt-1 overflow-hidden w-12 h-12 flex items-center justify-center ${u.role === UserRole.ADMIN ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-500'}`}>
+                {u.logoUrl ? (
+                  <img src={u.logoUrl} alt={u.name} className="max-h-full max-w-full object-contain" />
+                ) : u.role === UserRole.ADMIN ? (
+                  <Shield size={20} />
+                ) : (
+                  <UserIcon size={20} />
+                )}
               </div>
-              <div>
-                <p className="font-black text-gray-900 text-base leading-tight uppercase truncate max-w-[140px]">{u.name}</p>
+              <div className="min-w-0 flex-1">
+                <p className="font-black text-gray-900 text-base leading-tight uppercase truncate">{u.name}</p>
                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">@{u.username}</p>
+                {u.companyName && (
+                  <p className="text-[9px] font-bold text-blue-600 truncate mt-0.5">{u.companyName}</p>
+                )}
               </div>
             </div>
             
@@ -115,7 +138,7 @@ const UserManagement: React.FC = () => {
                 </div>
 
                 <div className="flex justify-end space-x-1">
-                    {(currentUser?.role === UserRole.ADMIN || u.parentId === currentUser?.id) && (
+                    {(currentUser?.role === UserRole.ADMIN || u.parentId === currentUser?.id || u.id === currentUser?.id) && (
                         <button onClick={() => handleEdit(u)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
                             <Edit size={14}/>
                         </button>
@@ -186,6 +209,47 @@ const UserManagement: React.FC = () => {
                     <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
                   </div>
               </div>
+
+              {(newUser.role === UserRole.GENERAL || newUser.role === UserRole.ADMIN) && (
+                <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100 space-y-4">
+                  <p className="text-[10px] font-black text-blue-900 uppercase tracking-widest">Personalización de Tickets</p>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Razón Social / Marca</label>
+                    <input 
+                      className="w-full border-2 border-slate-200 bg-white rounded-xl px-3 py-2.5 font-bold text-xs text-slate-800 outline-none focus:border-blue-500" 
+                      placeholder="Ej. Distribuidora Avícola"
+                      value={newUser.companyName || ''}
+                      onChange={e => setNewUser({...newUser, companyName: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Logotipo (Buscar en carpeta)</label>
+                    <div className="flex gap-2 items-center">
+                      <button 
+                        type="button"
+                        onClick={() => logoInputRef.current?.click()}
+                        className="flex-1 bg-white border-2 border-dashed border-blue-200 rounded-xl p-2.5 text-[10px] font-black uppercase text-blue-900 hover:bg-blue-50 flex items-center justify-center gap-2"
+                      >
+                        <FolderOpen size={16} />
+                        <span>Buscar imagen</span>
+                      </button>
+                      {newUser.logoUrl && (
+                        <div className="relative">
+                          <img src={newUser.logoUrl} alt="Logo" className="w-10 h-10 object-contain bg-white rounded-lg border border-slate-200 p-0.5" />
+                          <button 
+                            type="button" 
+                            onClick={() => setNewUser({ ...newUser, logoUrl: '' })} 
+                            className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5 shadow"
+                          >
+                            <X size={10} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+                  </div>
+                </div>
+              )}
 
               <div className="pt-5 border-t border-slate-100">
                   <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Módulos Habilitados</p>

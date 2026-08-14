@@ -189,7 +189,7 @@ const Dashboard: React.FC = () => {
               icon={<Settings size={22} />}
               onClick={() => navigate('/config')}
               color="bg-slate-800"
-              roles={[UserRole.ADMIN]}
+              roles={[UserRole.ADMIN, UserRole.GENERAL]}
               compact
               user={user}
             />

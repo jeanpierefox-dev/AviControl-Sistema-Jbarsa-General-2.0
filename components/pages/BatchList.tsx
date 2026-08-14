@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Batch, WeighingType, UserRole, ClientOrder } from '../../types';
-import { getBatches, saveBatch, deleteBatch, getOrdersByBatch, getVisibleUserIds, getConfig } from '../../services/storage';
-import { addLogoToPdf } from '../../services/pdfHelper';
+import { getBatches, saveBatch, deleteBatch, getOrdersByBatch, getVisibleUserIds, getConfig, getEffectiveBranding } from '../../services/storage';
+import { addLogoToPdf, addAppWatermarkToPdf } from '../../services/pdfHelper';
 import { Plus, Trash2, Edit, Scale, Calendar, Box, Activity, FileText, Receipt } from 'lucide-react';
 import { AuthContext } from '../../App';
 import { jsPDF } from 'jspdf';
@@ -144,16 +144,17 @@ const BatchList: React.FC = () => {
     };
 
     const renderSummaryTicketContent = (doc: jsPDF) => {
-        const config = getConfig();
+        const branding = getEffectiveBranding(batch, user);
+        addAppWatermarkToPdf(doc);
         let y = 10;
         
         // Header Logo in natural aspect ratio
-        if (config.logoUrl) {
-            y = addLogoToPdf(doc, config.logoUrl, { maxWidth: 35, maxHeight: 22, y });
+        if (branding.logoUrl) {
+            y = addLogoToPdf(doc, branding.logoUrl, { maxWidth: 35, maxHeight: 22, y });
         }
 
         doc.setFontSize(14).setFont("helvetica", "bold");
-        const splitTitle = doc.splitTextToSize(config.companyName.toUpperCase(), 70);
+        const splitTitle = doc.splitTextToSize(branding.companyName.toUpperCase(), 70);
         splitTitle.forEach((line: string) => {
             doc.text(line, 40, y, { align: 'center' });
             y += 6;
@@ -427,16 +428,17 @@ const BatchList: React.FC = () => {
     };
 
     const renderTicketContent = (doc: jsPDF) => {
-        const config = getConfig();
+        const branding = getEffectiveBranding(batch, user);
+        addAppWatermarkToPdf(doc);
         let y = 10;
         
         // Header Logo in natural aspect ratio
-        if (config.logoUrl) {
-            y = addLogoToPdf(doc, config.logoUrl, { maxWidth: 35, maxHeight: 22, y });
+        if (branding.logoUrl) {
+            y = addLogoToPdf(doc, branding.logoUrl, { maxWidth: 35, maxHeight: 22, y });
         }
 
         doc.setFontSize(14).setFont("helvetica", "bold");
-        const splitTitle = doc.splitTextToSize(config.companyName.toUpperCase(), 70);
+        const splitTitle = doc.splitTextToSize(branding.companyName.toUpperCase(), 70);
         splitTitle.forEach((line: string) => {
             doc.text(line, 40, y, { align: 'center' });
             y += 6;
