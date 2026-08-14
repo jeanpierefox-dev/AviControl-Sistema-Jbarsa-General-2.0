@@ -19,6 +19,34 @@ const KEYS = {
   SESSION: 'avi_session'
 };
 
+// Cross-tab and multi-device local broadcast channel
+const syncChannel: BroadcastChannel | null = typeof window !== 'undefined' && 'BroadcastChannel' in window
+  ? new BroadcastChannel('avi_realtime_sync_channel')
+  : null;
+
+if (syncChannel) {
+  syncChannel.onmessage = (event) => {
+    const { type, key, data } = event.data || {};
+    if (type === 'SYNC_DATA' && key && data) {
+      localStorage.setItem(key, JSON.stringify(data));
+      if (key === KEYS.USERS) window.dispatchEvent(new Event('avi_data_users'));
+      if (key === KEYS.BATCHES) window.dispatchEvent(new Event('avi_data_batches'));
+      if (key === KEYS.ORDERS) window.dispatchEvent(new Event('avi_data_orders'));
+      if (key === KEYS.CONFIG) window.dispatchEvent(new Event('avi_data_config'));
+    }
+  };
+}
+
+const broadcastLocalSync = (key: string, data: any) => {
+  if (syncChannel) {
+    try {
+      syncChannel.postMessage({ type: 'SYNC_DATA', key, data });
+    } catch (e) {
+      // Ignore broadcast errors
+    }
+  }
+};
+
 const safeParse = (key: string, fallback: any) => {
     try {
         const item = localStorage.getItem(key);
@@ -97,6 +125,7 @@ export const getConfig = (): AppConfig => {
 
 export const saveConfig = (config: AppConfig) => {
   localStorage.setItem(KEYS.CONFIG, JSON.stringify(config));
+  broadcastLocalSync(KEYS.CONFIG, config);
   window.dispatchEvent(new Event('avi_data_config'));
 };
 
@@ -268,6 +297,7 @@ export const saveUser = (user: User) => {
     if (idx >= 0) users[idx] = user; else users.push(user);
     const cleaned = cleanData(user);
     localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+    broadcastLocalSync(KEYS.USERS, users);
     window.dispatchEvent(new Event('avi_data_users'));
     if (db) set(ref(db, `users/${user.id}`), cleaned).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
@@ -275,6 +305,8 @@ export const saveUser = (user: User) => {
 export const deleteUser = (id: string) => {
     const users = getUsers().filter(u => u.id !== id);
     localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+    broadcastLocalSync(KEYS.USERS, users);
+    window.dispatchEvent(new Event('avi_data_users'));
     if (db) remove(ref(db, `users/${id}`)).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
 
@@ -305,6 +337,7 @@ export const saveBatch = (batch: Batch) => {
     if (idx >= 0) batches[idx] = bWithMeta; else batches.push(bWithMeta);
     const cleaned = cleanData(bWithMeta);
     localStorage.setItem(KEYS.BATCHES, JSON.stringify(batches));
+    broadcastLocalSync(KEYS.BATCHES, batches);
     window.dispatchEvent(new Event('avi_data_batches'));
     if (db) set(ref(db, `batches/${bWithMeta.id}`), cleaned).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
@@ -312,6 +345,8 @@ export const saveBatch = (batch: Batch) => {
 export const deleteBatch = (id: string) => {
     const batches = getBatches().filter(b => b.id !== id);
     localStorage.setItem(KEYS.BATCHES, JSON.stringify(batches));
+    broadcastLocalSync(KEYS.BATCHES, batches);
+    window.dispatchEvent(new Event('avi_data_batches'));
     if (db) remove(ref(db, `batches/${id}`)).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
 
@@ -333,6 +368,7 @@ export const saveOrder = (order: ClientOrder) => {
     if (idx >= 0) orders[idx] = oWithMeta; else orders.push(oWithMeta);
     const cleaned = cleanData(oWithMeta);
     localStorage.setItem(KEYS.ORDERS, JSON.stringify(orders));
+    broadcastLocalSync(KEYS.ORDERS, orders);
     window.dispatchEvent(new Event('avi_data_orders'));
     if (db) set(ref(db, `orders/${oWithMeta.id}`), cleaned).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
@@ -340,6 +376,8 @@ export const saveOrder = (order: ClientOrder) => {
 export const deleteOrder = (id: string) => {
     const orders = getOrders().filter(o => o.id !== id);
     localStorage.setItem(KEYS.ORDERS, JSON.stringify(orders));
+    broadcastLocalSync(KEYS.ORDERS, orders);
+    window.dispatchEvent(new Event('avi_data_orders'));
     if (db) remove(ref(db, `orders/${id}`)).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
 };
 
