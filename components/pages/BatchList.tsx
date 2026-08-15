@@ -248,7 +248,7 @@ const BatchList: React.FC = () => {
         doc.setFont("helvetica", "bold");
         doc.text(`JABAS VACÍAS:`, 5, y);
         doc.setFont("helvetica", "normal");
-        const displayEmptyCrates = (batch.emptyCrates !== undefined && batch.emptyCrates !== null) ? batch.emptyCrates : totalEmptyCrates;
+        const displayEmptyCrates = totalEmptyCrates > 0 ? totalEmptyCrates : ((batch.emptyCrates !== undefined && batch.emptyCrates !== null) ? batch.emptyCrates : 0);
         doc.text(`${displayEmptyCrates} jabas`, 36, y);
         y += 4;
 
@@ -502,7 +502,7 @@ const BatchList: React.FC = () => {
             body: [
                 ['Total Jabas Llenas:', totalFullCrates.toString()],
                 ['Total Pollos:', totalBirds.toString()],
-                ['Total Jabas Vacías:', (batch.emptyCrates !== undefined && batch.emptyCrates !== null ? batch.emptyCrates : totalEmptyCrates).toString()],
+                ['Total Jabas Vacías:', (totalEmptyCrates > 0 ? totalEmptyCrates : ((batch.emptyCrates !== undefined && batch.emptyCrates !== null) ? batch.emptyCrates : 0)).toString()],
                 ['Total Muertos:', totalMort.toString()],
                 ['  - Galpón:', qM_Galpon.toString()],
                 ['  - Acopio:', qM_Acopio.toString()],
@@ -682,9 +682,12 @@ const BatchList: React.FC = () => {
                           <p className="text-[10px] text-slate-500 font-bold mt-1">{totalFullWeight.toFixed(2)} kg</p>
                       </div>
                       <div className="bg-orange-50 p-2 rounded-xl border border-orange-100">
-                          <p className="text-[10px] font-bold text-orange-400 uppercase">Vacías</p>
-                          <p className="font-black text-slate-800 text-lg leading-none">{batch.emptyCrates !== undefined && batch.emptyCrates !== null ? batch.emptyCrates : totalEmptyCrates}</p>
-                           <p className="text-[10px] text-slate-500 font-bold mt-1">{totalEmptyWeight.toFixed(2)} kg</p>
+                          <p className="text-[10px] font-bold text-orange-500 uppercase">Vacías</p>
+                          <p className="font-black text-slate-800 text-lg leading-none">
+                            {totalEmptyCrates}
+                            {batch.emptyCrates ? <span className="text-[10px] font-bold text-slate-400 font-sans ml-0.5">/ {batch.emptyCrates}</span> : ''}
+                          </p>
+                          <p className="text-[10px] text-slate-500 font-bold mt-1">-{totalEmptyWeight.toFixed(2)} kg</p>
                       </div>
                       <div className="bg-red-50 p-2 rounded-xl border border-red-100">
                           <p className="text-[10px] font-bold text-red-400 uppercase">Merma</p>

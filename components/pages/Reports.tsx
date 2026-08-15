@@ -191,6 +191,7 @@ const Reports: React.FC = () => {
     const filteredOrders = orders.filter(filterFn);
     let totalFull = 0, totalEmpty = 0, totalNet = 0, totalMort = 0;
     let totalLameWeight = 0, totalLameQty = 0, totalBirds = 0, totalCrates = 0;
+    let totalEmptyCrates = 0, totalMortQty = 0;
     let totalAmount = 0, totalPaid = 0, totalBalance = 0;
     
     filteredOrders.forEach(o => {
@@ -203,6 +204,8 @@ const Reports: React.FC = () => {
       totalLameQty += stats.qLame;
       totalBirds += stats.bF;
       totalCrates += stats.qF;
+      totalEmptyCrates += stats.qE;
+      totalMortQty += stats.qM;
       totalAmount += stats.totalAmount;
       totalPaid += stats.totalPaid;
       totalBalance += stats.balance;
@@ -211,6 +214,7 @@ const Reports: React.FC = () => {
     return { 
       totalFull, totalEmpty, totalMort, totalNet, 
       totalLameWeight, totalLameQty, totalBirds, totalCrates,
+      totalEmptyCrates, totalMortQty,
       totalAmount, totalPaid, totalBalance,
       orderCount: filteredOrders.length, 
       batchOrders: filteredOrders 
@@ -1133,16 +1137,16 @@ const Reports: React.FC = () => {
                 <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-right">
                     <div>
-                      <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Jabas / Pollos</p>
-                      <p className="text-base font-black text-slate-800">{directSalesStats.totalCrates} j / {directSalesStats.totalBirds} p</p>
+                      <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Jabas Llenas / Vacías</p>
+                      <p className="text-base font-black text-slate-800">{directSalesStats.totalCrates} ll / <span className="text-orange-600">{directSalesStats.totalEmptyCrates} vac</span></p>
                     </div>
                     <div>
-                      <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Peso Bruto</p>
-                      <p className="text-base font-black text-slate-800 font-digital">{directSalesStats.totalFull.toFixed(1)} kg</p>
+                      <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Peso Bruto / Tara</p>
+                      <p className="text-base font-black text-slate-800 font-digital">{directSalesStats.totalFull.toFixed(1)} / -{directSalesStats.totalEmpty.toFixed(1)}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Mortalidad</p>
-                      <p className="text-base font-black text-red-600 font-digital">{directSalesStats.totalMort.toFixed(1)} kg</p>
+                      <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Mortalidad ({directSalesStats.totalMortQty}p)</p>
+                      <p className="text-base font-black text-red-600 font-digital">-{directSalesStats.totalMort.toFixed(1)} kg</p>
                     </div>
                     <div>
                       <p className="text-[9px] text-emerald-600 uppercase font-black tracking-widest">Neto Total</p>
@@ -1233,16 +1237,16 @@ const Reports: React.FC = () => {
                     <div className="flex flex-wrap sm:flex-nowrap items-center gap-6 w-full lg:w-auto justify-between lg:justify-end">
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-right">
                         <div>
-                          <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Jabas / Pollos</p>
-                          <p className="text-sm font-black text-slate-800">{stats.totalCrates} j / {stats.totalBirds} p</p>
+                          <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Jabas Llenas / Vacías</p>
+                          <p className="text-sm font-black text-slate-800">{stats.totalCrates} ll / <span className="text-orange-600">{stats.totalEmptyCrates} vac</span></p>
                         </div>
                         <div>
                           <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Bruto / Tara</p>
                           <p className="text-sm font-black text-slate-800 font-digital">{stats.totalFull.toFixed(1)} / -{stats.totalEmpty.toFixed(1)}</p>
                         </div>
                         <div>
-                          <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Mortalidad</p>
-                          <p className="text-sm font-black text-red-600 font-digital">{stats.totalMort.toFixed(1)} kg</p>
+                          <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Mortalidad ({stats.totalMortQty}p)</p>
+                          <p className="text-sm font-black text-red-600 font-digital">-{stats.totalMort.toFixed(1)} kg</p>
                         </div>
                         <div>
                           <p className="text-[9px] text-emerald-600 uppercase font-black tracking-widest">Neto Acumulado</p>
@@ -1329,28 +1333,32 @@ const Reports: React.FC = () => {
             </div>
 
             {/* Metrics Breakdown Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Jabas Llenas</p>
                 <p className="text-xl font-black text-slate-900">{getTotals(showDetailModal).qF}</p>
               </div>
-              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+              <div className="bg-orange-50 p-3 rounded-2xl border border-orange-200">
+                <p className="text-[9px] font-black text-orange-500 uppercase tracking-widest mb-0.5">Jabas Vacías</p>
+                <p className="text-xl font-black text-orange-700">{getTotals(showDetailModal).qE}</p>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Pollos</p>
                 <p className="text-xl font-black text-blue-600">{getTotals(showDetailModal).bF}</p>
               </div>
-              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Peso Bruto</p>
                 <p className="text-xl font-black text-slate-900 font-digital">{getTotals(showDetailModal).wF.toFixed(1)}</p>
               </div>
-              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Tara Total</p>
                 <p className="text-xl font-black text-orange-600 font-digital">-{getTotals(showDetailModal).wE.toFixed(1)}</p>
               </div>
-              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Mortalidad</p>
                 <p className="text-xl font-black text-red-600 font-digital">-{getTotals(showDetailModal).wM.toFixed(1)}</p>
               </div>
-              <div className="bg-emerald-50 p-3.5 rounded-2xl border border-emerald-200">
+              <div className="bg-emerald-50 p-3 rounded-2xl border border-emerald-200 col-span-2 sm:col-span-1">
                 <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-0.5">Peso Neto</p>
                 <p className="text-xl font-black text-emerald-700 font-digital">{getTotals(showDetailModal).net.toFixed(1)} kg</p>
               </div>
