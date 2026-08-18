@@ -132,10 +132,8 @@ const App: React.FC = () => {
             }
         }
 
-        // 2. Initialize Cloud
-        if (isFirebaseConfigured()) {
-            initCloudSync();
-        }
+        // 2. Initialize Cloud Sync Automatically
+        initCloudSync();
 
         const handleSyncError = (e: any) => {
             setSyncError(e.detail);
