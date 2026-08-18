@@ -1,15 +1,4 @@
-
 import { User, UserRole, Batch, ClientOrder, AppConfig, WeighingType } from '../types';
-import { initializeApp, getApps, deleteApp, FirebaseApp } from 'firebase/app';
-import { 
-    getDatabase, 
-    ref, 
-    set, 
-    remove, 
-    onValue, 
-    Database,
-    get
-} from 'firebase/database';
 
 const KEYS = {
   USERS: 'avi_users',
@@ -19,7 +8,7 @@ const KEYS = {
   SESSION: 'avi_session'
 };
 
-// Cross-tab and multi-device local broadcast channel
+// Cross-tab and local broadcast channel
 const syncChannel: BroadcastChannel | null = typeof window !== 'undefined' && 'BroadcastChannel' in window
   ? new BroadcastChannel('avi_realtime_sync_channel')
   : null;
@@ -48,78 +37,24 @@ const broadcastLocalSync = (key: string, data: any) => {
 };
 
 const safeParse = (key: string, fallback: any) => {
-    try {
-        const item = localStorage.getItem(key);
-        return item ? JSON.parse(item) : fallback;
-    } catch (e) {
-        console.warn(`Data corruption detected in ${key}. Resetting to default.`);
-        return fallback;
-    }
-};
-
-const metaEnv = (import.meta as any).env || {};
-
-const DEFAULT_FIREBASE_CONFIG = {
-  apiKey: metaEnv.VITE_FIREBASE_API_KEY || "AIzaSyAviControlProKey2026AutoCloud",
-  projectId: metaEnv.VITE_FIREBASE_PROJECT_ID || "avicontrol-pro-cloud",
-  databaseURL: metaEnv.VITE_FIREBASE_DATABASE_URL || "https://avicontrol-pro-cloud-default-rtdb.firebaseio.com",
-  authDomain: metaEnv.VITE_FIREBASE_AUTH_DOMAIN || "avicontrol-pro-cloud.firebaseapp.com"
-};
-
-const sanitizeDatabaseUrl = (url?: string, projectId?: string): string => {
-    let clean = (url || '').trim();
-    const defaultProjectId = (projectId || '').trim() || 'avicontrol-pro-cloud';
-    const fallbackUrl = `https://${defaultProjectId}-default-rtdb.firebaseio.com`;
-
-    if (!clean) {
-        return fallbackUrl;
-    }
-
-    if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
-        clean = `https://${clean}`;
-    }
-
-    try {
-        const parsed = new URL(clean);
-        const host = parsed.hostname.toLowerCase();
-        
-        if (host.endsWith('.firebaseio.com') || host.endsWith('.firebasedatabase.app') || host === 'localhost' || host === '127.0.0.1') {
-            return `https://${host}${parsed.pathname === '/' ? '' : parsed.pathname}`;
-        }
-
-        if (!host.includes('.')) {
-            return `https://${host}-default-rtdb.firebaseio.com`;
-        }
-
-        return fallbackUrl;
-    } catch (e) {
-        return fallbackUrl;
-    }
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : fallback;
+  } catch (e) {
+    console.warn(`Data corruption detected in ${key}. Resetting to default.`);
+    return fallback;
+  }
 };
 
 export const getConfig = (): AppConfig => {
   const parsed = safeParse(KEYS.CONFIG, {});
-  const fbConfig = parsed.firebaseConfig || {};
-  const projectId = fbConfig.projectId || DEFAULT_FIREBASE_CONFIG.projectId;
-  const rawDbUrl = fbConfig.databaseURL || DEFAULT_FIREBASE_CONFIG.databaseURL;
-  const sanitizedDbUrl = sanitizeDatabaseUrl(rawDbUrl, projectId);
-
   return {
     companyName: parsed.companyName || 'AVI CONTROL',
     logoUrl: parsed.logoUrl || '',
     printerConnected: parsed.printerConnected || false,
     scaleConnected: parsed.scaleConnected || false,
     defaultFullCrateBatch: parsed.defaultFullCrateBatch ?? 5,
-    defaultEmptyCrateBatch: parsed.defaultEmptyCrateBatch ?? 10,
-    firebaseConfig: {
-      apiKey: fbConfig.apiKey || DEFAULT_FIREBASE_CONFIG.apiKey,
-      projectId: projectId,
-      databaseURL: sanitizedDbUrl,
-      authDomain: fbConfig.authDomain || `${projectId}.firebaseapp.com`,
-      appId: fbConfig.appId || '',
-      storageBucket: fbConfig.storageBucket || '',
-      messagingSenderId: fbConfig.messagingSenderId || ''
-    }
+    defaultEmptyCrateBatch: parsed.defaultEmptyCrateBatch ?? 10
   };
 };
 
@@ -127,6 +62,13 @@ export const saveConfig = (config: AppConfig) => {
   localStorage.setItem(KEYS.CONFIG, JSON.stringify(config));
   broadcastLocalSync(KEYS.CONFIG, config);
   window.dispatchEvent(new Event('avi_data_config'));
+
+  // Sync with cloud server
+  fetch('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config)
+  }).catch(err => console.warn('Cloud config sync notice:', err));
 };
 
 export const getEffectiveBranding = (
@@ -170,319 +112,372 @@ export const getEffectiveBranding = (
 };
 
 export const isFirebaseConfigured = (): boolean => {
-  return true;
+  return true; // Always connected to backend cloud
 };
 
-export const resetApp = () => {
-    localStorage.clear();
-    window.location.reload();
+let eventSource: EventSource | null = null;
+let pollInterval: any = null;
+let isCloudConnected = false;
+let connectionListeners: ((connected: boolean) => void)[] = [];
+
+const notifyConnectionState = (connected: boolean) => {
+  isCloudConnected = connected;
+  connectionListeners.forEach(fn => {
+    try { fn(connected); } catch (e) {}
+  });
 };
 
-let db: Database | null = null;
-let unsubscribers: Function[] = [];
-
-export const testFirebaseConnection = async (config: any): Promise<boolean> => {
-    try {
-        const tempAppName = `test_${Date.now()}`;
-        const dbUrl = sanitizeDatabaseUrl(config?.databaseURL, config?.projectId);
-        const appConfig = { ...config, databaseURL: dbUrl };
-        
-        const tempApp = initializeApp(appConfig, tempAppName);
-        const tempDb = getDatabase(tempApp, dbUrl);
-        
-        const testRef = ref(tempDb, '.info/connected');
-        
-        return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                deleteApp(tempApp);
-                resolve(true); // Resolve gracefully on timeout for auto-connect
-            }, 3000);
-
-            onValue(testRef, () => {
-                clearTimeout(timeout);
-                deleteApp(tempApp);
-                resolve(true);
-            }, (error) => {
-                clearTimeout(timeout);
-                deleteApp(tempApp);
-                resolve(true);
-            }, { onlyOnce: true });
-        });
-    } catch (e) {
-        return true;
-    }
+export const onConnectionStateChange = (callback: (connected: boolean) => void) => {
+  connectionListeners.push(callback);
+  callback(isCloudConnected);
+  return () => {
+    connectionListeners = connectionListeners.filter(fn => fn !== callback);
+  };
 };
 
-export const initCloudSync = async () => {
-  const config = getConfig();
-  unsubscribers.forEach(unsub => unsub());
-  unsubscribers = [];
-
+export const resetApp = async () => {
+  localStorage.clear();
   try {
-    let app: FirebaseApp;
-    const apps = getApps();
-    const defaultApp = apps.find(a => a.name === '[DEFAULT]');
-    
-    const projectId = config.firebaseConfig?.projectId || DEFAULT_FIREBASE_CONFIG.projectId;
-    const dbUrl = sanitizeDatabaseUrl(config.firebaseConfig?.databaseURL, projectId);
+    await fetch('/api/reset', { method: 'POST' });
+  } catch (e) {}
+  window.location.reload();
+};
 
-    const appConfig = {
-        ...config.firebaseConfig,
-        databaseURL: dbUrl
-    };
-
-    if (!defaultApp) {
-        app = initializeApp(appConfig);
-    } else {
-        app = defaultApp;
-    }
-    
-    db = getDatabase(app, dbUrl);
-    
-    const connectedRef = ref(db, '.info/connected');
-    onValue(connectedRef, (snap) => {
-        if (snap.val() === false) {
-            console.log("Realtime Database offline, keeping local state.");
-        } else {
-            console.log("Realtime Database connected directly.");
-        }
-    }, (err) => {
-        console.warn("Connection listener handled gracefully:", err);
-    });
-
-    startListeners();
-  } catch (e: any) {
-    console.warn("Nube en segundo plano:", e);
+export const testFirebaseConnection = async (): Promise<boolean> => {
+  try {
+    const res = await fetch('/api/health');
+    return res.ok;
+  } catch (e) {
+    return true;
   }
 };
 
-export const getUsers = (): User[] => {
-    const users = safeParse(KEYS.USERS, []);
-    if (users.length === 0) {
-        const defaultAdmin: User = { 
-            id: 'admin', 
-            username: 'admin', 
-            password: '1234', 
-            name: 'Administrador', 
-            role: UserRole.ADMIN, 
-            allowedModes: [WeighingType.BATCH, WeighingType.SOLO_POLLO, WeighingType.SOLO_JABAS] 
-        };
-        return [defaultAdmin];
-    }
+const mergeServerData = (serverData: { users?: any[]; batches?: any[]; orders?: any[]; config?: any }) => {
+  if (!serverData) return;
 
-    // Auto-migrate admin password from 123 to 1234
-    const adminIdx = users.findIndex((u: User) => u.username === 'admin');
-    if (adminIdx >= 0 && users[adminIdx].password === '123') {
-        users[adminIdx].password = '1234';
-        localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+  if (Array.isArray(serverData.users) && serverData.users.length > 0) {
+    const localUsers = safeParse(KEYS.USERS, []);
+    const localMap = new Map(localUsers.map((u: any) => [u.id, u]));
+    serverData.users.forEach((u: any) => {
+      localMap.set(u.id, u);
+    });
+    const merged = Array.from(localMap.values());
+    if (JSON.stringify(merged) !== JSON.stringify(localUsers)) {
+      localStorage.setItem(KEYS.USERS, JSON.stringify(merged));
+      window.dispatchEvent(new Event('avi_data_users'));
     }
+  }
 
-    return users;
+  if (Array.isArray(serverData.batches)) {
+    const localBatches = safeParse(KEYS.BATCHES, []);
+    const localMap = new Map<string, any>(localBatches.map((b: any) => [b.id, b]));
+    
+    serverData.batches.forEach((serverBatch: any) => {
+      const local: any = localMap.get(serverBatch.id);
+      if (!local || (serverBatch.updatedAt || 0) >= (local.updatedAt || 0)) {
+        localMap.set(serverBatch.id, serverBatch);
+      }
+    });
+
+    const merged = Array.from(localMap.values());
+    if (JSON.stringify(merged) !== JSON.stringify(localBatches)) {
+      localStorage.setItem(KEYS.BATCHES, JSON.stringify(merged));
+      window.dispatchEvent(new Event('avi_data_batches'));
+    }
+  }
+
+  if (Array.isArray(serverData.orders)) {
+    const localOrders = safeParse(KEYS.ORDERS, []);
+    const localMap = new Map<string, any>(localOrders.map((o: any) => [o.id, o]));
+
+    serverData.orders.forEach((serverOrder: any) => {
+      const local: any = localMap.get(serverOrder.id);
+      if (!local) {
+        localMap.set(serverOrder.id, serverOrder);
+      } else {
+        const sRecords = (serverOrder.records || []).length;
+        const lRecords = (local.records || []).length;
+        if (sRecords >= lRecords || (serverOrder.updatedAt || 0) >= (local.updatedAt || 0)) {
+          localMap.set(serverOrder.id, serverOrder);
+        }
+      }
+    });
+
+    const merged = Array.from(localMap.values());
+    if (JSON.stringify(merged) !== JSON.stringify(localOrders)) {
+      localStorage.setItem(KEYS.ORDERS, JSON.stringify(merged));
+      window.dispatchEvent(new Event('avi_data_orders'));
+    }
+  }
+
+  if (serverData.config && typeof serverData.config === 'object') {
+    const localConfig = safeParse(KEYS.CONFIG, {});
+    const updated = { ...localConfig, ...serverData.config };
+    if (JSON.stringify(updated) !== JSON.stringify(localConfig)) {
+      localStorage.setItem(KEYS.CONFIG, JSON.stringify(updated));
+      window.dispatchEvent(new Event('avi_data_config'));
+    }
+  }
 };
 
-const cleanData = (obj: any): any => {
-    if (obj === null || typeof obj !== 'object') return obj;
-    if (Array.isArray(obj)) return obj.map(cleanData);
-    
-    return Object.fromEntries(
-        Object.entries(obj)
-            .filter(([_, v]) => v !== undefined)
-            .map(([k, v]) => [k, cleanData(v)])
-    );
+const fetchInitialAndPoll = async () => {
+  try {
+    const res = await fetch('/api/data');
+    if (res.ok) {
+      notifyConnectionState(true);
+      const serverData = await res.json();
+      mergeServerData(serverData);
+
+      // If server is clean/empty but local has batches/orders, push initial seed to server
+      const localBatches = safeParse(KEYS.BATCHES, []);
+      const localOrders = safeParse(KEYS.ORDERS, []);
+      if ((serverData.batches?.length === 0 && localBatches.length > 0) || (serverData.orders?.length === 0 && localOrders.length > 0)) {
+        await uploadLocalToCloud();
+      }
+    } else {
+      notifyConnectionState(false);
+    }
+  } catch (err) {
+    notifyConnectionState(false);
+  }
+};
+
+export const initCloudSync = async () => {
+  // 1. Initial Pull from Server
+  await fetchInitialAndPoll();
+
+  // 2. Setup Server-Sent Events (SSE) for instant real-time sync across devices
+  if (typeof window !== 'undefined' && 'EventSource' in window) {
+    if (eventSource) {
+      eventSource.close();
+    }
+
+    try {
+      eventSource = new EventSource('/api/events');
+      
+      eventSource.onopen = () => {
+        notifyConnectionState(true);
+      };
+
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'HANDSHAKE') {
+            notifyConnectionState(true);
+          } else if (payload.type === 'SYNC_ALL' && payload.data) {
+            mergeServerData(payload.data);
+          } else if (payload.type === 'BATCH_UPDATED' && payload.data) {
+            const batches = getBatches();
+            const idx = batches.findIndex(b => b.id === payload.data.id);
+            if (idx >= 0) batches[idx] = payload.data; else batches.push(payload.data);
+            localStorage.setItem(KEYS.BATCHES, JSON.stringify(batches));
+            broadcastLocalSync(KEYS.BATCHES, batches);
+            window.dispatchEvent(new Event('avi_data_batches'));
+          } else if (payload.type === 'BATCH_DELETED' && payload.data?.id) {
+            const batches = getBatches().filter(b => b.id !== payload.data.id);
+            localStorage.setItem(KEYS.BATCHES, JSON.stringify(batches));
+            broadcastLocalSync(KEYS.BATCHES, batches);
+            window.dispatchEvent(new Event('avi_data_batches'));
+          } else if (payload.type === 'ORDER_UPDATED' && payload.data) {
+            const orders = getOrders();
+            const idx = orders.findIndex(o => o.id === payload.data.id);
+            if (idx >= 0) orders[idx] = payload.data; else orders.push(payload.data);
+            localStorage.setItem(KEYS.ORDERS, JSON.stringify(orders));
+            broadcastLocalSync(KEYS.ORDERS, orders);
+            window.dispatchEvent(new Event('avi_data_orders'));
+          } else if (payload.type === 'ORDER_DELETED' && payload.data?.id) {
+            const orders = getOrders().filter(o => o.id !== payload.data.id);
+            localStorage.setItem(KEYS.ORDERS, JSON.stringify(orders));
+            broadcastLocalSync(KEYS.ORDERS, orders);
+            window.dispatchEvent(new Event('avi_data_orders'));
+          } else if (payload.type === 'USER_UPDATED' && payload.data) {
+            const users = getUsers();
+            const idx = users.findIndex(u => u.id === payload.data.id);
+            if (idx >= 0) users[idx] = payload.data; else users.push(payload.data);
+            localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+            broadcastLocalSync(KEYS.USERS, users);
+            window.dispatchEvent(new Event('avi_data_users'));
+          } else if (payload.type === 'USER_DELETED' && payload.data?.id) {
+            const users = getUsers().filter(u => u.id !== payload.data.id);
+            localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+            broadcastLocalSync(KEYS.USERS, users);
+            window.dispatchEvent(new Event('avi_data_users'));
+          } else if (payload.type === 'CONFIG_UPDATED' && payload.data) {
+            localStorage.setItem(KEYS.CONFIG, JSON.stringify(payload.data));
+            broadcastLocalSync(KEYS.CONFIG, payload.data);
+            window.dispatchEvent(new Event('avi_data_config'));
+          }
+        } catch (e) {
+          // Ignore JSON parse error on heartbeat
+        }
+      };
+
+      eventSource.onerror = () => {
+        notifyConnectionState(false);
+      };
+    } catch (e) {
+      console.warn('SSE fallback to polling:', e);
+    }
+  }
+
+  // 3. Periodic Background Sync (every 2.5 seconds) to ensure zero dropouts
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(fetchInitialAndPoll, 2500);
+};
+
+export const getUsers = (): User[] => {
+  const users = safeParse(KEYS.USERS, []);
+  if (users.length === 0) {
+    const defaultAdmin: User = { 
+      id: 'admin', 
+      username: 'admin', 
+      password: '1234', 
+      name: 'Administrador', 
+      role: UserRole.ADMIN, 
+      allowedModes: [WeighingType.BATCH, WeighingType.SOLO_POLLO, WeighingType.SOLO_JABAS] 
+    };
+    return [defaultAdmin];
+  }
+
+  // Auto-migrate admin password if needed
+  const adminIdx = users.findIndex((u: User) => u.username === 'admin');
+  if (adminIdx >= 0 && users[adminIdx].password === '123') {
+    users[adminIdx].password = '1234';
+    localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+  }
+
+  return users;
 };
 
 export const saveUser = (user: User) => {
-    const users = getUsers();
-    const idx = users.findIndex(u => u.id === user.id);
-    if (idx >= 0) users[idx] = user; else users.push(user);
-    const cleaned = cleanData(user);
-    localStorage.setItem(KEYS.USERS, JSON.stringify(users));
-    broadcastLocalSync(KEYS.USERS, users);
-    window.dispatchEvent(new Event('avi_data_users'));
-    if (db) set(ref(db, `users/${user.id}`), cleaned).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
+  const users = getUsers();
+  const idx = users.findIndex(u => u.id === user.id);
+  if (idx >= 0) users[idx] = user; else users.push(user);
+  localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+  broadcastLocalSync(KEYS.USERS, users);
+  window.dispatchEvent(new Event('avi_data_users'));
+
+  fetch('/api/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(user)
+  }).catch(e => console.warn('User cloud sync notice:', e));
 };
 
 export const deleteUser = (id: string) => {
-    const users = getUsers().filter(u => u.id !== id);
-    localStorage.setItem(KEYS.USERS, JSON.stringify(users));
-    broadcastLocalSync(KEYS.USERS, users);
-    window.dispatchEvent(new Event('avi_data_users'));
-    if (db) remove(ref(db, `users/${id}`)).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
+  const users = getUsers().filter(u => u.id !== id);
+  localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+  broadcastLocalSync(KEYS.USERS, users);
+  window.dispatchEvent(new Event('avi_data_users'));
+
+  fetch(`/api/users/${id}`, {
+    method: 'DELETE'
+  }).catch(e => console.warn('User delete cloud notice:', e));
 };
 
 export const login = (username: string, password: string): User | null => {
-    const users = getUsers();
-    return users.find(u => u.username === username && u.password === password) || null;
+  const users = getUsers();
+  return users.find(u => u.username === username && u.password === password) || null;
 };
 
 export const getVisibleUserIds = (user: User | null): string[] => {
-    if (!user) return [];
-    const allUsers = getUsers();
-    if (user.role === UserRole.ADMIN) {
-        return allUsers.map(u => u.id);
-    }
-    if (user.role === UserRole.GENERAL) {
-        const operators = allUsers.filter(u => u.parentId === user.id);
-        return [user.id, ...operators.map(u => u.id)];
-    }
-    return [user.id];
+  if (!user) return [];
+  const allUsers = getUsers();
+  if (user.role === UserRole.ADMIN) {
+    return allUsers.map(u => u.id);
+  }
+  if (user.role === UserRole.GENERAL) {
+    const operators = allUsers.filter(u => u.parentId === user.id);
+    return [user.id, ...operators.map(u => u.id)];
+  }
+  return [user.id];
 };
 
 export const getBatches = (): Batch[] => safeParse(KEYS.BATCHES, []);
 
 export const saveBatch = (batch: Batch) => {
-    const batches = getBatches();
-    const bWithMeta = { ...batch, updatedAt: Date.now() };
-    const idx = batches.findIndex(b => b.id === bWithMeta.id);
-    if (idx >= 0) batches[idx] = bWithMeta; else batches.push(bWithMeta);
-    const cleaned = cleanData(bWithMeta);
-    localStorage.setItem(KEYS.BATCHES, JSON.stringify(batches));
-    broadcastLocalSync(KEYS.BATCHES, batches);
-    window.dispatchEvent(new Event('avi_data_batches'));
-    if (db) set(ref(db, `batches/${bWithMeta.id}`), cleaned).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
+  const batches = getBatches();
+  const bWithMeta = { ...batch, updatedAt: Date.now() };
+  const idx = batches.findIndex(b => b.id === bWithMeta.id);
+  if (idx >= 0) batches[idx] = bWithMeta; else batches.push(bWithMeta);
+  localStorage.setItem(KEYS.BATCHES, JSON.stringify(batches));
+  broadcastLocalSync(KEYS.BATCHES, batches);
+  window.dispatchEvent(new Event('avi_data_batches'));
+
+  fetch('/api/batches', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(bWithMeta)
+  }).catch(e => console.warn('Batch cloud sync notice:', e));
 };
 
 export const deleteBatch = (id: string) => {
-    const batches = getBatches().filter(b => b.id !== id);
-    localStorage.setItem(KEYS.BATCHES, JSON.stringify(batches));
-    broadcastLocalSync(KEYS.BATCHES, batches);
-    window.dispatchEvent(new Event('avi_data_batches'));
-    if (db) remove(ref(db, `batches/${id}`)).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
+  const batches = getBatches().filter(b => b.id !== id);
+  localStorage.setItem(KEYS.BATCHES, JSON.stringify(batches));
+  broadcastLocalSync(KEYS.BATCHES, batches);
+  window.dispatchEvent(new Event('avi_data_batches'));
+
+  fetch(`/api/batches/${id}`, {
+    method: 'DELETE'
+  }).catch(e => console.warn('Batch delete cloud notice:', e));
 };
 
 export const getOrders = (): ClientOrder[] => {
-    const orders = safeParse(KEYS.ORDERS, []);
-    return orders.map((o: any) => ({
-        ...o,
-        payments: o.payments || []
-    }));
+  const orders = safeParse(KEYS.ORDERS, []);
+  return orders.map((o: any) => ({
+    ...o,
+    payments: o.payments || []
+  }));
 };
 
 export const getOrdersByBatch = (batchId: string): ClientOrder[] => 
-    getOrders().filter(o => o.batchId === batchId);
+  getOrders().filter(o => o.batchId === batchId);
 
 export const saveOrder = (order: ClientOrder) => {
-    const orders = getOrders();
-    const oWithMeta = { ...order, updatedAt: Date.now() };
-    const idx = orders.findIndex(o => o.id === oWithMeta.id);
-    if (idx >= 0) orders[idx] = oWithMeta; else orders.push(oWithMeta);
-    const cleaned = cleanData(oWithMeta);
-    localStorage.setItem(KEYS.ORDERS, JSON.stringify(orders));
-    broadcastLocalSync(KEYS.ORDERS, orders);
-    window.dispatchEvent(new Event('avi_data_orders'));
-    if (db) set(ref(db, `orders/${oWithMeta.id}`), cleaned).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
+  const orders = getOrders();
+  const oWithMeta = { ...order, updatedAt: Date.now() };
+  const idx = orders.findIndex(o => o.id === oWithMeta.id);
+  if (idx >= 0) orders[idx] = oWithMeta; else orders.push(oWithMeta);
+  localStorage.setItem(KEYS.ORDERS, JSON.stringify(orders));
+  broadcastLocalSync(KEYS.ORDERS, orders);
+  window.dispatchEvent(new Event('avi_data_orders'));
+
+  fetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(oWithMeta)
+  }).catch(e => console.warn('Order cloud sync notice:', e));
 };
 
 export const deleteOrder = (id: string) => {
-    const orders = getOrders().filter(o => o.id !== id);
-    localStorage.setItem(KEYS.ORDERS, JSON.stringify(orders));
-    broadcastLocalSync(KEYS.ORDERS, orders);
-    window.dispatchEvent(new Event('avi_data_orders'));
-    if (db) remove(ref(db, `orders/${id}`)).catch(e => window.dispatchEvent(new CustomEvent('avi_sync_error', { detail: e.message })));
-};
+  const orders = getOrders().filter(o => o.id !== id);
+  localStorage.setItem(KEYS.ORDERS, JSON.stringify(orders));
+  broadcastLocalSync(KEYS.ORDERS, orders);
+  window.dispatchEvent(new Event('avi_data_orders'));
 
-export const onConnectionStateChange = (callback: (connected: boolean) => void) => {
-    if (!db) {
-        callback(false);
-        return () => {};
-    }
-    const connectedRef = ref(db, '.info/connected');
-    const unsub = onValue(connectedRef, (snap) => {
-        if (snap.val() === true) {
-            callback(true);
-        } else {
-            callback(false);
-        }
-    });
-    return () => unsub();
+  fetch(`/api/orders/${id}`, {
+    method: 'DELETE'
+  }).catch(e => console.warn('Order delete cloud notice:', e));
 };
 
 export const uploadLocalToCloud = async () => {
-    if (!db) return;
-    const upload = async (col: string, data: any[]) => {
-        for (const item of data) {
-            const cleaned = cleanData(item);
-            await set(ref(db!, `${col}/${item.id}`), cleaned);
-        }
-    };
-    await upload('users', getUsers());
-    await upload('batches', getBatches());
-    await upload('orders', getOrders());
-};
-
-const startListeners = () => {
-  if (!db) return;
-  
-  const syncCollection = (colName: string, storageKey: string, eventName: string) => {
-    if (!db) return;
-    try {
-        const collectionRef = ref(db, colName);
-        const unsub = onValue(collectionRef, (snapshot) => {
-          const val = snapshot.val();
-          // Smart Merge logic: preserve local state that is fresher than cloud during sync
-          const cloudDataArray: any[] = val ? Object.values(val) : [];
-          const currentLocalRaw = localStorage.getItem(storageKey);
-          const currentLocal: any[] = currentLocalRaw ? JSON.parse(currentLocalRaw) : [];
-          
-          let mergedData: any[] = [];
-
-          if (cloudDataArray.length === 0 && currentLocal.length > 0) {
-              // Initial seed: if cloud is empty, upload local items to cloud
-              currentLocal.forEach(item => {
-                  const cleaned = cleanData(item);
-                  set(ref(db!, `${colName}/${item.id}`), cleaned).catch(err => {
-                      console.error(`Upload error for ${colName}:`, err);
-                  });
-              });
-              mergedData = currentLocal;
-          } else {
-              // Cloud has data: use cloud items as the source of truth
-              mergedData = cloudDataArray.map(cloudItem => {
-                  const localItem = currentLocal.find(li => li.id === cloudItem.id);
-                  if (!localItem) return cloudItem;
-
-                  if (localItem.updatedAt && cloudItem.updatedAt && localItem.updatedAt > cloudItem.updatedAt) {
-                      return localItem;
-                  }
-
-                  if (colName === 'orders') {
-                      const cloudRC = (cloudItem.records || []).length;
-                      const localRC = (localItem.records || []).length;
-                      if (localRC > cloudRC) return localItem;
-                  }
-                  
-                  return cloudItem;
-              });
-
-              // Also preserve local items that were created offline recently and not yet present in cloud
-              const now = Date.now();
-              currentLocal.forEach(localItem => {
-                  if (!cloudDataArray.some(ci => ci.id === localItem.id)) {
-                      if (localItem.updatedAt && (now - localItem.updatedAt < 120000)) {
-                          mergedData.push(localItem);
-                          set(ref(db!, `${colName}/${localItem.id}`), cleanData(localItem)).catch(() => {});
-                      }
-                  }
-              });
-          }
-
-          const sortedMerged = [...mergedData].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
-          const sortedLocal = [...currentLocal].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
-          
-          if (JSON.stringify(sortedMerged) !== JSON.stringify(sortedLocal)) {
-              localStorage.setItem(storageKey, JSON.stringify(mergedData));
-              window.dispatchEvent(new Event(eventName));
-          }
-        }, (error) => {
-            console.warn(`Sync listener notice (${colName}):`, error.message);
-        });
-        unsubscribers.push(() => unsub());
-    } catch(e) {
-        console.error(`Fallo crítico al iniciar listener ${colName}:`, e);
-    }
+  const payload = {
+    users: getUsers(),
+    batches: getBatches(),
+    orders: getOrders(),
+    config: getConfig()
   };
-  
-  syncCollection('users', KEYS.USERS, 'avi_data_users');
-  syncCollection('batches', KEYS.BATCHES, 'avi_data_batches');
-  syncCollection('orders', KEYS.ORDERS, 'avi_data_orders');
+
+  try {
+    const res = await fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      notifyConnectionState(true);
+    }
+  } catch (err) {
+    console.warn('Direct cloud upload notice:', err);
+  }
 };

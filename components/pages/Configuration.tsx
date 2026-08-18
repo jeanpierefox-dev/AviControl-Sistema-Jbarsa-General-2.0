@@ -1,12 +1,12 @@
 
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import { AppConfig } from '../../types';
-import { getConfig, saveConfig, resetApp, isFirebaseConfigured, uploadLocalToCloud, testFirebaseConnection } from '../../services/storage';
+import { getConfig, saveConfig, resetApp, uploadLocalToCloud, onConnectionStateChange } from '../../services/storage';
 import { 
   Save, Check, X, Layout, 
   Image as ImageIcon, Trash2, Printer, Scale, Bluetooth, AlertCircle,
-  Apple, ExternalLink, Info, Smartphone, Wifi, BluetoothOff, Globe,
-  Cloud, CloudOff, Database, Key, Upload, Loader2, Copy, ClipboardPaste
+  Apple, ExternalLink, Info, Smartphone, Wifi, Globe,
+  Cloud, Upload, Loader2
 } from 'lucide-react';
 import { AuthContext } from '../../App';
 
@@ -15,9 +15,9 @@ const Configuration: React.FC = () => {
   const [saved, setSaved] = useState(false);
   const { user } = useContext(AuthContext);
   
-  const [isConnected, setIsConnected] = useState(isFirebaseConfigured());
-  const [isConnecting, setIsConnecting] = useState(false);
+  const [isCloudOnline, setIsCloudOnline] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
+  const [syncSuccessMessage, setSyncSuccessMessage] = useState(false);
 
   const [browserSupport, setBrowserSupport] = useState({ 
     bluetooth: false, 
@@ -25,86 +25,36 @@ const Configuration: React.FC = () => {
     isIOS: /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
   });
 
-  const [manualForm, setManualForm] = useState({
-      apiKey: '', 
-      projectId: '', 
-      authDomain: '', 
-      databaseURL: '', 
-      appId: '', 
-      storageBucket: '', 
-      messagingSenderId: ''
-  });
-
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-      setIsConnected(isFirebaseConfigured());
       setBrowserSupport({
           bluetooth: 'bluetooth' in navigator,
           secure: window.isSecureContext,
           isIOS: /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
       });
 
-      if (config.firebaseConfig) {
-          setManualForm({
-              apiKey: config.firebaseConfig.apiKey || '',
-              projectId: config.firebaseConfig.projectId || '',
-              authDomain: config.firebaseConfig.authDomain || '',
-              databaseURL: config.firebaseConfig.databaseURL || '',
-              appId: config.firebaseConfig.appId || '',
-              storageBucket: config.firebaseConfig.storageBucket || '',
-              messagingSenderId: config.firebaseConfig.messagingSenderId || ''
-          });
-      }
-  }, [config]);
+      const unsub = onConnectionStateChange((online) => {
+        setIsCloudOnline(online);
+      });
+      return () => unsub();
+  }, []);
 
   const handleSave = () => {
     saveConfig(config);
     setSaved(true);
-    setIsConnected(isFirebaseConfigured());
     window.dispatchEvent(new Event('avi_data_config'));
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const handleLinkCloud = async () => {
-      if (!manualForm.projectId || !manualForm.apiKey) {
-          alert("❌ Error: Project ID y API Key son obligatorios.");
-          return;
-      }
-
-      setIsConnecting(true);
-      
-      // Construct databaseURL if missing
-      let dbUrl = manualForm.databaseURL;
-      if (!dbUrl && manualForm.projectId) {
-          dbUrl = `https://${manualForm.projectId}-default-rtdb.firebaseio.com`;
-      }
-      
-      const configToSave = {
-          ...manualForm,
-          databaseURL: dbUrl
-      };
-
-      try {
-          await testFirebaseConnection(configToSave);
-          saveConfig({ ...config, firebaseConfig: configToSave });
-          setIsConnected(true);
-          alert("✅ Servidor vinculado. El sistema se reiniciará para aplicar los cambios.");
-          window.location.reload();
-      } catch (error: any) {
-          alert(`❌ Error al conectar con Firebase:\n${error.message}\n\nRevisa que la URL de la base de datos y el Project ID sean correctos.`);
-          setIsConnecting(false);
-      }
-  };
-
   const handleUploadData = async () => {
-      if (!isConnected) return;
       setIsUploading(true);
       try {
           await uploadLocalToCloud();
-          alert("✅ Sincronización Exitosa.");
+          setSyncSuccessMessage(true);
+          setTimeout(() => setSyncSuccessMessage(false), 3000);
       } catch (e: any) {
-          alert("❌ Error: " + e.message);
+          alert("Aviso de sincronización: " + (e?.message || 'Error al conectar'));
       } finally {
           setIsUploading(false);
       }
@@ -289,14 +239,14 @@ const Configuration: React.FC = () => {
       <div className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-sm">
           <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
               <div className="flex items-center gap-4">
-                  <div className="bg-emerald-600 p-3 rounded-2xl text-white shadow-lg">
+                  <div className={`p-3.5 rounded-2xl text-white shadow-lg ${isCloudOnline ? 'bg-emerald-600 shadow-emerald-600/20' : 'bg-amber-500 shadow-amber-500/20'}`}>
                       <Cloud size={24} />
                   </div>
                   <div>
-                      <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Sincronización en la Nube</h2>
-                      <p className="text-[10px] text-emerald-600 font-black uppercase tracking-widest mt-1 flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                          Conexión Directa Activa
+                      <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Sincronización en la Nube Automática</h2>
+                      <p className={`text-[10px] font-black uppercase tracking-widest mt-1 flex items-center gap-1.5 ${isCloudOnline ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          <span className={`w-2.5 h-2.5 rounded-full ${isCloudOnline ? 'bg-emerald-500 animate-ping' : 'bg-amber-400'}`}></span>
+                          {isCloudOnline ? 'Conexión Directa en Tiempo Real Activa' : 'Conectando con Servidor Nube...'}
                       </p>
                   </div>
               </div>
@@ -307,69 +257,30 @@ const Configuration: React.FC = () => {
                       disabled={isUploading}
                       className="bg-emerald-600 text-white px-6 py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 active:scale-95 disabled:opacity-50"
                   >
-                      {isUploading ? <Loader2 size={16} className="animate-spin"/> : <Upload size={16}/>}
-                      Sincronizar Datos Ahora
+                      {isUploading ? <Loader2 size={16} className="animate-spin"/> : (syncSuccessMessage ? <Check size={16} className="text-emerald-200"/> : <Upload size={16}/>)}
+                      {syncSuccessMessage ? '¡Sincronizado!' : 'Forzar Sincronización Ahora'}
                   </button>
               </div>
           </div>
 
-          <div className="bg-slate-50 border border-slate-100 p-5 rounded-2xl space-y-2">
-              <div className="flex items-center gap-2 text-slate-800 font-black text-xs uppercase tracking-tight">
-                  <Wifi size={16} className="text-emerald-600"/> Estado del Servicio
-              </div>
-              <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                  El sistema se conecta automáticamente a la nube en segundo plano. Los datos pesados, lotes y cobros se guardan en tu dispositivo y se sincronizan directamente sin necesidad de ingresar códigos ni claves.
-              </p>
-          </div>
-
-          {/* Advanced toggle if explicitly needed */}
-          <details className="mt-4 group">
-              <summary className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 cursor-pointer select-none py-2 flex items-center gap-1">
-                  <span>Ajustes avanzados de servidor (Opcional)</span>
-              </summary>
-              <div className="pt-4 border-t border-slate-100 space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Project ID</label>
-                          <input 
-                              type="text" 
-                              value={manualForm.projectId} 
-                              onChange={e => setManualForm({...manualForm, projectId: e.target.value})}
-                              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-mono text-xs text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
-                              placeholder="avicontrol-pro-cloud"
-                          />
-                      </div>
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">API Key</label>
-                          <input 
-                              type="text" 
-                              value={manualForm.apiKey} 
-                              onChange={e => setManualForm({...manualForm, apiKey: e.target.value})}
-                              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-mono text-xs text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
-                              placeholder="AIzaSy..."
-                          />
-                      </div>
-                      <div className="space-y-1 md:col-span-2">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Database URL</label>
-                          <input 
-                              type="text" 
-                              value={manualForm.databaseURL} 
-                              onChange={e => setManualForm({...manualForm, databaseURL: e.target.value})}
-                              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-mono text-xs text-slate-900 outline-none focus:border-blue-600 focus:bg-white transition-all"
-                              placeholder="https://avicontrol-pro-cloud-default-rtdb.firebaseio.com"
-                          />
-                      </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-emerald-50/70 border border-emerald-100 p-5 rounded-2xl space-y-1.5">
+                  <div className="flex items-center gap-2 text-emerald-950 font-black text-xs uppercase tracking-tight">
+                      <Wifi size={16} className="text-emerald-600"/> Multidispositivo Automático
                   </div>
-                  <button 
-                      onClick={handleLinkCloud}
-                      disabled={isConnecting}
-                      className="bg-blue-900 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-blue-800 transition-all flex items-center justify-center gap-2"
-                  >
-                      {isConnecting ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>}
-                      Guardar Servidor Personalizado
-                  </button>
+                  <p className="text-xs text-emerald-800 font-medium leading-relaxed">
+                      No necesitas registrar códigos ni contraseñas. Cada pesada, lote y cliente se sincroniza de forma instantánea entre balanzas, celulares y computadoras conectadas a este enlace.
+                  </p>
               </div>
-          </details>
+              <div className="bg-slate-50 border border-slate-200/80 p-5 rounded-2xl space-y-1.5">
+                  <div className="flex items-center gap-2 text-slate-800 font-black text-xs uppercase tracking-tight">
+                      <Globe size={16} className="text-blue-600"/> Modo Híbrido con Respaldo
+                  </div>
+                  <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                      El sistema guarda las pesadas de forma segura en la memoria local y las transmite al servidor en tiempo real con tolerancia a caídas temporales de red.
+                  </p>
+              </div>
+          </div>
       </div>
 
       {/* Apple Compatibility Card */}
