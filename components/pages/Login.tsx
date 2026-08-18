@@ -1,7 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../App';
-import { login, getConfig, getUsers } from '../../services/storage';
+import { login, getConfig } from '../../services/storage';
 import { Scale, User, Lock, Eye, EyeOff, ShieldCheck, ArrowRight } from 'lucide-react';
 
 const Login: React.FC = () => {
@@ -26,8 +26,6 @@ const Login: React.FC = () => {
       setError('Usuario o contraseña incorrectos. Verifica tus credenciales.');
     }
   };
-
-  const usersList = getUsers();
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-blue-950 p-4 relative overflow-hidden">
@@ -111,33 +109,8 @@ const Login: React.FC = () => {
             <ArrowRight size={16} />
           </button>
         </form>
-
-        {/* Quick select credentials if available */}
-        {usersList.length > 0 && (
-          <div className="mt-6 pt-5 border-t border-slate-100">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 text-center">
-              Usuarios Disponibles en este Dispositivo
-            </p>
-            <div className="flex flex-wrap gap-1.5 justify-center">
-              {usersList.map((u) => (
-                <button
-                  key={u.id}
-                  type="button"
-                  onClick={() => {
-                    setUsername(u.username || '');
-                    setPassword(u.password || '');
-                    setError('');
-                  }}
-                  className="text-[10px] font-black uppercase px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-blue-900 text-slate-600 transition-all border border-slate-200"
-                >
-                  {u.username} ({u.role})
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
         
-        <div className="mt-6 pt-4 border-t border-slate-100 text-center flex items-center justify-center gap-1.5 text-[9px] text-emerald-600 font-bold uppercase tracking-widest">
+        <div className="mt-8 pt-4 border-t border-slate-100 text-center flex items-center justify-center gap-1.5 text-[9px] text-emerald-600 font-bold uppercase tracking-widest">
             <ShieldCheck size={14} />
             <span>Acceso Seguro Directo &bull; Sin Correo Electrónico</span>
         </div>
