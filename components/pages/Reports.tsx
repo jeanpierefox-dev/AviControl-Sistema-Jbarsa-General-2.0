@@ -66,8 +66,8 @@ const Reports: React.FC = () => {
     const allOrders = getOrders();
     const visibleIds = getVisibleUserIds(user);
 
-    let filteredBatches = allBatches.filter(b => visibleIds.includes(b.createdBy || ''));
-    let filteredOrders = allOrders.filter(o => visibleIds.includes(o.createdBy || ''));
+    let filteredBatches = allBatches.filter(b => user?.role === UserRole.ADMIN || visibleIds.includes(b.createdBy || '') || !b.createdBy);
+    let filteredOrders = allOrders.filter(o => user?.role === UserRole.ADMIN || visibleIds.includes(o.createdBy || '') || !o.createdBy);
 
     if (filterMode === 'byDate') {
       filteredBatches = filteredBatches.filter(b => {

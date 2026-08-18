@@ -64,7 +64,7 @@ const Collections: React.FC = () => {
   const refresh = () => {
     const all = getOrders();
     const visibleIds = getVisibleUserIds(user);
-    setOrders(all.filter(o => visibleIds.includes(o.createdBy || '')));
+    setOrders(all.filter(o => user?.role === UserRole.ADMIN || visibleIds.includes(o.createdBy || '') || !o.createdBy));
   };
 
   const calculateBalance = (order: ClientOrder): BalanceCalculation => {

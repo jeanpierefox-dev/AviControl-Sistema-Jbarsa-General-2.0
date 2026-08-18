@@ -44,7 +44,7 @@ const BatchList: React.FC = () => {
       // Filter: Admin sees all, General sees self + operators, others see only their own
       let finalBatches = filteredByDate;
       const visibleIds = getVisibleUserIds(user);
-      finalBatches = finalBatches.filter(b => visibleIds.includes(b.createdBy || ''));
+      finalBatches = finalBatches.filter(b => user?.role === UserRole.ADMIN || visibleIds.includes(b.createdBy || '') || !b.createdBy);
       
       setBatches(finalBatches.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
   };

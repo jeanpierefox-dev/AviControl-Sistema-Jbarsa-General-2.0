@@ -228,10 +228,10 @@ const fetchInitialAndPoll = async () => {
       const serverData = await res.json();
       mergeServerData(serverData);
 
-      // If server is clean/empty but local has batches/orders, push initial seed to server
+      // If local has data not yet on server, push immediately
       const localBatches = safeParse(KEYS.BATCHES, []);
       const localOrders = safeParse(KEYS.ORDERS, []);
-      if ((serverData.batches?.length === 0 && localBatches.length > 0) || (serverData.orders?.length === 0 && localOrders.length > 0)) {
+      if ((serverData.batches?.length || 0) < localBatches.length || (serverData.orders?.length || 0) < localOrders.length) {
         await uploadLocalToCloud();
       }
     } else {
@@ -243,10 +243,17 @@ const fetchInitialAndPoll = async () => {
 };
 
 export const initCloudSync = async () => {
-  // 1. Initial Pull from Server
+  // 1. First push whatever local data we already have to seed the server
+  const localBatches = safeParse(KEYS.BATCHES, []);
+  const localOrders = safeParse(KEYS.ORDERS, []);
+  if (localBatches.length > 0 || localOrders.length > 0) {
+    await uploadLocalToCloud();
+  }
+
+  // 2. Initial Pull from Server
   await fetchInitialAndPoll();
 
-  // 2. Setup Server-Sent Events (SSE) for instant real-time sync across devices
+  // 3. Setup Server-Sent Events (SSE) for instant real-time sync across devices
   if (typeof window !== 'undefined' && 'EventSource' in window) {
     if (eventSource) {
       eventSource.close();
@@ -381,16 +388,17 @@ export const login = (username: string, password: string): User | null => {
 };
 
 export const getVisibleUserIds = (user: User | null): string[] => {
-  if (!user) return [];
-  const allUsers = getUsers();
+  if (!user) return ['*'];
   if (user.role === UserRole.ADMIN) {
-    return allUsers.map(u => u.id);
+    const allUsers = getUsers();
+    return ['*', '', 'undefined', ...allUsers.map(u => u.id)];
   }
+  const allUsers = getUsers();
   if (user.role === UserRole.GENERAL) {
     const operators = allUsers.filter(u => u.parentId === user.id);
-    return [user.id, ...operators.map(u => u.id)];
+    return ['', 'undefined', user.id, ...operators.map(u => u.id)];
   }
-  return [user.id];
+  return [user.id, '', 'undefined'];
 };
 
 export const getBatches = (): Batch[] => safeParse(KEYS.BATCHES, []);

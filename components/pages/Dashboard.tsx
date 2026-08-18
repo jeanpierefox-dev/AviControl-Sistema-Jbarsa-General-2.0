@@ -44,8 +44,8 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const calculateStats = () => {
         const visibleIds = getVisibleUserIds(user);
-        const batches = getBatches().filter(b => b.status === 'ACTIVE' && visibleIds.includes(b.createdBy || ''));
-        const orders = getOrders().filter(o => visibleIds.includes(o.createdBy || ''));
+        const batches = getBatches().filter(b => b.status === 'ACTIVE' && (user?.role === UserRole.ADMIN || visibleIds.includes(b.createdBy || '') || !b.createdBy));
+        const orders = getOrders().filter(o => user?.role === UserRole.ADMIN || visibleIds.includes(o.createdBy || '') || !o.createdBy);
         const today = new Date().toDateString();
         const todayWeight = orders.reduce((acc, order) => {
             const isToday = new Date(order.id ? parseInt(order.id) : Date.now()).toDateString() === today;
@@ -67,7 +67,7 @@ const Dashboard: React.FC = () => {
         window.removeEventListener('avi_data_batches', calculateStats);
         window.removeEventListener('avi_data_orders', calculateStats);
     };
-  }, []);
+  }, [user]);
 
   return (
     <div className="space-y-8 animate-fade-in pb-10">

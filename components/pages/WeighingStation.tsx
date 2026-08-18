@@ -81,7 +81,7 @@ const WeighingStation: React.FC = () => {
     });
     
     // Visibility check
-    filtered = filtered.filter(o => visibleIds.includes(o.createdBy || ''));
+    filtered = filtered.filter(o => user?.role === UserRole.ADMIN || visibleIds.includes(o.createdBy || '') || !o.createdBy);
 
     // Strict Date Filtering
     filtered = filtered.filter(o => {
