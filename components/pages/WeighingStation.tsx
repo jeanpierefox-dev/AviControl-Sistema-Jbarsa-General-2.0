@@ -7,7 +7,7 @@ import { addLogoToPdf, addAppWatermarkToPdf } from '../../services/pdfHelper';
 import { 
   ArrowLeft, Save, X, Eye, Package, PackageOpen, 
   User, Trash2, Box, UserPlus, Bird, Printer, Receipt, 
-  Activity, Download, List, ChevronRight, Scale, ChevronDown, FileText, Edit2, CloudOff
+  Activity, Download, List, ChevronRight, Scale, ChevronDown, FileText, Edit2, CloudOff, ShoppingBag
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -40,6 +40,7 @@ const WeighingStation: React.FC = () => {
   const [orderToDelete, setOrderToDelete] = useState<ClientOrder | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showAdditionalItemsModal, setShowAdditionalItemsModal] = useState(false);
   
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [newClientName, setNewClientName] = useState('');
@@ -49,6 +50,10 @@ const WeighingStation: React.FC = () => {
   const [newRecipientDni, setNewRecipientDni] = useState('');
   const [newClientSignature, setNewClientSignature] = useState('');
   const [sigModalOpen, setSigModalOpen] = useState(false);
+
+  const [additionalItemName, setAdditionalItemName] = useState('');
+  const [additionalItemQty, setAdditionalItemQty] = useState('1');
+  const [additionalItemPrice, setAdditionalItemPrice] = useState('');
 
   const [weightInput, setWeightInput] = useState('');
   const [qtyInput, setQtyInput] = useState('');
@@ -505,6 +510,40 @@ const WeighingStation: React.FC = () => {
     setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
   };
 
+  const addAdditionalItem = () => {
+    if (!activeOrder || isLocked) return;
+    if (!additionalItemName || !additionalItemQty || !additionalItemPrice) return;
+    
+    const items = activeOrder.additionalItems || [];
+    const newItem = {
+      id: Date.now().toString(),
+      name: additionalItemName,
+      quantity: parseFloat(additionalItemQty),
+      pricePerUnit: parseFloat(additionalItemPrice)
+    };
+    const updated = { ...activeOrder, additionalItems: [...items, newItem] };
+    
+    saveOrder(updated);
+    setActiveOrder(updated);
+    setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
+    
+    setAdditionalItemName('');
+    setAdditionalItemQty('1');
+    setAdditionalItemPrice('');
+  };
+
+  const removeAdditionalItem = (id: string) => {
+    if (!activeOrder || isLocked) return;
+    if (!confirm('¿Eliminar cargo extra?')) return;
+    
+    const items = activeOrder.additionalItems || [];
+    const updated = { ...activeOrder, additionalItems: items.filter(i => i.id !== id) };
+    
+    saveOrder(updated);
+    setActiveOrder(updated);
+    setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
+  };
+
   const handlePDFOutput = (doc: jsPDF, filename: string) => {
     doc.save(filename);
   };
@@ -680,20 +719,48 @@ const WeighingStation: React.FC = () => {
     y += 10;
 
     // Financials
-    if (order.pricePerKg > 0) {
-        doc.setFontSize(9).setFont("helvetica", "bold");
-        doc.text(`PRECIO X KG: S/. ${order.pricePerKg.toFixed(2)}`, 5, y);
-        y += 6;
+    if (order.pricePerKg > 0 || (order.additionalItems && order.additionalItems.length > 0)) {
+        let currentY = y;
+        let finalNetCost = 0;
         
+        if (order.pricePerKg > 0) {
+            finalNetCost = t.net * order.pricePerKg;
+            doc.setFontSize(9).setFont("helvetica", "bold");
+            doc.text(`PRECIO X KG: S/. ${order.pricePerKg.toFixed(2)}`, 5, currentY);
+            currentY += 6;
+            doc.setFontSize(9).setFont("helvetica", "normal");
+            doc.text("Total Aves:", 5, currentY);
+            doc.text(`S/. ${finalNetCost.toFixed(2)}`, 75, currentY, { align: 'right' });
+            currentY += 6;
+        }
+
+        let additionalTotal = 0;
+        if (order.additionalItems && order.additionalItems.length > 0) {
+            doc.setFontSize(9).setFont("helvetica", "bold");
+            doc.text("CARGOS EXTRAS:", 5, currentY);
+            currentY += 5;
+            doc.setFontSize(8).setFont("helvetica", "normal");
+            order.additionalItems.forEach(item => {
+                const itemTotal = item.quantity * item.pricePerUnit;
+                additionalTotal += itemTotal;
+                doc.text(`${item.quantity} x ${item.name}`, 5, currentY);
+                doc.text(`S/. ${itemTotal.toFixed(2)}`, 75, currentY, { align: 'right' });
+                currentY += 4;
+            });
+            currentY += 2;
+        }
+        
+        const finalTotal = finalNetCost + additionalTotal;
+
         doc.setFillColor(15, 23, 42); // Slate 900
-        doc.rect(5, y, 70, 12, 'F');
+        doc.rect(5, currentY, 70, 12, 'F');
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(9).setFont("helvetica", "bold");
-        doc.text("TOTAL A PAGAR", 35, y + 7, { align: 'right' });
+        doc.text("TOTAL A PAGAR", 35, currentY + 7, { align: 'right' });
         doc.setFontSize(12);
-        doc.text(`S/. ${(t.net * order.pricePerKg).toFixed(2)}`, 72, y + 8, { align: 'right' });
+        doc.text(`S/. ${finalTotal.toFixed(2)}`, 72, currentY + 8, { align: 'right' });
         doc.setTextColor(0, 0, 0);
-        y += 18;
+        y = currentY + 18;
     }
 
     doc.setFontSize(8).setFont("helvetica", "italic");
@@ -783,20 +850,48 @@ const WeighingStation: React.FC = () => {
     y = (doc as any).lastAutoTable.finalY + 8;
 
     // Financials
-    if (order.pricePerKg > 0) {
-        doc.setFontSize(9).setFont("helvetica", "bold");
-        doc.text(`PRECIO X KG: S/. ${order.pricePerKg.toFixed(2)}`, 5, y);
-        y += 6;
+    if (order.pricePerKg > 0 || (order.additionalItems && order.additionalItems.length > 0)) {
+        let currentY = y;
+        let finalNetCost = 0;
         
+        if (order.pricePerKg > 0) {
+            finalNetCost = t.net * order.pricePerKg;
+            doc.setFontSize(9).setFont("helvetica", "bold");
+            doc.text(`PRECIO X KG: S/. ${order.pricePerKg.toFixed(2)}`, 5, currentY);
+            currentY += 6;
+            doc.setFontSize(9).setFont("helvetica", "normal");
+            doc.text("Total Aves:", 5, currentY);
+            doc.text(`S/. ${finalNetCost.toFixed(2)}`, 75, currentY, { align: 'right' });
+            currentY += 6;
+        }
+
+        let additionalTotal = 0;
+        if (order.additionalItems && order.additionalItems.length > 0) {
+            doc.setFontSize(9).setFont("helvetica", "bold");
+            doc.text("CARGOS EXTRAS:", 5, currentY);
+            currentY += 5;
+            doc.setFontSize(8).setFont("helvetica", "normal");
+            order.additionalItems.forEach(item => {
+                const itemTotal = item.quantity * item.pricePerUnit;
+                additionalTotal += itemTotal;
+                doc.text(`${item.quantity} x ${item.name}`, 5, currentY);
+                doc.text(`S/. ${itemTotal.toFixed(2)}`, 75, currentY, { align: 'right' });
+                currentY += 4;
+            });
+            currentY += 2;
+        }
+        
+        const finalTotal = finalNetCost + additionalTotal;
+
         doc.setFillColor(15, 23, 42); // Slate 900
-        doc.rect(5, y, 70, 15, 'F');
+        doc.rect(5, currentY, 70, 15, 'F');
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(10).setFont("helvetica", "bold");
-        doc.text("TOTAL A PAGAR", 35, y + 9, { align: 'right' });
+        doc.text("TOTAL A PAGAR", 35, currentY + 9, { align: 'right' });
         doc.setFontSize(14);
-        doc.text(`S/. ${(t.net * order.pricePerKg).toFixed(2)}`, 72, y + 10, { align: 'right' });
+        doc.text(`S/. ${finalTotal.toFixed(2)}`, 72, currentY + 10, { align: 'right' });
         doc.setTextColor(0, 0, 0);
-        y += 22;
+        y = currentY + 22;
     }
 
     doc.setFontSize(8).setFont("helvetica", "italic");
@@ -984,20 +1079,48 @@ const WeighingStation: React.FC = () => {
     y += 13;
 
     // Financials
-    if (order.pricePerKg > 0) {
-        doc.setFontSize(9).setFont("helvetica", "bold");
-        doc.text(`PRECIO X KG: S/. ${order.pricePerKg.toFixed(2)}`, 5, y);
-        y += 6;
+    if (order.pricePerKg > 0 || (order.additionalItems && order.additionalItems.length > 0)) {
+        let currentY = y;
+        let finalNetCost = 0;
         
+        if (order.pricePerKg > 0) {
+            finalNetCost = t.net * order.pricePerKg;
+            doc.setFontSize(9).setFont("helvetica", "bold");
+            doc.text(`PRECIO X KG: S/. ${order.pricePerKg.toFixed(2)}`, 5, currentY);
+            currentY += 6;
+            doc.setFontSize(9).setFont("helvetica", "normal");
+            doc.text("Total Aves:", 5, currentY);
+            doc.text(`S/. ${finalNetCost.toFixed(2)}`, 75, currentY, { align: 'right' });
+            currentY += 6;
+        }
+
+        let additionalTotal = 0;
+        if (order.additionalItems && order.additionalItems.length > 0) {
+            doc.setFontSize(9).setFont("helvetica", "bold");
+            doc.text("CARGOS EXTRAS:", 5, currentY);
+            currentY += 5;
+            doc.setFontSize(8).setFont("helvetica", "normal");
+            order.additionalItems.forEach(item => {
+                const itemTotal = item.quantity * item.pricePerUnit;
+                additionalTotal += itemTotal;
+                doc.text(`${item.quantity} x ${item.name}`, 5, currentY);
+                doc.text(`S/. ${itemTotal.toFixed(2)}`, 75, currentY, { align: 'right' });
+                currentY += 4;
+            });
+            currentY += 2;
+        }
+        
+        const finalTotal = finalNetCost + additionalTotal;
+
         doc.setFillColor(15, 23, 42); // Slate 900
-        doc.rect(5, y, 70, 14, 'F');
+        doc.rect(5, currentY, 70, 14, 'F');
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(9).setFont("helvetica", "bold");
-        doc.text("TOTAL A PAGAR", 35, y + 8, { align: 'right' });
+        doc.text("TOTAL A PAGAR", 35, currentY + 8, { align: 'right' });
         doc.setFontSize(12);
-        doc.text(`S/. ${(t.net * order.pricePerKg).toFixed(2)}`, 72, y + 9, { align: 'right' });
+        doc.text(`S/. ${finalTotal.toFixed(2)}`, 72, currentY + 9, { align: 'right' });
         doc.setTextColor(0, 0, 0);
-        y += 20;
+        y = currentY + 20;
     }
 
     // Signatures Block
@@ -1741,6 +1864,13 @@ const WeighingStation: React.FC = () => {
                 >
                     <List size={16} /> <span className="hidden xs:inline">Ver</span> Detalle
                 </button>
+                <button 
+                    type="button"
+                    onClick={() => setShowAdditionalItemsModal(true)}
+                    className="flex-1 bg-amber-500 text-white p-3 md:p-4 rounded-xl font-black text-[9px] md:text-xs uppercase tracking-widest shadow-xl hover:bg-amber-400 active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                    <ShoppingBag size={16} /> <span className="hidden xs:inline">Cargos</span> Extras
+                </button>
                 {!isLocked && (
                     <button 
                       type="button"
@@ -2263,6 +2393,98 @@ const WeighingStation: React.FC = () => {
                         >
                             <Receipt size={16} /> Ticket Cojos
                         </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Additional Items Modal */}
+        {showAdditionalItemsModal && activeOrder && (
+            <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden animate-scale-up">
+                    <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-slate-50/50">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-amber-100 p-3 rounded-2xl text-amber-600">
+                                <ShoppingBag size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Cargos Extras</h3>
+                                <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">{activeOrder.clientName}</p>
+                            </div>
+                        </div>
+                        <button onClick={() => setShowAdditionalItemsModal(false)} className="text-slate-400 hover:text-slate-700 bg-white p-2 rounded-full shadow-sm hover:shadow transition-all">
+                            <X size={24} />
+                        </button>
+                    </div>
+
+                    <div className="p-6 overflow-y-auto flex-1">
+                        {!isLocked && (
+                            <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100 mb-6 flex flex-col md:flex-row gap-3 items-end">
+                                <div className="flex-1 w-full">
+                                    <label className="block text-[10px] font-black text-amber-900 uppercase tracking-widest mb-1.5">Descripción</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full bg-white border-2 border-amber-200 rounded-xl px-4 py-2.5 font-bold text-slate-900 focus:border-amber-500 focus:outline-none" 
+                                        placeholder="Ej. Saco de alimento"
+                                        value={additionalItemName}
+                                        onChange={e => setAdditionalItemName(e.target.value)}
+                                    />
+                                </div>
+                                <div className="w-full md:w-24">
+                                    <label className="block text-[10px] font-black text-amber-900 uppercase tracking-widest mb-1.5">Cantidad</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full bg-white border-2 border-amber-200 rounded-xl px-4 py-2.5 font-bold text-slate-900 focus:border-amber-500 focus:outline-none" 
+                                        value={additionalItemQty}
+                                        onChange={e => setAdditionalItemQty(e.target.value)}
+                                    />
+                                </div>
+                                <div className="w-full md:w-32">
+                                    <label className="block text-[10px] font-black text-amber-900 uppercase tracking-widest mb-1.5">Precio Unit. (S/.)</label>
+                                    <input 
+                                        type="number" 
+                                        step="0.01"
+                                        className="w-full bg-white border-2 border-amber-200 rounded-xl px-4 py-2.5 font-bold text-slate-900 focus:border-amber-500 focus:outline-none" 
+                                        value={additionalItemPrice}
+                                        onChange={e => setAdditionalItemPrice(e.target.value)}
+                                    />
+                                </div>
+                                <button 
+                                    onClick={addAdditionalItem}
+                                    className="w-full md:w-auto bg-amber-500 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-amber-400 active:scale-95 transition-all"
+                                >
+                                    Agregar
+                                </button>
+                            </div>
+                        )}
+
+                        <div className="space-y-3">
+                            {(activeOrder.additionalItems || []).length === 0 ? (
+                                <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-3xl">
+                                    <p className="text-slate-400 font-medium text-sm">No hay cargos extra registrados.</p>
+                                </div>
+                            ) : (
+                                (activeOrder.additionalItems || []).map(item => (
+                                    <div key={item.id} className="flex justify-between items-center bg-white border border-slate-200 p-4 rounded-2xl shadow-sm">
+                                        <div>
+                                            <h4 className="font-bold text-slate-900 text-sm">{item.name}</h4>
+                                            <p className="text-xs text-slate-500 font-medium">{item.quantity} x S/. {item.pricePerUnit.toFixed(2)}</p>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <span className="font-black text-slate-900">S/. {(item.quantity * item.pricePerUnit).toFixed(2)}</span>
+                                            {!isLocked && (
+                                                <button 
+                                                    onClick={() => removeAdditionalItem(item.id)}
+                                                    className="bg-red-50 text-red-500 p-2 rounded-lg hover:bg-red-100 transition-colors"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

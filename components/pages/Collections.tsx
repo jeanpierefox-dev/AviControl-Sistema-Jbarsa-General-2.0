@@ -67,7 +67,7 @@ const Collections: React.FC = () => {
     setOrders(all.filter(o => user?.role === UserRole.ADMIN || visibleIds.includes(o.createdBy || '') || !o.createdBy));
   };
 
-  const calculateBalance = (order: ClientOrder): BalanceCalculation => {
+  const calculateBalance = (order: ClientOrder): BalanceCalculation & { additionalTotal: number } => {
     const records = order.records || [];
     const full = records.filter(r => r.type === 'FULL').reduce((a, b) => a + b.weight, 0);
     const empty = records.filter(r => r.type === 'EMPTY').reduce((a, b) => a + b.weight, 0);
@@ -77,11 +77,16 @@ const Collections: React.FC = () => {
     if (net < 0) net = 0;
     
     const price = order.pricePerKg || 0;
-    const totalDue = Math.round((net * price) * 100) / 100;
+    
+    // Additional Items
+    const additionalItems = order.additionalItems || [];
+    const additionalTotal = additionalItems.reduce((a, b) => a + (b.quantity * b.pricePerUnit), 0);
+    
+    const totalDue = Math.round(((net * price) + additionalTotal) * 100) / 100;
     const payments = order.payments || [];
     const totalPaid = Math.round(payments.reduce((a, b) => a + b.amount, 0) * 100) / 100;
     const balance = Math.max(0, Math.round((totalDue - totalPaid) * 100) / 100);
-    const percentPaid = totalDue > 0 ? Math.min(100, Math.round((totalPaid / totalDue) * 100)) : 100;
+    const percentPaid = totalDue > 0 ? Math.min(100, Math.round((totalPaid / totalDue) * 100)) : (totalPaid > 0 ? 100 : 0);
 
     return { 
       netKg: net,
@@ -90,7 +95,8 @@ const Collections: React.FC = () => {
       totalPaid, 
       balance, 
       paymentCount: payments.length,
-      percentPaid
+      percentPaid,
+      additionalTotal
     };
   };
 
@@ -484,23 +490,45 @@ const Collections: React.FC = () => {
 
     // Prepare ledger rows
     const tableRows: any[] = [];
+    let rowIndex = 1;
 
-    // Row 0: Initial cargo
+    // Row 1: Initial cargo for Chickens
     const initialDate = order.date ? new Date(order.date).toLocaleDateString() : new Date(parseInt(order.id)).toLocaleDateString();
-    let currentBalance = balanceInfo.totalDue;
+    
+    // Calculate the base chicken cost without additional items
+    const baseChickenCost = balanceInfo.netKg * balanceInfo.pricePerKg;
+    let currentBalance = baseChickenCost;
 
     tableRows.push([
-      '01',
+      String(rowIndex++).padStart(2, '0'),
       initialDate,
       `VTA-${order.id.slice(-6).toUpperCase()}`,
-      `Cargo por Despacho de Pollo (${balanceInfo.netKg.toFixed(2)} kg @ S/. ${balanceInfo.pricePerKg.toFixed(2)})`,
+      `Cargo por Despacho de Aves (${balanceInfo.netKg.toFixed(2)} kg @ S/. ${balanceInfo.pricePerKg.toFixed(2)})`,
       'LIQUIDACIÓN',
-      `S/. ${balanceInfo.totalDue.toFixed(2)}`,
+      `S/. ${baseChickenCost.toFixed(2)}`,
       '-',
       `S/. ${currentBalance.toFixed(2)}`
     ]);
 
-    // Rows 1..N: Payments
+    // Rows for Additional Items
+    if (order.additionalItems && order.additionalItems.length > 0) {
+      order.additionalItems.forEach(item => {
+        const itemTotal = item.quantity * item.pricePerUnit;
+        currentBalance += itemTotal;
+        tableRows.push([
+          String(rowIndex++).padStart(2, '0'),
+          initialDate,
+          `EXT-${item.id.slice(-6).toUpperCase()}`,
+          `Cargo Extra: ${item.name} (${item.quantity} und. @ S/. ${item.pricePerUnit.toFixed(2)})`,
+          'EXTRA',
+          `S/. ${itemTotal.toFixed(2)}`,
+          '-',
+          `S/. ${currentBalance.toFixed(2)}`
+        ]);
+      });
+    }
+
+    // Rows N: Payments
     sortedPayments.forEach((pay, idx) => {
       currentBalance = Math.max(0, currentBalance - pay.amount);
       const payTime = new Date(pay.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
@@ -508,7 +536,7 @@ const Collections: React.FC = () => {
       const concept = pay.note ? `Abono: ${pay.note}` : 'Amortización a cuenta de deuda';
 
       tableRows.push([
-        String(idx + 2).padStart(2, '0'),
+        String(rowIndex++).padStart(2, '0'),
         payTime,
         opRef,
         concept,
@@ -1396,45 +1424,76 @@ const Collections: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-mono">
                       
-                      {/* Fila 0: Cargo Inicial */}
-                      <tr className="bg-slate-50/50">
-                        <td className="p-3.5 text-slate-600 font-bold">
-                          {viewHistoryOrder.date ? new Date(viewHistoryOrder.date).toLocaleDateString() : new Date(parseInt(viewHistoryOrder.id)).toLocaleDateString()}
-                        </td>
-                        <td className="p-3.5 font-sans font-black text-slate-800">
-                          Liquidación Inicial Despacho
-                        </td>
-                        <td className="p-3.5 text-slate-400">
-                          VTA-{viewHistoryOrder.id.slice(-6).toUpperCase()}
-                        </td>
-                        <td className="p-3.5 text-right font-bold text-slate-900">
-                          {calculateBalance(viewHistoryOrder).totalDue.toFixed(2)}
-                        </td>
-                        <td className="p-3.5 text-right text-slate-400">-</td>
-                        <td className="p-3.5 text-right font-bold text-red-600">
-                          {calculateBalance(viewHistoryOrder).totalDue.toFixed(2)}
-                        </td>
-                        <td className="p-3.5 text-center text-slate-300">-</td>
-                        <td className="p-3.5 text-center text-slate-300">-</td>
-                      </tr>
-
-                      {/* Filas de Abonos */}
                       {(() => {
-                        let runningBalance = calculateBalance(viewHistoryOrder).totalDue;
-                        const payments = [...(viewHistoryOrder.payments || [])].sort((a, b) => a.timestamp - b.timestamp);
-
-                        return payments.map(pay => {
-                          const prevBal = runningBalance;
-                          runningBalance = Math.max(0, runningBalance - pay.amount);
-
-                          return (
-                            <tr key={pay.id} className="hover:bg-emerald-50/40 transition-colors">
+                        const balInfo = calculateBalance(viewHistoryOrder);
+                        const baseChickenCost = balInfo.netKg * balInfo.pricePerKg;
+                        let runningBalance = baseChickenCost;
+                        
+                        return (
+                          <>
+                            {/* Fila 0: Cargo Inicial */}
+                            <tr className="bg-slate-50/50">
                               <td className="p-3.5 text-slate-600 font-bold">
-                                {new Date(pay.timestamp).toLocaleDateString()}{' '}
-                                <span className="text-[10px] text-slate-400">
-                                  {new Date(pay.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </span>
+                                {viewHistoryOrder.date ? new Date(viewHistoryOrder.date).toLocaleDateString() : new Date(parseInt(viewHistoryOrder.id)).toLocaleDateString()}
                               </td>
+                              <td className="p-3.5 font-sans font-black text-slate-800">
+                                Liquidación Inicial Aves
+                              </td>
+                              <td className="p-3.5 text-slate-400">
+                                VTA-{viewHistoryOrder.id.slice(-6).toUpperCase()}
+                              </td>
+                              <td className="p-3.5 text-right font-bold text-slate-900">
+                                {baseChickenCost.toFixed(2)}
+                              </td>
+                              <td className="p-3.5 text-right text-slate-400">-</td>
+                              <td className="p-3.5 text-right font-bold text-red-600">
+                                {runningBalance.toFixed(2)}
+                              </td>
+                              <td className="p-3.5 text-center text-slate-300">-</td>
+                              <td className="p-3.5 text-center text-slate-300">-</td>
+                            </tr>
+
+                            {/* Filas de Cargos Extras */}
+                            {(viewHistoryOrder.additionalItems || []).map(item => {
+                              const itemTotal = item.quantity * item.pricePerUnit;
+                              runningBalance += itemTotal;
+                              return (
+                                <tr key={item.id} className="bg-amber-50/30">
+                                  <td className="p-3.5 text-slate-600 font-bold">
+                                    {viewHistoryOrder.date ? new Date(viewHistoryOrder.date).toLocaleDateString() : new Date(parseInt(viewHistoryOrder.id)).toLocaleDateString()}
+                                  </td>
+                                  <td className="p-3.5 font-sans font-black text-amber-900">
+                                    Cargo Extra: {item.name}
+                                  </td>
+                                  <td className="p-3.5 text-slate-400">
+                                    EXT-{item.id.slice(-6).toUpperCase()}
+                                  </td>
+                                  <td className="p-3.5 text-right font-bold text-slate-900">
+                                    {itemTotal.toFixed(2)}
+                                  </td>
+                                  <td className="p-3.5 text-right text-slate-400">-</td>
+                                  <td className="p-3.5 text-right font-bold text-red-600">
+                                    {runningBalance.toFixed(2)}
+                                  </td>
+                                  <td className="p-3.5 text-center text-slate-300">-</td>
+                                  <td className="p-3.5 text-center text-slate-300">-</td>
+                                </tr>
+                              );
+                            })}
+
+                            {/* Filas de Abonos */}
+                            {[...(viewHistoryOrder.payments || [])].sort((a, b) => a.timestamp - b.timestamp).map(pay => {
+                              const prevBal = runningBalance;
+                              runningBalance = Math.max(0, runningBalance - pay.amount);
+
+                              return (
+                                <tr key={pay.id} className="hover:bg-emerald-50/40 transition-colors">
+                                  <td className="p-3.5 text-slate-600 font-bold">
+                                    {new Date(pay.timestamp).toLocaleDateString()}{' '}
+                                    <span className="text-[10px] text-slate-400">
+                                      {new Date(pay.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  </td>
                               
                               <td className="p-3.5 font-sans">
                                 <div className="font-bold text-emerald-800">{pay.note || 'Abono a Cuenta'}</div>
@@ -1476,8 +1535,10 @@ const Collections: React.FC = () => {
                               </td>
                             </tr>
                           );
-                        });
-                      })()}
+                        })}
+                      </>
+                    );
+                  })()}
 
                     </tbody>
                   </table>

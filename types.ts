@@ -33,6 +33,13 @@ export interface WeighingRecord {
   origin?: 'GALPON' | 'ACOPIO'; // New field for mortality origin
 }
 
+export interface AdditionalItem {
+  id: string;
+  name: string;
+  quantity: number;
+  pricePerUnit: number;
+}
+
 export interface ClientOrder {
   id: string;
   clientName: string;
@@ -49,6 +56,7 @@ export interface ClientOrder {
   pricePerKg: number;
   status: 'OPEN' | 'CLOSED';
   records: WeighingRecord[];
+  additionalItems?: AdditionalItem[]; // New field for extra items (feed, etc.)
   batchId?: string; // Optional if solo mode
   weighingMode?: WeighingType; // To distinguish in collections
   paymentStatus: 'PENDING' | 'PAID';
