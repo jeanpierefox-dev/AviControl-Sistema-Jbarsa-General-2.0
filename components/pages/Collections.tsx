@@ -146,6 +146,59 @@ const Collections: React.FC = () => {
     });
   }, [orders, searchTerm, statusFilter, sortBy, batches]);
 
+  type ClientGroup = {
+    clientName: string;
+    clientDni: string;
+    orders: ClientOrder[];
+    totalDue: number;
+    totalPaid: number;
+    balance: number;
+    percentPaid: number;
+  };
+
+  const clientGroups = useMemo(() => {
+    const groups: Record<string, ClientGroup> = {};
+
+    filteredOrders.forEach(o => {
+      const key = (o.clientName || 'Cliente No Identificado').trim().toLowerCase();
+      if (!groups[key]) {
+        groups[key] = {
+          clientName: (o.clientName || 'Cliente No Identificado').trim(),
+          clientDni: o.clientDni || '',
+          orders: [],
+          totalDue: 0,
+          totalPaid: 0,
+          balance: 0,
+          percentPaid: 0
+        };
+      }
+      
+      const bal = calculateBalance(o);
+      groups[key].orders.push(o);
+      groups[key].totalDue += bal.totalDue;
+      groups[key].totalPaid += bal.totalPaid;
+      groups[key].balance += bal.balance;
+    });
+
+    return Object.values(groups).map(g => {
+       g.percentPaid = g.totalDue > 0 ? Math.min(100, Math.round((g.totalPaid / g.totalDue) * 100)) : (g.totalPaid > 0 ? 100 : 0);
+       return g;
+    }).sort((a,b) => {
+       if (sortBy === 'balance_desc') return b.balance - a.balance;
+       if (sortBy === 'client_asc') return a.clientName.localeCompare(b.clientName);
+       return b.balance - a.balance; // Default to highest balance first for groups
+    });
+  }, [filteredOrders, sortBy]);
+
+  const [expandedClients, setExpandedClients] = useState<Record<string, boolean>>({});
+
+  const toggleClientExpansion = (clientName: string) => {
+    setExpandedClients(prev => ({
+      ...prev,
+      [clientName]: !prev[clientName]
+    }));
+  };
+
   // Overall Financial KPIs
   const kpiStats = useMemo(() => {
     let totalBilled = 0;

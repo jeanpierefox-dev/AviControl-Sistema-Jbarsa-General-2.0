@@ -1,4 +1,7 @@
-import { User, WeighingType, UserRole, Batch, ClientOrder, AppConfig } from '../types';
+const fs = require('fs');
+const content = fs.readFileSync('services/storage.ts', 'utf-8');
+
+const replacement = `import { User, WeighingType, UserRole, Batch, ClientOrder, AppConfig } from '../types';
 import { db } from './firebase';
 import { collection, doc, setDoc, deleteDoc, getDocs, onSnapshot, writeBatch } from 'firebase/firestore';
 
@@ -215,36 +218,7 @@ export const uploadLocalToCloud = async () => {
     console.warn('Direct cloud upload notice:', err);
   }
 };
+`;
 
-export const resetApp = async () => {
-  localStorage.clear();
-  window.dispatchEvent(new Event('avi_data_users'));
-  window.dispatchEvent(new Event('avi_data_batches'));
-  window.dispatchEvent(new Event('avi_data_orders'));
-  window.dispatchEvent(new Event('avi_data_config'));
-  
-  // Note: we don't delete everything in firestore for safety here,
-  // just the local cache. If needed, a cloud reset could be implemented.
-};
-
-export const initCloudSync = initDataSync;
-
-export const isFirebaseConfigured = () => true;
-
-export const onConnectionStateChange = (callback: (connected: boolean) => void) => {
-  const handler = (e: any) => callback(e.detail);
-  window.addEventListener('avi_cloud_status', handler);
-  return () => window.removeEventListener('avi_cloud_status', handler);
-};
-
-export const getEffectiveBranding = (item: any, user: User | null) => {
-  const config = getConfig();
-  let logoUrl = config.logoUrl;
-  let companyName = config.companyName || 'AVICONTROL PRO';
-  
-  if (user && user.role !== UserRole.ADMIN) {
-    if (user.logoUrl) logoUrl = user.logoUrl;
-    if (user.companyName) companyName = user.companyName;
-  }
-  return { logoUrl, companyName };
-};
+fs.writeFileSync('services/storage.ts', replacement);
+console.log('Patched storage.ts');

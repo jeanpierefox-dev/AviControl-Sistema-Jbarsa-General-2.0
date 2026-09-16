@@ -1,0 +1,111 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Application users and roles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "GENERAL", "OPERATOR"] },
+        "parentId": { "type": "string" },
+        "allowedModes": { "type": "array", "items": { "type": "string" } },
+        "logoUrl": { "type": "string" },
+        "companyName": { "type": "string" }
+      },
+      "required": ["id", "username", "name", "role"]
+    },
+    "Batch": {
+      "title": "Batch",
+      "description": "A batch of chickens/crates",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "date": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "totalCratesLimit": { "type": "number" },
+        "emptyCrates": { "type": "number" },
+        "birdType": { "type": "string" },
+        "birdSex": { "type": "string" },
+        "origin": { "type": "string" },
+        "truckPlate": { "type": "string" },
+        "dispatcherName": { "type": "string" },
+        "dispatcherDni": { "type": "string" },
+        "clientDni": { "type": "string" },
+        "recipientName": { "type": "string" },
+        "recipientDni": { "type": "string" },
+        "clientSignature": { "type": "string" },
+        "dispatcherSignature": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "ARCHIVED"] },
+        "createdBy": { "type": "string" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "name", "createdAt", "totalCratesLimit", "status"]
+    },
+    "Order": {
+      "title": "ClientOrder",
+      "description": "A weighing order for a client",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clientName": { "type": "string" },
+        "date": { "type": "string" },
+        "targetCrates": { "type": "number" },
+        "birdsPerCrate": { "type": "number" },
+        "birdType": { "type": "string" },
+        "birdSex": { "type": "string" },
+        "clientDni": { "type": "string" },
+        "recipientName": { "type": "string" },
+        "recipientDni": { "type": "string" },
+        "clientSignature": { "type": "string" },
+        "dispatcherSignature": { "type": "string" },
+        "pricePerKg": { "type": "number" },
+        "status": { "type": "string", "enum": ["OPEN", "CLOSED"] },
+        "records": { "type": "array" },
+        "additionalItems": { "type": "array" },
+        "batchId": { "type": "string" },
+        "weighingMode": { "type": "string" },
+        "paymentStatus": { "type": "string", "enum": ["PENDING", "PAID"] },
+        "paymentMethod": { "type": "string" },
+        "payments": { "type": "array" },
+        "createdBy": { "type": "string" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "clientName", "targetCrates", "pricePerKg", "status", "paymentStatus"]
+    },
+    "Config": {
+      "title": "AppConfig",
+      "description": "Global application configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyName": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "printerConnected": { "type": "boolean" },
+        "scaleConnected": { "type": "boolean" },
+        "defaultFullCrateBatch": { "type": "number" },
+        "defaultEmptyCrateBatch": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Store application users"
+    },
+    "/batches/{batchId}": {
+      "schema": { "$ref": "#/entities/Batch" },
+      "description": "Store all batches"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Store all client weighing orders"
+    },
+    "/config/{configId}": {
+      "schema": { "$ref": "#/entities/Config" },
+      "description": "Store global configs"
+    }
+  }
+}
