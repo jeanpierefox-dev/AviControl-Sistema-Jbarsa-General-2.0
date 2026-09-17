@@ -29,8 +29,20 @@ const broadcastLocalSync = (key: string, data: any) => {
 
 let unsubscribes: (() => void)[] = [];
 
-export const initDataSync = () => {
+export const initDataSync = async () => {
   console.log('Initializing Firebase Cloud Sync...');
+  
+  try {
+    // Check if cloud is empty (first time connect)
+    const usersSnapshot = await getDocs(collection(db, 'users'));
+    if (usersSnapshot.empty) {
+      console.log('Cloud database is empty, migrating local data to cloud...');
+      await uploadLocalToCloud();
+    }
+  } catch(e) {
+     console.error('Failed to check cloud state', e);
+  }
+
   notifyConnectionState(true);
 
   // Clear previous subscriptions
@@ -39,14 +51,18 @@ export const initDataSync = () => {
 
   // Users
   unsubscribes.push(onSnapshot(collection(db, 'users'), (snapshot) => {
+    if (snapshot.empty && getUsers().length > 0) return; // Prevent overwriting with empty
     const users: User[] = [];
     snapshot.forEach(doc => users.push(doc.data() as User));
-    localStorage.setItem(KEYS.USERS, JSON.stringify(users));
-    window.dispatchEvent(new Event('avi_data_users'));
+    if (users.length > 0) {
+      localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+      window.dispatchEvent(new Event('avi_data_users'));
+    }
   }, (err) => notifyConnectionState(false)));
 
   // Batches
   unsubscribes.push(onSnapshot(collection(db, 'batches'), (snapshot) => {
+    if (snapshot.empty && getBatches().length > 0) return; 
     const batches: Batch[] = [];
     snapshot.forEach(doc => batches.push(doc.data() as Batch));
     localStorage.setItem(KEYS.BATCHES, JSON.stringify(batches));
@@ -55,6 +71,7 @@ export const initDataSync = () => {
 
   // Orders
   unsubscribes.push(onSnapshot(collection(db, 'orders'), (snapshot) => {
+    if (snapshot.empty && getOrders().length > 0) return;
     const orders: ClientOrder[] = [];
     snapshot.forEach(doc => orders.push(doc.data() as ClientOrder));
     localStorage.setItem(KEYS.ORDERS, JSON.stringify(orders));
@@ -63,6 +80,7 @@ export const initDataSync = () => {
 
   // Config
   unsubscribes.push(onSnapshot(collection(db, 'config'), (snapshot) => {
+    if (snapshot.empty) return;
     let config = safeParse(KEYS.CONFIG, {
       companyName: 'AVICONTROL PRO',
       logoUrl: '',
@@ -78,7 +96,6 @@ export const initDataSync = () => {
     window.dispatchEvent(new Event('avi_data_config'));
   }, (err) => notifyConnectionState(false)));
 };
-
 export const getConfig = (): AppConfig => {
   return safeParse(KEYS.CONFIG, {
     companyName: 'AVICONTROL PRO',
