@@ -8,7 +8,7 @@ import {
   Receipt, ArrowDownRight, AlertTriangle, CheckCircle2, ChevronRight,
   TrendingDown, TrendingUp, Wallet, Eye, Download, ShieldCheck,
   Smartphone, Landmark, FileSpreadsheet, RefreshCw, Layers
-} from 'lucide-react';
+, ChevronUp, ChevronDown} from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { AuthContext } from '../../App';
@@ -25,6 +25,33 @@ interface BalanceCalculation {
   paymentCount: number;
   percentPaid: number;
 }
+
+
+const getSafeDateString = (dateVal: string | number | undefined | null, fallbackId: string) => {
+    if (dateVal) {
+        const d = new Date(dateVal);
+        if (!isNaN(d.getTime())) return d.toLocaleDateString();
+    }
+    const idNum = parseInt(fallbackId);
+    if (!isNaN(idNum)) {
+        const d = new Date(idNum);
+        if (!isNaN(d.getTime())) return d.toLocaleDateString();
+    }
+    return new Date().toLocaleDateString();
+};
+
+const getSafeDateObj = (dateVal: string | number | undefined | null, fallbackId: string) => {
+    if (dateVal) {
+        const d = new Date(dateVal);
+        if (!isNaN(d.getTime())) return d;
+    }
+    const idNum = parseInt(fallbackId);
+    if (!isNaN(idNum)) {
+        const d = new Date(idNum);
+        if (!isNaN(d.getTime())) return d;
+    }
+    return new Date();
+};
 
 const Collections: React.FC = () => {
   const [orders, setOrders] = useState<ClientOrder[]>([]);
@@ -462,7 +489,7 @@ const Collections: React.FC = () => {
     doc.setFont("helvetica", "bold").setTextColor(100, 116, 139);
     doc.text("Fecha Liquidación Venta:", 20, y + 27);
     doc.setFont("helvetica", "normal").setTextColor(15, 23, 42);
-    doc.text(order.date ? new Date(order.date).toLocaleDateString() : new Date(parseInt(order.id)).toLocaleDateString(), 62, y + 27);
+    doc.text(getSafeDateString(order.date, order.id), 62, y + 27);
 
     // Columna 2
     doc.setFont("helvetica", "bold").setTextColor(100, 116, 139);
@@ -546,7 +573,7 @@ const Collections: React.FC = () => {
     let rowIndex = 1;
 
     // Row 1: Initial cargo for Chickens
-    const initialDate = order.date ? new Date(order.date).toLocaleDateString() : new Date(parseInt(order.id)).toLocaleDateString();
+    const initialDate = getSafeDateString(order.date, order.id);
     
     // Calculate the base chicken cost without additional items
     const baseChickenCost = balanceInfo.netKg * balanceInfo.pricePerKg;
@@ -967,7 +994,7 @@ const Collections: React.FC = () => {
             const monthlyStats: Record<string, { totalDue: number, totalPaid: number, balance: number, orders: ClientOrder[] }> = {};
             
             group.orders.forEach(order => {
-               const orderDate = order.date ? new Date(order.date) : new Date(parseInt(order.id));
+               const orderDate = getSafeDateObj(order.date, order.id);
                const monthYear = orderDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
                if (!monthlyStats[monthYear]) {
                  monthlyStats[monthYear] = { totalDue: 0, totalPaid: 0, balance: 0, orders: [] };
@@ -1045,7 +1072,7 @@ const Collections: React.FC = () => {
                                 const { totalDue, totalPaid, balance, percentPaid } = calculateBalance(order);
                                 const isOrderPaid = balance <= 0.05 || order.paymentStatus === 'PAID';
                                 const batchName = getBatchName(order.batchId);
-                                const orderDate = order.date ? new Date(order.date).toLocaleDateString() : new Date(parseInt(order.id)).toLocaleDateString();
+                                const orderDate = getSafeDateString(order.date, order.id);
 
                                 return (
                                   <tr key={order.id} className="hover:bg-blue-50/30 transition-colors bg-white">
@@ -1120,7 +1147,7 @@ const Collections: React.FC = () => {
             const isPaid = balance <= 0.05 || order.paymentStatus === 'PAID';
             const isPartial = totalPaid > 0 && !isPaid;
             const batchName = getBatchName(order.batchId);
-            const orderDate = order.date ? new Date(order.date).toLocaleDateString() : new Date(parseInt(order.id)).toLocaleDateString();
+            const orderDate = getSafeDateString(order.date, order.id);
 
             return (
               <div 
@@ -1496,7 +1523,7 @@ const Collections: React.FC = () => {
                             {/* Fila 0: Cargo Inicial */}
                             <tr className="bg-slate-50/50">
                               <td className="p-3.5 text-slate-600 font-bold">
-                                {viewHistoryOrder.date ? new Date(viewHistoryOrder.date).toLocaleDateString() : new Date(parseInt(viewHistoryOrder.id)).toLocaleDateString()}
+                                {getSafeDateString(viewHistoryOrder.date, viewHistoryOrder.id)}
                               </td>
                               <td className="p-3.5 font-sans font-black text-slate-800">
                                 Liquidación Inicial Aves
@@ -1522,7 +1549,7 @@ const Collections: React.FC = () => {
                               return (
                                 <tr key={item.id} className="bg-amber-50/30">
                                   <td className="p-3.5 text-slate-600 font-bold">
-                                    {viewHistoryOrder.date ? new Date(viewHistoryOrder.date).toLocaleDateString() : new Date(parseInt(viewHistoryOrder.id)).toLocaleDateString()}
+                                    {getSafeDateString(viewHistoryOrder.date, viewHistoryOrder.id)}
                                   </td>
                                   <td className="p-3.5 font-sans font-black text-amber-900">
                                     Cargo Extra: {item.name}
@@ -1551,7 +1578,7 @@ const Collections: React.FC = () => {
                               return (
                                 <tr key={pay.id} className="hover:bg-emerald-50/40 transition-colors">
                                   <td className="p-3.5 text-slate-600 font-bold">
-                                    {new Date(pay.timestamp).toLocaleDateString()}{' '}
+                                    {getSafeDateString(pay.timestamp, '0')}{' '}
                                     <span className="text-[10px] text-slate-400">
                                       {new Date(pay.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </span>

@@ -54,30 +54,131 @@ export const calculateTotals = (order: ClientOrder) => {
 const Reports = () => {
   const { user } = React.useContext(AuthContext);
   
+
   const handlePDFOutput = (doc: jsPDF, filename: string) => {
-    // try to use capacitor if needed, else save
     doc.save(filename);
   };
 
+  const getSafeDateString = (order: ClientOrder) => {
+    if (order.date) {
+      const d = new Date(order.date);
+      if (!isNaN(d.getTime())) return d.toLocaleDateString();
+    }
+    const idNum = parseInt(order.id);
+    if (!isNaN(idNum)) {
+      const d = new Date(idNum);
+      if (!isNaN(d.getTime())) return d.toLocaleDateString();
+    }
+    return new Date().toLocaleDateString();
+  };
+
   const generateTicketPDF = (order: ClientOrder, show: boolean = false) => {
-     const doc = new jsPDF();
-     doc.text("Ticket Detallado", 10, 10);
-     handlePDFOutput(doc, "ticket.pdf");
+     const doc = new jsPDF({ unit: 'mm', format: [80, 250] });
+     const t = calculateTotals(order);
+     let y = 10;
+     doc.setFontSize(12).setFont("helvetica", "bold");
+     doc.text("TICKET DETALLADO", 40, y, { align: 'center' });
+     y += 8;
+     doc.setFontSize(9).setFont("helvetica", "normal");
+     doc.text(`Cliente: ${order.clientName}`, 5, y); y += 5;
+     doc.text(`Fecha: ${getSafeDateString(order)}`, 5, y); y += 8;
+
+     autoTable(doc, {
+         startY: y,
+         head: [['Llenas', 'Vacías', 'Muertos']],
+         body: [
+             [`${t.wF.toFixed(1)} kg`, `${t.wE.toFixed(1)} kg`, `${t.wM.toFixed(1)} kg`]
+         ],
+         theme: 'grid',
+         styles: { fontSize: 8, cellPadding: 2, halign: 'center' }
+     });
+     y = (doc as any).lastAutoTable.finalY + 10;
+
+     doc.setFont("helvetica", "bold");
+     doc.text(`PESO NETO: ${t.net.toFixed(1)} kg`, 5, y);
+     
+     handlePDFOutput(doc, `Ticket_${order.clientName}.pdf`);
   };
+
   const generateSalesTicketPDF = (order: ClientOrder, show: boolean = false) => {
-     const doc = new jsPDF();
-     doc.text("Ticket de Venta", 10, 10);
-     handlePDFOutput(doc, "ticket_venta.pdf");
+     const doc = new jsPDF({ unit: 'mm', format: [80, 200] });
+     const t = calculateTotals(order);
+     let y = 10;
+     doc.setFontSize(12).setFont("helvetica", "bold");
+     doc.text("TICKET DE VENTA", 40, y, { align: 'center' });
+     y += 8;
+     doc.setFontSize(9).setFont("helvetica", "normal");
+     doc.text(`Cliente: ${order.clientName}`, 5, y); y += 5;
+     doc.text(`Fecha: ${getSafeDateString(order)}`, 5, y); y += 8;
+
+     autoTable(doc, {
+         startY: y,
+         head: [['Concepto', 'Total']],
+         body: [
+             ['Peso Neto', `${t.net.toFixed(1)} kg`],
+             ['Precio / Kg', `S/ ${order.pricePerKg.toFixed(2)}`],
+             ['TOTAL', `S/ ${t.totalAmount.toFixed(2)}`]
+         ],
+         theme: 'grid',
+         styles: { fontSize: 8, cellPadding: 2 }
+     });
+     
+     handlePDFOutput(doc, `Venta_${order.clientName}.pdf`);
   };
+
   const generateSummaryTicketPDF = (order: ClientOrder, show: boolean = false) => {
-     const doc = new jsPDF();
-     doc.text("Ticket Resumen", 10, 10);
-     handlePDFOutput(doc, "ticket_resumen.pdf");
+     const doc = new jsPDF({ unit: 'mm', format: [80, 180] });
+     const t = calculateTotals(order);
+     let y = 10;
+     doc.setFontSize(12).setFont("helvetica", "bold");
+     doc.text("RESUMEN DE PESAJE", 40, y, { align: 'center' });
+     y += 8;
+     doc.setFontSize(9).setFont("helvetica", "normal");
+     doc.text(`Cliente: ${order.clientName}`, 5, y); y += 5;
+     doc.text(`Fecha: ${getSafeDateString(order)}`, 5, y); y += 8;
+
+     doc.text(`Total Pollos: ${t.bF}`, 5, y); y += 5;
+     doc.text(`Jabas: ${t.qF}`, 5, y); y += 5;
+     doc.text(`Peso Neto: ${t.net.toFixed(1)} kg`, 5, y); y += 5;
+
+     handlePDFOutput(doc, `Resumen_${order.clientName}.pdf`);
   };
+
   const generateA4ClientPDF = (order: ClientOrder) => {
      const doc = new jsPDF();
-     doc.text("Reporte A4", 10, 10);
-     handlePDFOutput(doc, "reporte_a4.pdf");
+     const t = calculateTotals(order);
+     doc.setFontSize(18).setFont("helvetica", "bold");
+     doc.text("REPORTE DETALLADO DE PESAJE", 105, 20, { align: 'center' });
+     
+     doc.setFontSize(12).setFont("helvetica", "normal");
+     doc.text(`Cliente: ${order.clientName}`, 20, 35);
+     doc.text(`Fecha: ${getSafeDateString(order)}`, 20, 42);
+     doc.text(`Lote: ${getBatchName(order.batchId || "")}`, 20, 49);
+
+     autoTable(doc, {
+         startY: 60,
+         head: [['Total Jabas', 'Total Pollos', 'Bruto (kg)', 'Tara (kg)', 'Mort. (kg)', 'Neto (kg)']],
+         body: [
+             [t.qF, t.bF, t.wF.toFixed(1), t.wE.toFixed(1), t.wM.toFixed(1), t.net.toFixed(1)]
+         ],
+         theme: 'striped',
+         headStyles: { fillColor: [30, 58, 138] }
+     });
+
+     autoTable(doc, {
+         startY: (doc as any).lastAutoTable.finalY + 15,
+         head: [['Finanzas', 'Monto']],
+         body: [
+             ['Precio por Kg', `S/ ${order.pricePerKg.toFixed(2)}`],
+             ['Total Facturado', `S/ ${t.totalAmount.toFixed(2)}`],
+             ['Total Abonado', `S/ ${t.totalPaid.toFixed(2)}`],
+             ['Saldo Restante', `S/ ${t.balance.toFixed(2)}`]
+         ],
+         theme: 'grid',
+         headStyles: { fillColor: [15, 23, 42] }
+     });
+
+     handlePDFOutput(doc, `ReporteA4_${order.clientName}.pdf`);
   };
 
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -85,6 +186,42 @@ const Reports = () => {
   useEffect(() => {
     setBatches(getBatches());
   }, []);
+
+
+  const generateGeneralClientPDF = (group: ClientGroup) => {
+     const doc = new jsPDF();
+     doc.setFontSize(18).setFont("helvetica", "bold");
+     doc.text("REPORTE GENERAL DE CLIENTE", 105, 20, { align: 'center' });
+     
+     doc.setFontSize(12).setFont("helvetica", "normal");
+     doc.text(`Cliente: ${group.clientName}`, 20, 35);
+     doc.text(`DNI: ${group.clientDni || 'N/A'}`, 20, 42);
+     doc.text(`Fecha de Emisión: ${new Date().toLocaleDateString()}`, 20, 49);
+
+     autoTable(doc, {
+         startY: 60,
+         head: [['Total Órdenes', 'Total Jabas', 'Total Pollos', 'Peso Neto (kg)']],
+         body: [
+             [group.orders.length, group.totalCrates, group.totalBirds, group.totalNet.toFixed(1)]
+         ],
+         theme: 'striped',
+         headStyles: { fillColor: [30, 58, 138] }
+     });
+
+     autoTable(doc, {
+         startY: (doc as any).lastAutoTable.finalY + 15,
+         head: [['Resumen Financiero', 'Monto']],
+         body: [
+             ['Total Facturado Histórico', `S/ ${group.totalDue.toFixed(2)}`],
+             ['Total Abonado', `S/ ${group.totalPaid.toFixed(2)}`],
+             ['Deuda General Pendiente', `S/ ${group.balance.toFixed(2)}`]
+         ],
+         theme: 'grid',
+         headStyles: { fillColor: [15, 23, 42] }
+     });
+
+     handlePDFOutput(doc, `ReporteGeneral_${group.clientName}.pdf`);
+  };
 
   const getBatchName = (batchId: string) => {
     if (batchId === 'direct-sales') return 'Ventas Directas';
@@ -194,7 +331,7 @@ const Reports = () => {
 
   const shareViaWhatsApp = (order: ClientOrder) => {
     const t = calculateTotals(order);
-    const orderDate = order.date ? new Date(order.date).toLocaleDateString() : new Date(parseInt(order.id)).toLocaleDateString();
+    const orderDate = getSafeDateString(order);
     
     let msg = `*TICKET DE PESAJE - AVICONTROL*
 
@@ -203,7 +340,7 @@ const Reports = () => {
 `;
     msg += `*Fecha:* ${orderDate}
 `;
-    msg += `*Lote:* ${getBatchName(order.batchId)}
+    msg += `*Lote:* ${getBatchName(order.batchId || "")}
 
 `;
     
@@ -358,7 +495,17 @@ const Reports = () => {
           const monthlyStats: Record<string, { totalDue: number, totalPaid: number, balance: number, net: number, orders: ClientOrder[] }> = {};
           
           group.orders.forEach(order => {
-             const orderDate = order.date ? new Date(order.date) : new Date(parseInt(order.id));
+             let orderDate = new Date();
+             if (order.date) {
+                const d = new Date(order.date);
+                if (!isNaN(d.getTime())) orderDate = d;
+             } else {
+                const idNum = parseInt(order.id);
+                if (!isNaN(idNum)) {
+                   const d = new Date(idNum);
+                   if (!isNaN(d.getTime())) orderDate = d;
+                }
+             }
              const monthYear = orderDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
              if (!monthlyStats[monthYear]) {
                monthlyStats[monthYear] = { totalDue: 0, totalPaid: 0, balance: 0, net: 0, orders: [] };
@@ -410,7 +557,17 @@ const Reports = () => {
 
               {isExpanded && (
                 <div className="border-t border-slate-100 bg-slate-50/50 p-3 md:p-5 animate-fade-in space-y-4">
+                  
+                  <div className="flex justify-end mb-4">
+                     <button 
+                         onClick={(e) => { e.stopPropagation(); generateGeneralClientPDF(group); }} 
+                         className="bg-blue-900 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-blue-800 shadow-sm transition-all"
+                     >
+                         <Download size={14} /> Descargar Reporte General del Cliente
+                     </button>
+                  </div>
                   {/* Monthly Breakdowns */}
+
                   {Object.entries(monthlyStats).map(([month, stats]) => (
                     <div key={month} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                       <div className="bg-slate-100/80 p-3 border-b border-slate-200 flex flex-col md:flex-row md:justify-between md:items-center gap-2">
@@ -436,8 +593,8 @@ const Reports = () => {
                           <tbody className="divide-y divide-slate-50 text-xs">
                             {stats.orders.map(order => {
                               const t = calculateTotals(order);
-                              const batchName = getBatchName(order.batchId);
-                              const orderDate = order.date ? new Date(order.date).toLocaleDateString() : new Date(parseInt(order.id)).toLocaleDateString();
+                              const batchName = getBatchName(order.batchId || "");
+                              const orderDate = getSafeDateString(order);
 
                               return (
                                 <tr key={order.id} className="hover:bg-blue-50/30 transition-colors bg-white">
@@ -652,8 +809,18 @@ const Reports = () => {
                 </div>
               </div>
             </div>
+
+            <div className="mt-8 flex justify-end border-t border-slate-100 pt-5">
+              <button 
+                onClick={() => { setShowDetailModal(null); }} 
+                className="bg-slate-800 text-white px-8 py-3 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all shadow-md active:scale-95 flex items-center gap-2"
+              >
+                <X size={16}/> Cerrar Detalle
+              </button>
+            </div>
           </div>
         </div>
+
       )}
     </div>
   );
