@@ -697,21 +697,32 @@ const Collections: React.FC = () => {
 
     endY += 24;
 
+    const batch = getBatches().find(b => b.id === order.batchId);
+    const dispSig = batch?.dispatcherSignature;
+    const clientSig = order.clientSignature || batch?.clientSignature;
+    
+    if (dispSig) {
+      try { doc.addImage(dispSig, 'PNG', 25, endY - 20, 40, 15); } catch (e) {}
+    }
+    if (clientSig) {
+      try { doc.addImage(clientSig, 'PNG', 135, endY - 20, 40, 15); } catch (e) {}
+    }
+
     // Signatures
-    doc.setLineWidth(0.4);
-    doc.setDrawColor(100, 116, 139);
-    doc.line(25, endY, 85, endY);
-    doc.line(125, endY, 185, endY);
+    doc.setLineWidth(0.5);
+    doc.setDrawColor(0);
+    doc.line(15, endY, 65, endY);
+    doc.line(135, endY, 185, endY);
 
     doc.setFontSize(8).setFont("helvetica", "bold").setTextColor(15, 23, 42);
-    doc.text("RESPONSABLE DE TESORERÍA / CAJA", 55, endY + 5, { align: 'center' });
+    doc.text("RESPONSABLE DESPACHO", 40, endY + 4, { align: 'center' });
     doc.setFontSize(7).setFont("helvetica", "normal").setTextColor(100, 116, 139);
-    doc.text(branding.companyName.toUpperCase(), 55, endY + 9, { align: 'center' });
+    doc.text(branding.companyName.toUpperCase(), 40, endY + 8, { align: 'center' });
 
     doc.setFontSize(8).setFont("helvetica", "bold").setTextColor(15, 23, 42);
-    doc.text("CONFORMIDAD DEL CLIENTE / TITULAR", 155, endY + 5, { align: 'center' });
+    doc.text("CLIENTE / RECIBE", 160, endY + 4, { align: 'center' });
     doc.setFontSize(7).setFont("helvetica", "normal").setTextColor(100, 116, 139);
-    doc.text(order.clientName.toUpperCase(), 155, endY + 9, { align: 'center' });
+    doc.text("Firma de Conformidad", 160, endY + 8, { align: 'center' });
 
     // Page Footer
     const pageH = doc.internal.pageSize.getHeight();

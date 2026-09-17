@@ -1306,6 +1306,39 @@ const WeighingStation: React.FC = () => {
     }
     
     // Footer
+    if (y > 250) {
+       doc.addPage();
+       addAppWatermarkToPdf(doc);
+       y = 20;
+    }
+    
+    y += 20;
+    const dispSig = batch?.dispatcherSignature;
+    const clientSig = order.clientSignature || batch?.clientSignature;
+    if (dispSig) {
+      try { doc.addImage(dispSig, 'PNG', 20, y - 15, 40, 15); } catch (e) {}
+    }
+    if (clientSig) {
+      try { doc.addImage(clientSig, 'PNG', 150, y - 15, 40, 15); } catch (e) {}
+    }
+    
+    doc.setLineWidth(0.5);
+    doc.setDrawColor(0);
+    
+    // Firma Responsable
+    doc.line(15, y, 65, y);
+    doc.setFontSize(8).setFont("helvetica", "bold");
+    doc.text("RESPONSABLE DESPACHO", 40, y + 4, { align: 'center' });
+    doc.setFont("helvetica", "normal");
+    doc.text("Firma o Sello", 40, y + 8, { align: 'center' });
+    
+    // Firma Cliente
+    doc.line(145, y, 195, y);
+    doc.setFontSize(8).setFont("helvetica", "bold");
+    doc.text("CLIENTE / RECIBE", 170, y + 4, { align: 'center' });
+    doc.setFont("helvetica", "normal");
+    doc.text("Firma de Conformidad", 170, y + 8, { align: 'center' });
+
     const pageCount = (doc as any).internal.getNumberOfPages();
     for(let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
@@ -1544,6 +1577,35 @@ const WeighingStation: React.FC = () => {
     });
 
     // Footer
+    y = (doc as any).lastAutoTable.finalY + 15;
+    if (y > 170) { doc.addPage(); y = 20; }
+    
+    const dispSig = currentBatch?.dispatcherSignature;
+    const clientSig = currentBatch?.clientSignature;
+    if (dispSig) {
+      try { doc.addImage(dispSig, 'PNG', 40, y - 15, 40, 15); } catch (e) {}
+    }
+    if (clientSig) {
+      try { doc.addImage(clientSig, 'PNG', 215, y - 15, 40, 15); } catch (e) {}
+    }
+    
+    doc.setLineWidth(0.5);
+    doc.setDrawColor(0);
+    
+    // Firma Responsable
+    doc.line(30, y, 90, y);
+    doc.setFontSize(8).setFont("helvetica", "bold");
+    doc.text("RESPONSABLE DESPACHO", 60, y + 4, { align: 'center' });
+    doc.setFont("helvetica", "normal");
+    doc.text("Firma o Sello", 60, y + 8, { align: 'center' });
+    
+    // Firma Cliente
+    doc.line(205, y, 265, y);
+    doc.setFontSize(8).setFont("helvetica", "bold");
+    doc.text("CLIENTE / RECIBE", 235, y + 4, { align: 'center' });
+    doc.setFont("helvetica", "normal");
+    doc.text("Firma de Conformidad", 235, y + 8, { align: 'center' });
+
     const pageCount = (doc as any).internal.getNumberOfPages();
     for(let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
