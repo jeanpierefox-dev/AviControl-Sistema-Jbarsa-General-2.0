@@ -246,6 +246,11 @@ export const resetApp = async () => {
 
 export const initCloudSync = initDataSync;
 
+window.addEventListener('avi_force_sync', () => {
+  uploadLocalToCloud();
+  initDataSync();
+});
+
 export const isFirebaseConfigured = () => true;
 
 export const onConnectionStateChange = (callback: (connected: boolean) => void) => {

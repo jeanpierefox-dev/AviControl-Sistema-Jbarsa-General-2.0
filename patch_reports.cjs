@@ -1,13 +1,13 @@
-import React, { useState, useMemo, useEffect } from 'react';
+const fs = require('fs');
+let content = fs.readFileSync('components/pages/Reports.tsx', 'utf-8');
+
+const replacement = `import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Batch, WeighingType, UserRole, ClientOrder, WeighingRecord } from '../../types';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { addLogoToPdf, addAppWatermarkToPdf } from '../../services/pdfHelper';
 import { getBatches, getOrders, getConfig, saveOrder, resetApp, getVisibleUserIds, getEffectiveBranding, uploadLocalToCloud } from '../../services/storage';
 import { AuthContext } from '../../App';
-
-
+import { getBatchName } from './Collections';
+import { generateTicketPDF, generateSalesTicketPDF, generateSummaryTicketPDF, generateLameTicketPDF, generateA4ClientPDF, generateBankStatementPDF } from '../../services/pdfHelper';
 
 import { 
   BarChart2, Calendar, Search, Filter, Package, Users, DollarSign, 
@@ -53,44 +53,6 @@ export const calculateTotals = (order: ClientOrder) => {
 
 const Reports = () => {
   const { user } = React.useContext(AuthContext);
-  
-  const handlePDFOutput = (doc: jsPDF, filename: string) => {
-    // try to use capacitor if needed, else save
-    doc.save(filename);
-  };
-
-  const generateTicketPDF = (order: ClientOrder, show: boolean = false) => {
-     const doc = new jsPDF();
-     doc.text("Ticket Detallado", 10, 10);
-     handlePDFOutput(doc, "ticket.pdf");
-  };
-  const generateSalesTicketPDF = (order: ClientOrder, show: boolean = false) => {
-     const doc = new jsPDF();
-     doc.text("Ticket de Venta", 10, 10);
-     handlePDFOutput(doc, "ticket_venta.pdf");
-  };
-  const generateSummaryTicketPDF = (order: ClientOrder, show: boolean = false) => {
-     const doc = new jsPDF();
-     doc.text("Ticket Resumen", 10, 10);
-     handlePDFOutput(doc, "ticket_resumen.pdf");
-  };
-  const generateA4ClientPDF = (order: ClientOrder) => {
-     const doc = new jsPDF();
-     doc.text("Reporte A4", 10, 10);
-     handlePDFOutput(doc, "reporte_a4.pdf");
-  };
-
-  const [batches, setBatches] = useState<Batch[]>([]);
-  
-  useEffect(() => {
-    setBatches(getBatches());
-  }, []);
-
-  const getBatchName = (batchId: string) => {
-    if (batchId === 'direct-sales') return 'Ventas Directas';
-    const b = batches.find(b => b.id === batchId);
-    return b ? b.name : batchId;
-  };
   const navigate = useNavigate();
   
   const [orders, setOrders] = useState<ClientOrder[]>([]);
@@ -196,60 +158,35 @@ const Reports = () => {
     const t = calculateTotals(order);
     const orderDate = order.date ? new Date(order.date).toLocaleDateString() : new Date(parseInt(order.id)).toLocaleDateString();
     
-    let msg = `*TICKET DE PESAJE - AVICONTROL*
-
-`;
-    msg += `*Cliente:* ${order.clientName}
-`;
-    msg += `*Fecha:* ${orderDate}
-`;
-    msg += `*Lote:* ${getBatchName(order.batchId)}
-
-`;
+    let msg = \`*TICKET DE PESAJE - AVICONTROL*\n\n\`;
+    msg += \`*Cliente:* \${order.clientName}\n\`;
+    msg += \`*Fecha:* \${orderDate}\n\`;
+    msg += \`*Lote:* \${getBatchName(order.batchId)}\n\n\`;
     
-    msg += `*RESUMEN DE PESO*
-`;
-    msg += `- Jabas Llenas: ${t.qF}
-`;
-    msg += `- Pollos: ${t.bF}
-`;
-    msg += `- Jabas Vacías: ${t.qE}
-`;
-    msg += `- Mortalidad: ${t.qM} pollos
-`;
-    msg += `- Cojos: ${t.qLame} pollos
-
-`;
+    msg += \`*RESUMEN DE PESO*\n\`;
+    msg += \`- Jabas Llenas: \${t.qF}\n\`;
+    msg += \`- Pollos: \${t.bF}\n\`;
+    msg += \`- Jabas Vacías: \${t.qE}\n\`;
+    msg += \`- Mortalidad: \${t.qM} pollos\n\`;
+    msg += \`- Cojos: \${t.qLame} pollos\n\n\`;
     
-    msg += `*KILOS*
-`;
-    msg += `- Bruto: ${t.wF.toFixed(1)} kg
-`;
-    msg += `- Tara: ${t.wE.toFixed(1)} kg
-`;
-    msg += `- Merma Muertos: ${t.wM.toFixed(1)} kg
-`;
-    msg += `- *NETO TOTAL: ${t.net.toFixed(1)} kg*
-
-`;
+    msg += \`*KILOS*\n\`;
+    msg += \`- Bruto: \${t.wF.toFixed(1)} kg\n\`;
+    msg += \`- Tara: \${t.wE.toFixed(1)} kg\n\`;
+    msg += \`- Merma Muertos: \${t.wM.toFixed(1)} kg\n\`;
+    msg += \`- *NETO TOTAL: \${t.net.toFixed(1)} kg*\n\n\`;
     
-    msg += `*FINANCIERO*
-`;
-    msg += `- Precio/Kg: S/ ${order.pricePerKg.toFixed(2)}
-`;
-    msg += `- Importe Total: S/ ${t.totalAmount.toFixed(2)}
-`;
+    msg += \`*FINANCIERO*\n\`;
+    msg += \`- Precio/Kg: S/ \${order.pricePerKg.toFixed(2)}\n\`;
+    msg += \`- Importe Total: S/ \${t.totalAmount.toFixed(2)}\n\`;
     if (t.totalPaid > 0) {
-      msg += `- Abonado: S/ ${t.totalPaid.toFixed(2)}
-`;
+      msg += \`- Abonado: S/ \${t.totalPaid.toFixed(2)}\n\`;
     }
-    msg += `- *Saldo Restante: S/ ${t.balance.toFixed(2)}*
-
-`;
+    msg += \`- *Saldo Restante: S/ \${t.balance.toFixed(2)}*\n\n\`;
     
-    msg += `Gracias por su compra.`;
+    msg += \`Gracias por su compra.\`;
     
-    const url = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    const url = \`https://wa.me/?text=\${encodeURIComponent(msg)}\`;
     window.open(url, '_blank');
   };
 
@@ -375,10 +312,10 @@ const Reports = () => {
             <div key={group.clientName} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
               <div 
                 onClick={() => toggleClientExpansion(group.clientName)}
-                className={`p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer transition-colors ${isExpanded ? 'bg-blue-50/50' : 'hover:bg-slate-50'}`}
+                className={\`p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer transition-colors \${isExpanded ? 'bg-blue-50/50' : 'hover:bg-slate-50'}\`}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-inner bg-blue-100 text-blue-600`}>
+                  <div className={\`w-10 h-10 rounded-xl flex items-center justify-center shadow-inner bg-blue-100 text-blue-600\`}>
                     <Users size={20} />
                   </div>
                   <div>
@@ -398,7 +335,7 @@ const Reports = () => {
                   </div>
                   <div className="text-left md:text-right hidden sm:block">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Deuda Pendiente</p>
-                    <p className={`font-digital font-bold text-sm md:text-base ${isFullyPaid ? 'text-emerald-600' : 'text-red-600'}`}>
+                    <p className={\`font-digital font-bold text-sm md:text-base \${isFullyPaid ? 'text-emerald-600' : 'text-red-600'}\`}>
                       S/. {group.balance.toFixed(2)}
                     </p>
                   </div>
@@ -418,7 +355,7 @@ const Reports = () => {
                          <div className="flex flex-wrap gap-4">
                            <span className="text-[10px] font-bold text-slate-500 uppercase">Peso Mes: <span className="text-slate-800">{stats.net.toFixed(1)} kg</span></span>
                            <span className="text-[10px] font-bold text-slate-500 uppercase">Facturado: <span className="text-slate-800">S/. {stats.totalDue.toFixed(2)}</span></span>
-                           <span className="text-[10px] font-bold text-slate-500 uppercase">Deuda Mes: <span className={`${stats.balance <= 0.05 ? 'text-emerald-600' : 'text-red-600'}`}>S/. {stats.balance.toFixed(2)}</span></span>
+                           <span className="text-[10px] font-bold text-slate-500 uppercase">Deuda Mes: <span className={\`\${stats.balance <= 0.05 ? 'text-emerald-600' : 'text-red-600'}\`}>S/. {stats.balance.toFixed(2)}</span></span>
                          </div>
                       </div>
                       <div className="overflow-x-auto">
@@ -660,3 +597,7 @@ const Reports = () => {
 };
 
 export default Reports;
+`;
+
+fs.writeFileSync('components/pages/Reports.tsx', replacement);
+console.log('Patched Reports.tsx entirely');
