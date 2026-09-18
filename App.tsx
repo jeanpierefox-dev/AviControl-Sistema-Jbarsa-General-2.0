@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { User } from './types';
 import { LogOut, ArrowLeft, Settings, Database, Cloud, CloudOff, Wifi, WifiOff } from 'lucide-react';
-import { isFirebaseConfigured, getConfig, onConnectionStateChange, initCloudSync } from './services/storage';
+import { isFirebaseConfigured, getConfig, onConnectionStateChange, initCloudSync, checkCloudConnection } from './services/storage';
 
 // Pages
 import LoginPage from './components/pages/Login';
@@ -55,12 +55,10 @@ const Container: React.FC<{ children: React.ReactNode; title?: string; showBack?
     
     let unsubConnection = () => {};
     if (isFirebaseConfigured()) {
-        // Wait a bit for db to be initialized
-        setTimeout(() => {
-            unsubConnection = onConnectionStateChange((connected) => {
-                setIsCloudConnected(connected);
-            });
-        }, 1000);
+        unsubConnection = onConnectionStateChange((connected) => {
+            setIsCloudConnected(connected);
+        });
+        checkCloudConnection();
     }
 
     return () => {
@@ -88,13 +86,18 @@ const Container: React.FC<{ children: React.ReactNode; title?: string; showBack?
             </h1>
           </div>
           <div className="flex items-center space-x-3">
-            <div 
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-all ${isCloudConnected ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.2)]' : 'border-amber-500/30 bg-amber-500/10 text-amber-400'}`}
-              title={isCloudConnected ? "Conectado y sincronizado en la nube en tiempo real" : "Modo local / Reconectando con la nube..."}
+            <button 
+              type="button"
+              onClick={() => {
+                checkCloudConnection();
+                window.dispatchEvent(new Event('avi_force_sync'));
+              }}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-all cursor-pointer select-none active:scale-95 ${isCloudConnected ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.2)] hover:bg-emerald-500/25' : 'border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'}`}
+              title={isCloudConnected ? "Conectado y sincronizado en la nube en tiempo real (Clic para verificar)" : "Modo local / Reconectando... Clic para forzar conexión con la nube"}
             >
-                {isCloudConnected ? <Wifi size={13} className="animate-pulse"/> : <WifiOff size={13}/>}
-                <span className="text-[9px] font-black uppercase tracking-wider hidden xs:inline">{isCloudConnected ? 'Sincronizado' : 'Modo Local'}</span>
-            </div>
+                {isCloudConnected ? <Wifi size={13} className="animate-pulse text-emerald-400"/> : <WifiOff size={13} className="text-amber-400"/>}
+                <span className="text-[9px] font-black uppercase tracking-wider hidden xs:inline">{isCloudConnected ? 'Sincronizado' : 'Reconectar'}</span>
+            </button>
 
             <div className="text-right hidden sm:block">
               <p className="text-[10px] font-black text-blue-100 uppercase leading-none">{user?.name || 'Usuario'}</p>

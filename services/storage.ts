@@ -19,8 +19,27 @@ const safeParse = (key: string, fallback: any) => {
   }
 };
 
+let isCloudConnectedState = false;
+
+export const getCloudStatus = () => isCloudConnectedState;
+
 const notifyConnectionState = (connected: boolean) => {
+  isCloudConnectedState = connected;
   window.dispatchEvent(new CustomEvent('avi_cloud_status', { detail: connected }));
+};
+
+export const checkCloudConnection = async (): Promise<boolean> => {
+  try {
+    const [usersSnapshot] = await Promise.all([
+      getDocs(collection(db, 'config'))
+    ]);
+    notifyConnectionState(true);
+    return true;
+  } catch (err) {
+    console.warn('Cloud connection check result: offline/error', err);
+    notifyConnectionState(false);
+    return false;
+  }
 };
 
 const broadcastLocalSync = (key: string, data: any) => {
@@ -28,6 +47,7 @@ const broadcastLocalSync = (key: string, data: any) => {
 };
 
 let unsubscribes: (() => void)[] = [];
+let heartbeatInterval: any = null;
 
 export const initDataSync = async () => {
   console.log('Initializing Firebase Cloud Sync...');
@@ -45,14 +65,30 @@ export const initDataSync = async () => {
     notifyConnectionState(true);
   } catch(e) {
      console.error('Failed to check cloud state', e);
+     notifyConnectionState(false);
   }
 
   // Clear previous subscriptions
   unsubscribes.forEach(unsub => unsub());
   unsubscribes = [];
 
+  // Setup periodic heartbeat check if not already setup
+  if (!heartbeatInterval && typeof window !== 'undefined') {
+    heartbeatInterval = setInterval(() => {
+      checkCloudConnection();
+    }, 20000);
+
+    window.addEventListener('online', () => {
+      checkCloudConnection();
+    });
+    window.addEventListener('offline', () => {
+      notifyConnectionState(false);
+    });
+  }
+
   // Users
   unsubscribes.push(onSnapshot(collection(db, 'users'), (snapshot) => {
+    notifyConnectionState(true);
     if (snapshot.empty && getUsers().length > 0) return; // Prevent overwriting with empty
     const users: User[] = [];
     snapshot.forEach(doc => users.push(doc.data() as User));
@@ -60,10 +96,14 @@ export const initDataSync = async () => {
       localStorage.setItem(KEYS.USERS, JSON.stringify(users));
       window.dispatchEvent(new Event('avi_data_users'));
     }
-  }, (err) => notifyConnectionState(false)));
+  }, (err) => {
+    console.warn("Users sync error:", err);
+    notifyConnectionState(false);
+  }));
 
   // Batches (Optimized)
   unsubscribes.push(onSnapshot(collection(db, 'batches'), (snapshot) => {
+    notifyConnectionState(true);
     if (snapshot.empty && getBatches().length > 0) return; 
     const changes = snapshot.docChanges();
     if (changes.length === 0 && !snapshot.empty) return;
@@ -84,11 +124,15 @@ export const initDataSync = async () => {
     });
     localStorage.setItem(KEYS.BATCHES, JSON.stringify(Array.from(map.values())));
     window.dispatchEvent(new Event('avi_data_batches'));
-  }, (err) => notifyConnectionState(false)));
+  }, (err) => {
+    console.warn("Batches sync error:", err);
+    notifyConnectionState(false);
+  }));
 
   // Orders (Optimized delta sync)
   let ordersTimeout: any;
   unsubscribes.push(onSnapshot(collection(db, 'orders'), (snapshot) => {
+    notifyConnectionState(true);
     if (snapshot.empty && getOrders().length > 0) return;
     
     const changes = snapshot.docChanges();
@@ -100,8 +144,6 @@ export const initDataSync = async () => {
     
     let hasChanges = false;
     // For initial load, docChanges() contains all added docs.
-    // If it's a massive initial load, we might as well just use snapshot.forEach for speed, 
-    // but docChanges() works fine too.
     if (changes.length > 500) {
        // Bulk load
        const newOrders: ClientOrder[] = [];
@@ -131,10 +173,14 @@ export const initDataSync = async () => {
            window.dispatchEvent(new Event('avi_data_orders'));
        }, 250);
     }
-  }, (err) => notifyConnectionState(false)));
+  }, (err) => {
+    console.warn("Orders sync error:", err);
+    notifyConnectionState(false);
+  }));
 
   // Config
   unsubscribes.push(onSnapshot(collection(db, 'config'), (snapshot) => {
+    notifyConnectionState(true);
     if (snapshot.empty) return;
     let config = safeParse(KEYS.CONFIG, {
       companyName: 'AVICONTROL PRO',
@@ -149,7 +195,10 @@ export const initDataSync = async () => {
     });
     localStorage.setItem(KEYS.CONFIG, JSON.stringify(config));
     window.dispatchEvent(new Event('avi_data_config'));
-  }, (err) => notifyConnectionState(false)));
+  }, (err) => {
+    console.warn("Config sync error:", err);
+    notifyConnectionState(false);
+  }));
 };
 export const getConfig = (): AppConfig => {
   return safeParse(KEYS.CONFIG, {
@@ -318,6 +367,7 @@ window.addEventListener('avi_force_sync', () => {
 export const isFirebaseConfigured = () => true;
 
 export const onConnectionStateChange = (callback: (connected: boolean) => void) => {
+  callback(isCloudConnectedState);
   const handler = (e: any) => callback(e.detail);
   window.addEventListener('avi_cloud_status', handler);
   return () => window.removeEventListener('avi_cloud_status', handler);
