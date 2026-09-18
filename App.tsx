@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { User } from './types';
-import { LogOut, ArrowLeft, Settings, Database, Cloud, CloudOff, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { LogOut, ArrowLeft, Settings, Database, Cloud, CloudOff, Wifi, WifiOff } from 'lucide-react';
 import { isFirebaseConfigured, getConfig, onConnectionStateChange, initCloudSync } from './services/storage';
 
 // Pages
@@ -88,19 +88,12 @@ const Container: React.FC<{ children: React.ReactNode; title?: string; showBack?
             </h1>
           </div>
           <div className="flex items-center space-x-3">
-            <button 
-              onClick={() => {
-                const event = new CustomEvent('avi_force_sync');
-                window.dispatchEvent(event);
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded-lg transition-all shadow-lg active:scale-95"
-              title="Sincronizar y Actualizar Datos"
+            <div 
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-all ${isCloudConnected ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.2)]' : 'border-amber-500/30 bg-amber-500/10 text-amber-400'}`}
+              title={isCloudConnected ? "Conectado y sincronizado en la nube en tiempo real" : "Modo local / Reconectando con la nube..."}
             >
-              <RefreshCw size={14} className={isCloudConnected ? '' : 'animate-spin'} />
-            </button>
-            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border ${isCloudConnected ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' : 'border-slate-700 bg-slate-800 text-slate-500'}`}>
-                {isCloudConnected ? <Wifi size={12} className="animate-pulse"/> : <WifiOff size={12}/>}
-                <span className="text-[9px] font-black uppercase tracking-widest hidden xs:inline">{isCloudConnected ? 'Cloud' : 'Local'}</span>
+                {isCloudConnected ? <Wifi size={13} className="animate-pulse"/> : <WifiOff size={13}/>}
+                <span className="text-[9px] font-black uppercase tracking-wider hidden xs:inline">{isCloudConnected ? 'Sincronizado' : 'Modo Local'}</span>
             </div>
 
             <div className="text-right hidden sm:block">

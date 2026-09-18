@@ -3,7 +3,7 @@ import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import config from '../firebase-applet-config.json';
 
 const app = initializeApp(config);
-export const db = getFirestore(app);
+export const db = getFirestore(app, config.firestoreDatabaseId);
 
 // Enable offline persistence
 enableIndexedDbPersistence(db).catch((err) => {

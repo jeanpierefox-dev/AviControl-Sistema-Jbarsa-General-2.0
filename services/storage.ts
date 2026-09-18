@@ -33,17 +33,19 @@ export const initDataSync = async () => {
   console.log('Initializing Firebase Cloud Sync...');
   
   try {
-    // Check if cloud is empty (first time connect)
-    const usersSnapshot = await getDocs(collection(db, 'users'));
-    if (usersSnapshot.empty) {
-      console.log('Cloud database is empty, migrating local data to cloud...');
+    // Check if cloud database has data or needs migration from local data
+    const [usersSnapshot, batchesSnapshot] = await Promise.all([
+      getDocs(collection(db, 'users')),
+      getDocs(collection(db, 'batches'))
+    ]);
+    if (usersSnapshot.empty || batchesSnapshot.empty) {
+      console.log('Cloud database needs sync, migrating local data to cloud...');
       await uploadLocalToCloud();
     }
+    notifyConnectionState(true);
   } catch(e) {
      console.error('Failed to check cloud state', e);
   }
-
-  notifyConnectionState(true);
 
   // Clear previous subscriptions
   unsubscribes.forEach(unsub => unsub());
