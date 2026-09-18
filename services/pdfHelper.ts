@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import { getConfig } from './storage';
 
 function drawCurvedText(
   ctx: CanvasRenderingContext2D, 
@@ -164,44 +165,120 @@ export function getAppWatermarkDataUrl(): string {
 }
 
 /**
- * Adds the AviControl Pro official watermark to all or specific pages of the document.
+ * Adds the official watermark to all or specific pages of the document.
+ * Uses the user-uploaded company logo as the background watermark whenever available.
  */
-export function addAppWatermarkToPdf(doc: jsPDF, pageNumber?: number): void {
-  const watermarkUrl = getAppWatermarkDataUrl();
-  if (!watermarkUrl) return;
+export function addAppWatermarkToPdf(doc: jsPDF, pageNumber?: number, customLogoUrl?: string): void {
+  // Determine effective logo: custom passed in, or from app configuration
+  let effectiveLogo = customLogoUrl;
+  if (!effectiveLogo) {
+    try {
+      effectiveLogo = getConfig()?.logoUrl;
+    } catch (e) {
+      try {
+        const raw = localStorage.getItem('avi_config_v1');
+        if (raw) effectiveLogo = JSON.parse(raw).logoUrl;
+      } catch (err) {}
+    }
+  }
 
+  const defaultWatermarkUrl = getAppWatermarkDataUrl();
   const totalPages = doc.getNumberOfPages();
   const startPage = pageNumber || 1;
   const endPage = pageNumber || totalPages;
-
   const originalPage = (doc as any).getCurrentPageInfo ? (doc as any).getCurrentPageInfo().pageNumber : 1;
+
+  // Check if we can use the uploaded logo
+  let hasUserLogo = false;
+  let aspect = 1;
+  let format = 'PNG';
+
+  if (effectiveLogo) {
+    try {
+      const imgProps = doc.getImageProperties(effectiveLogo);
+      if (imgProps && imgProps.width && imgProps.height) {
+        aspect = imgProps.width / imgProps.height;
+        if (imgProps.fileType) format = imgProps.fileType.toUpperCase();
+        hasUserLogo = true;
+      }
+    } catch (e) {
+      hasUserLogo = false;
+    }
+  }
 
   for (let p = startPage; p <= endPage; p++) {
     doc.setPage(p);
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
 
+    if (hasUserLogo && effectiveLogo) {
+      try {
+        doc.saveGraphicsState();
+        // Subtle, elegant watermark opacity so text remains fully legible
+        if (typeof (doc as any).GState === 'function' && typeof doc.setGState === 'function') {
+          doc.setGState(new (doc as any).GState({ opacity: 0.085 }));
+        }
+
+        if (pageW <= 90) {
+          // 80mm thermal ticket format
+          let w = Math.min(pageW * 0.75, 55);
+          let h = w / aspect;
+          if (h > 65) {
+            h = 65;
+            w = h * aspect;
+          }
+
+          if (pageH > 220) {
+            const y1 = pageH * 0.30 - h / 2;
+            const y2 = pageH * 0.70 - h / 2;
+            const x = (pageW - w) / 2;
+            doc.addImage(effectiveLogo, format, x, y1, w, h);
+            doc.addImage(effectiveLogo, format, x, y2, w, h);
+          } else {
+            const x = (pageW - w) / 2;
+            const y = (pageH - h) / 2;
+            doc.addImage(effectiveLogo, format, x, y, w, h);
+          }
+        } else {
+          // A4 format
+          let w = Math.min(pageW * 0.65, 140);
+          let h = w / aspect;
+          if (h > 140) {
+            h = 140;
+            w = h * aspect;
+          }
+          const x = (pageW - w) / 2;
+          const y = (pageH - h) / 2;
+          doc.addImage(effectiveLogo, format, x, y, w, h);
+        }
+        doc.restoreGraphicsState();
+        continue;
+      } catch (e) {
+        console.warn("User logo watermark render fallback to default:", e);
+        // Fallback to default canvas watermark below
+      }
+    }
+
+    // Default precision scale watermark
+    if (!defaultWatermarkUrl) continue;
     if (pageW <= 90) {
-      // 80mm thermal ticket format (e.g. 80mm x 150-320mm)
       const size = Math.min(pageW * 0.72, 56);
       if (pageH > 220) {
-        // Double watermark for elongated thermal tickets
         const y1 = pageH * 0.30 - size / 2;
         const y2 = pageH * 0.70 - size / 2;
         const x = (pageW - size) / 2;
-        doc.addImage(watermarkUrl, 'PNG', x, y1, size, size);
-        doc.addImage(watermarkUrl, 'PNG', x, y2, size, size);
+        doc.addImage(defaultWatermarkUrl, 'PNG', x, y1, size, size);
+        doc.addImage(defaultWatermarkUrl, 'PNG', x, y2, size, size);
       } else {
         const x = (pageW - size) / 2;
         const y = (pageH - size) / 2;
-        doc.addImage(watermarkUrl, 'PNG', x, y, size, size);
+        doc.addImage(defaultWatermarkUrl, 'PNG', x, y, size, size);
       }
     } else {
-      // A4 format (210mm x 297mm) or Letter
       const size = Math.min(pageW * 0.62, 135);
       const x = (pageW - size) / 2;
       const y = (pageH - size) / 2;
-      doc.addImage(watermarkUrl, 'PNG', x, y, size, size);
+      doc.addImage(defaultWatermarkUrl, 'PNG', x, y, size, size);
     }
   }
 

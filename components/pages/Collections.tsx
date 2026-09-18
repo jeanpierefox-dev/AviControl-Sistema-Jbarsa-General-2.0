@@ -733,8 +733,519 @@ const Collections: React.FC = () => {
     handlePDFOutput(doc, `Estado_Cuenta_${order.clientName.replace(/\s+/g, '_')}_${order.id.slice(-6)}.pdf`);
   };
 
+  // =========================================================================
+  // 3. REPORTE A4 DE COBRANZAS DEL CLIENTE AGRUPADO POR MES Y DÍAS DE PESAJE
+  // =========================================================================
+  const generateClientCollectionsA4PDF = (group: ClientGroup) => {
+    const doc = new jsPDF();
+    addAppWatermarkToPdf(doc);
+    const branding = getEffectiveBranding({} as any, user);
+    let y = 10;
+    if (branding.logoUrl) {
+      y = addLogoToPdf(doc, branding.logoUrl, { maxWidth: 30, maxHeight: 22, defaultX: 14, y });
+    }
+
+    doc.setFillColor(15, 23, 42); // Slate 900
+    doc.rect(14, y, 182, 13, 'F');
+    doc.setFontSize(11).setFont("helvetica", "bold").setTextColor(255, 255, 255);
+    doc.text("ESTADO DE CUENTA Y COBRANZAS POR MES Y DÍAS DE PESAJE", 105, y + 8, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+    y += 18;
+
+    // Client info
+    doc.setFontSize(8.5).setFont("helvetica", "bold");
+    doc.text("CLIENTE:", 14, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(group.clientName.toUpperCase(), 35, y);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("FECHA EMISIÓN:", 135, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(new Date().toLocaleDateString(), 168, y);
+    y += 4.5;
+
+    if (group.clientDni) {
+      doc.setFont("helvetica", "bold");
+      doc.text("DNI / RUC:", 14, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(group.clientDni, 35, y);
+      y += 4.5;
+    }
+
+    // Resumen General Acumulado
+    autoTable(doc, {
+      startY: y + 2,
+      head: [['Total Facturado Histórico', 'Total Abonado Histórico', 'Deuda General Pendiente', 'Estado']],
+      body: [[
+        `S/. ${group.totalDue.toFixed(2)}`,
+        `S/. ${group.totalPaid.toFixed(2)}`,
+        `S/. ${group.balance.toFixed(2)}`,
+        group.balance <= 0.05 ? 'AL DÍA / CANCELADO' : 'CUENTA CON SALDO PENDIENTE'
+      ]],
+      theme: 'grid',
+      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+      styles: { fontSize: 8.5, halign: 'center', cellPadding: 2 }
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 7;
+
+    // Group orders by month
+    const monthlyData: Record<string, { totalDue: number; totalPaid: number; balance: number; netKg: number; orders: ClientOrder[] }> = {};
+    group.orders.forEach(o => {
+      const oDate = getSafeDateObj(o.date, o.id);
+      const monthKey = oDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase();
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = { totalDue: 0, totalPaid: 0, balance: 0, netKg: 0, orders: [] };
+      }
+      const bal = calculateBalance(o);
+      monthlyData[monthKey].totalDue += bal.totalDue;
+      monthlyData[monthKey].totalPaid += bal.totalPaid;
+      monthlyData[monthKey].balance += bal.balance;
+      monthlyData[monthKey].netKg += bal.netKg;
+      monthlyData[monthKey].orders.push(o);
+    });
+
+    Object.entries(monthlyData).forEach(([month, mData]) => {
+      if (y > 230) {
+        doc.addPage();
+        addAppWatermarkToPdf(doc);
+        y = 20;
+      }
+
+      // Month Section Banner
+      doc.setFillColor(30, 41, 59);
+      doc.rect(14, y, 182, 7, 'F');
+      doc.setFontSize(8.5).setFont("helvetica", "bold").setTextColor(255, 255, 255);
+      doc.text(`MES: ${month}  |  TOTAL PESO: ${mData.netKg.toFixed(1)} KG  |  FACTURADO: S/. ${mData.totalDue.toFixed(2)}  |  ABONADO: S/. ${mData.totalPaid.toFixed(2)}  |  SALDO: S/. ${mData.balance.toFixed(2)}`, 18, y + 4.8);
+      doc.setTextColor(0, 0, 0);
+      y += 9;
+
+      const rows = mData.orders.map((ord, idx) => {
+        const bal = calculateBalance(ord);
+        const isPaid = bal.balance <= 0.05 || ord.paymentStatus === 'PAID';
+        const records = ord.records || [];
+        const totalBirds = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.birds || 0), 0);
+        const totalCrates = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.quantity || 1), 0);
+        const dateStr = getSafeDateString(ord.date, ord.id);
+        const batchStr = getBatchName(ord.batchId);
+
+        return [
+          String(idx + 1).padStart(2, '0'),
+          dateStr,
+          batchStr,
+          `${bal.netKg.toFixed(1)} kg`,
+          `${totalBirds}p / ${totalCrates}j`,
+          `S/. ${bal.pricePerKg.toFixed(2)}`,
+          `S/. ${bal.totalDue.toFixed(2)}`,
+          `S/. ${bal.totalPaid.toFixed(2)}`,
+          `S/. ${bal.balance.toFixed(2)}`,
+          isPaid ? 'CANCELADO' : 'PENDIENTE'
+        ];
+      });
+
+      autoTable(doc, {
+        startY: y,
+        head: [['#', 'Día / Fecha', 'Lote', 'Neto (kg)', 'Pollos/Jabas', 'Precio/kg', 'Facturado', 'Abonado', 'Saldo', 'Estado']],
+        body: rows,
+        theme: 'grid',
+        headStyles: { fillColor: [71, 85, 105], textColor: [255, 255, 255], fontSize: 7, fontStyle: 'bold', halign: 'center' },
+        styles: { fontSize: 7, cellPadding: 1.8, halign: 'center' },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 7 },
+          1: { halign: 'center', cellWidth: 20 },
+          2: { halign: 'left', cellWidth: 25 },
+          3: { halign: 'right', cellWidth: 18, fontStyle: 'bold' },
+          4: { halign: 'center', cellWidth: 20 },
+          5: { halign: 'right', cellWidth: 16 },
+          6: { halign: 'right', cellWidth: 20, fontStyle: 'bold' },
+          7: { halign: 'right', cellWidth: 18 },
+          8: { halign: 'right', cellWidth: 18, fontStyle: 'bold' },
+          9: { halign: 'center', cellWidth: 20 }
+        },
+        margin: { left: 14, right: 14 }
+      });
+
+      y = (doc as any).lastAutoTable.finalY + 6;
+    });
+
+    // Firmas
+    if (y > 240) {
+      doc.addPage();
+      addAppWatermarkToPdf(doc);
+      y = 20;
+    }
+    y += 18;
+    doc.setLineWidth(0.4);
+    doc.line(20, y, 75, y);
+    doc.line(135, y, 190, y);
+    doc.setFontSize(8).setFont("helvetica", "bold");
+    doc.text("RESPONSABLE DE COBRANZAS", 47.5, y + 4, { align: 'center' });
+    doc.text("CONFORMIDAD CLIENTE", 162.5, y + 4, { align: 'center' });
+    doc.setFont("helvetica", "normal").setFontSize(7);
+    doc.text("Firma / Sello Tesorería", 47.5, y + 8, { align: 'center' });
+    doc.text(group.clientName.toUpperCase(), 162.5, y + 8, { align: 'center' });
+
+    handlePDFOutput(doc, `Cobranzas_${group.clientName.replace(/\s+/g, '_')}.pdf`);
+  };
+
+  // =========================================================================
+  // 4. TICKET TÉRMICO 80mm DE COBRANZAS AGRUPADO POR MES Y DÍAS DE PESAJE
+  // =========================================================================
+  const generateClientCollectionsTicketPDF = (group: ClientGroup) => {
+    const branding = getEffectiveBranding({} as any, user);
+    const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 25000] });
+
+    const renderContent = (targetDoc: any) => {
+      let y = 8;
+      addAppWatermarkToPdf(targetDoc);
+      if (branding.logoUrl) {
+        y = addLogoToPdf(targetDoc, branding.logoUrl, { maxWidth: 24, maxHeight: 22, defaultX: 28, y });
+      }
+      targetDoc.setFontSize(10.5).setFont("helvetica", "bold");
+      const splitTitle = targetDoc.splitTextToSize(branding.companyName.toUpperCase(), 70);
+      splitTitle.forEach((line: string) => {
+        targetDoc.text(line, 40, y, { align: 'center' });
+        y += 4;
+      });
+      targetDoc.setFontSize(8).setFont("helvetica", "bold");
+      targetDoc.text("ESTADO DE COBRANZAS Y DEUDA", 40, y, { align: 'center' });
+      y += 3.5;
+      targetDoc.setFontSize(6.5).setFont("helvetica", "normal");
+      targetDoc.text(`EMISIÓN: ${new Date().toLocaleDateString()}`, 40, y, { align: 'center' });
+      y += 3;
+
+      targetDoc.setLineWidth(0.3);
+      targetDoc.line(5, y, 75, y);
+      y += 3.5;
+
+      targetDoc.setFontSize(7.5).setFont("helvetica", "bold");
+      targetDoc.text("CLIENTE:", 5, y);
+      targetDoc.setFont("helvetica", "normal");
+      targetDoc.text(group.clientName.toUpperCase(), 25, y);
+      y += 3.5;
+      if (group.clientDni) {
+        targetDoc.setFont("helvetica", "bold");
+        targetDoc.text("DNI/RUC:", 5, y);
+        targetDoc.setFont("helvetica", "normal");
+        targetDoc.text(group.clientDni, 25, y);
+        y += 3.5;
+      }
+
+      // Box: Resumen General
+      autoTable(targetDoc, {
+        startY: y,
+        head: [[{ content: 'RESUMEN GENERAL DE CUENTA', colSpan: 2, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
+        body: [
+          ['Total Facturado:', `S/. ${group.totalDue.toFixed(2)}`],
+          ['Total Abonado:', `S/. ${group.totalPaid.toFixed(2)}`],
+          ['SALDO DEUDA:', `S/. ${group.balance.toFixed(2)}`]
+        ],
+        theme: 'grid',
+        styles: { fontSize: 7, cellPadding: 1 },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 42 }, 1: { halign: 'right', cellWidth: 28 } },
+        margin: { left: 5, right: 5 }
+      });
+      y = (targetDoc as any).lastAutoTable.finalY + 3.5;
+
+      // Group orders by month
+      const monthlyData: Record<string, { totalDue: number; totalPaid: number; balance: number; netKg: number; orders: ClientOrder[] }> = {};
+      group.orders.forEach(o => {
+        const oDate = getSafeDateObj(o.date, o.id);
+        const monthKey = oDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase();
+        if (!monthlyData[monthKey]) {
+          monthlyData[monthKey] = { totalDue: 0, totalPaid: 0, balance: 0, netKg: 0, orders: [] };
+        }
+        const bal = calculateBalance(o);
+        monthlyData[monthKey].totalDue += bal.totalDue;
+        monthlyData[monthKey].totalPaid += bal.totalPaid;
+        monthlyData[monthKey].balance += bal.balance;
+        monthlyData[monthKey].netKg += bal.netKg;
+        monthlyData[monthKey].orders.push(o);
+      });
+
+      Object.entries(monthlyData).forEach(([month, mData]) => {
+        targetDoc.setFillColor(240, 245, 250);
+        targetDoc.rect(5, y, 70, 5, 'F');
+        targetDoc.setFontSize(7).setFont("helvetica", "bold");
+        targetDoc.text(`MES: ${month}`, 7, y + 3.5);
+        y += 6;
+
+        const bodyRows = mData.orders.map(ord => {
+          const bal = calculateBalance(ord);
+          const dateStr = getSafeDateString(ord.date, ord.id);
+          return [
+            dateStr,
+            `${bal.netKg.toFixed(1)}kg`,
+            `S/.${bal.totalDue.toFixed(1)}`,
+            `S/.${bal.balance.toFixed(1)}`
+          ];
+        });
+
+        autoTable(targetDoc, {
+          startY: y,
+          head: [['FECHA', 'PESO', 'FACT.', 'SALDO']],
+          body: bodyRows,
+          theme: 'grid',
+          headStyles: { fillColor: [220, 226, 230], textColor: 0, fontSize: 6, fontStyle: 'bold', halign: 'center' },
+          styles: { fontSize: 6, cellPadding: 0.8, halign: 'center' },
+          columnStyles: {
+            0: { cellWidth: 20 },
+            1: { cellWidth: 16 },
+            2: { cellWidth: 17, halign: 'right' },
+            3: { cellWidth: 17, halign: 'right', fontStyle: 'bold' }
+          },
+          margin: { left: 5, right: 5 }
+        });
+        y = (targetDoc as any).lastAutoTable.finalY + 1.5;
+
+        targetDoc.setFontSize(6.5).setFont("helvetica", "bold");
+        targetDoc.text(`Subtotal Mes: Fact. S/. ${mData.totalDue.toFixed(2)} | Saldo S/. ${mData.balance.toFixed(2)}`, 40, y + 2.5, { align: 'center' });
+        y += 5.5;
+      });
+
+      y += 6;
+      targetDoc.setLineWidth(0.3);
+      targetDoc.line(6, y, 36, y);
+      targetDoc.line(44, y, 74, y);
+      targetDoc.setFontSize(6).setFont("helvetica", "bold");
+      targetDoc.text("COBRANZAS", 21, y + 3, { align: 'center' });
+      targetDoc.text("CLIENTE RECIBE", 59, y + 3, { align: 'center' });
+      y += 7;
+
+      return y;
+    };
+
+    const finalY = renderContent(dummyDoc);
+    const doc = new jsPDF({ unit: 'mm', format: [80, Math.max(130, finalY)] });
+    renderContent(doc);
+    handlePDFOutput(doc, `TicketCobranza_${group.clientName.replace(/\s+/g, '_')}.pdf`);
+  };
+
+  // =========================================================================
+  // 5. REPORTE A4 MENSUAL DE COBRANZAS DE CLIENTE
+  // =========================================================================
+  const generateMonthCollectionsA4PDF = (group: ClientGroup, month: string, stats: { totalDue: number, totalPaid: number, balance: number, orders: ClientOrder[] }) => {
+    const doc = new jsPDF();
+    addAppWatermarkToPdf(doc);
+    const branding = getEffectiveBranding({} as any, user);
+    let y = 10;
+    if (branding.logoUrl) {
+      y = addLogoToPdf(doc, branding.logoUrl, { maxWidth: 30, maxHeight: 22, defaultX: 14, y });
+    }
+
+    doc.setFillColor(15, 23, 42);
+    doc.rect(14, y, 182, 13, 'F');
+    doc.setFontSize(11).setFont("helvetica", "bold").setTextColor(255, 255, 255);
+    doc.text(`ESTADO DE COBRANZAS MENSUAL - ${month.toUpperCase()}`, 105, y + 8, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+    y += 18;
+
+    doc.setFontSize(8.5).setFont("helvetica", "bold");
+    doc.text("CLIENTE:", 14, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(group.clientName.toUpperCase(), 35, y);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("FECHA EMISIÓN:", 135, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(new Date().toLocaleDateString(), 168, y);
+    y += 4.5;
+
+    if (group.clientDni) {
+      doc.setFont("helvetica", "bold");
+      doc.text("DNI / RUC:", 14, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(group.clientDni, 35, y);
+      y += 4.5;
+    }
+
+    let netMonthKg = 0;
+    stats.orders.forEach(o => {
+      netMonthKg += calculateBalance(o).netKg;
+    });
+
+    autoTable(doc, {
+      startY: y + 2,
+      head: [['Facturado en el Mes', 'Abonado en el Mes', 'Saldo del Mes', 'Kilos Netos Mes', 'Total Pesas']],
+      body: [[
+        `S/. ${stats.totalDue.toFixed(2)}`,
+        `S/. ${stats.totalPaid.toFixed(2)}`,
+        `S/. ${stats.balance.toFixed(2)}`,
+        `${netMonthKg.toFixed(1)} kg`,
+        `${stats.orders.length}`
+      ]],
+      theme: 'grid',
+      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+      styles: { fontSize: 8.5, halign: 'center', cellPadding: 2 }
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 8;
+
+    const rows = stats.orders.map((ord, idx) => {
+      const bal = calculateBalance(ord);
+      const isPaid = bal.balance <= 0.05 || ord.paymentStatus === 'PAID';
+      const records = ord.records || [];
+      const totalBirds = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.birds || 0), 0);
+      const totalCrates = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.quantity || 1), 0);
+      const dateStr = getSafeDateString(ord.date, ord.id);
+      const batchStr = getBatchName(ord.batchId);
+
+      return [
+        String(idx + 1).padStart(2, '0'),
+        dateStr,
+        batchStr,
+        `${bal.netKg.toFixed(1)} kg`,
+        `${totalBirds}p / ${totalCrates}j`,
+        `S/. ${bal.pricePerKg.toFixed(2)}`,
+        `S/. ${bal.totalDue.toFixed(2)}`,
+        `S/. ${bal.totalPaid.toFixed(2)}`,
+        `S/. ${bal.balance.toFixed(2)}`,
+        isPaid ? 'CANCELADO' : 'PENDIENTE'
+      ];
+    });
+
+    autoTable(doc, {
+      startY: y,
+      head: [['#', 'Día / Fecha', 'Lote', 'Neto (kg)', 'Pollos/Jabas', 'Precio/kg', 'Facturado', 'Abonado', 'Saldo', 'Estado']],
+      body: rows,
+      theme: 'grid',
+      headStyles: { fillColor: [71, 85, 105], textColor: [255, 255, 255], fontSize: 7, fontStyle: 'bold', halign: 'center' },
+      styles: { fontSize: 7, cellPadding: 2, halign: 'center' },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 7 },
+        1: { halign: 'center', cellWidth: 20 },
+        2: { halign: 'left', cellWidth: 25 },
+        3: { halign: 'right', cellWidth: 18, fontStyle: 'bold' },
+        4: { halign: 'center', cellWidth: 20 },
+        5: { halign: 'right', cellWidth: 16 },
+        6: { halign: 'right', cellWidth: 20, fontStyle: 'bold' },
+        7: { halign: 'right', cellWidth: 18 },
+        8: { halign: 'right', cellWidth: 18, fontStyle: 'bold' },
+        9: { halign: 'center', cellWidth: 20 }
+      },
+      margin: { left: 14, right: 14 }
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 16;
+    if (y > 240) {
+      doc.addPage();
+      addAppWatermarkToPdf(doc);
+      y = 20;
+    }
+    doc.setLineWidth(0.4);
+    doc.line(20, y, 75, y);
+    doc.line(135, y, 190, y);
+    doc.setFontSize(8).setFont("helvetica", "bold");
+    doc.text("RESPONSABLE DE COBRANZAS", 47.5, y + 4, { align: 'center' });
+    doc.text("CONFORMIDAD CLIENTE", 162.5, y + 4, { align: 'center' });
+
+    handlePDFOutput(doc, `Cobranzas_${month.replace(/\s+/g, '_')}_${group.clientName.replace(/\s+/g, '_')}.pdf`);
+  };
+
+  // =========================================================================
+  // 6. TICKET TÉRMICO 80mm MENSUAL DE COBRANZAS DE CLIENTE
+  // =========================================================================
+  const generateMonthCollectionsTicketPDF = (group: ClientGroup, month: string, stats: { totalDue: number, totalPaid: number, balance: number, orders: ClientOrder[] }) => {
+    const branding = getEffectiveBranding({} as any, user);
+    const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 20000] });
+
+    const renderContent = (targetDoc: any) => {
+      let y = 8;
+      addAppWatermarkToPdf(targetDoc);
+      if (branding.logoUrl) {
+        y = addLogoToPdf(targetDoc, branding.logoUrl, { maxWidth: 24, maxHeight: 22, defaultX: 28, y });
+      }
+      targetDoc.setFontSize(10.5).setFont("helvetica", "bold");
+      const splitTitle = targetDoc.splitTextToSize(branding.companyName.toUpperCase(), 70);
+      splitTitle.forEach((line: string) => {
+        targetDoc.text(line, 40, y, { align: 'center' });
+        y += 4;
+      });
+      targetDoc.setFontSize(8).setFont("helvetica", "bold");
+      targetDoc.text("TICKET DE COBRANZAS MENSUAL", 40, y, { align: 'center' });
+      y += 3.5;
+      targetDoc.setFontSize(6.5).setFont("helvetica", "normal");
+      targetDoc.text(`MES: ${month.toUpperCase()} | EMISIÓN: ${new Date().toLocaleDateString()}`, 40, y, { align: 'center' });
+      y += 3;
+
+      targetDoc.setLineWidth(0.3);
+      targetDoc.line(5, y, 75, y);
+      y += 3.5;
+
+      targetDoc.setFontSize(7.5).setFont("helvetica", "bold");
+      targetDoc.text("CLIENTE:", 5, y);
+      targetDoc.setFont("helvetica", "normal");
+      targetDoc.text(group.clientName.toUpperCase(), 25, y);
+      y += 3.5;
+
+      let netMonthKg = 0;
+      stats.orders.forEach(o => {
+        netMonthKg += calculateBalance(o).netKg;
+      });
+
+      autoTable(targetDoc, {
+        startY: y,
+        head: [[{ content: `RESUMEN MES ${month.toUpperCase()}`, colSpan: 2, styles: { halign: 'center', fillColor: [220, 226, 230], textColor: 0 } }]],
+        body: [
+          ['Peso Neto Mes:', `${netMonthKg.toFixed(1)} kg`],
+          ['Total Facturado:', `S/. ${stats.totalDue.toFixed(2)}`],
+          ['Total Abonado:', `S/. ${stats.totalPaid.toFixed(2)}`],
+          ['SALDO PENDIENTE:', `S/. ${stats.balance.toFixed(2)}`]
+        ],
+        theme: 'grid',
+        styles: { fontSize: 7, cellPadding: 1 },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 42 }, 1: { halign: 'right', cellWidth: 28 } },
+        margin: { left: 5, right: 5 }
+      });
+      y = (targetDoc as any).lastAutoTable.finalY + 3.5;
+
+      const bodyRows = stats.orders.map(ord => {
+        const bal = calculateBalance(ord);
+        const dateStr = getSafeDateString(ord.date, ord.id);
+        return [
+          dateStr,
+          `${bal.netKg.toFixed(1)}kg`,
+          `S/.${bal.totalDue.toFixed(1)}`,
+          `S/.${bal.balance.toFixed(1)}`
+        ];
+      });
+
+      autoTable(targetDoc, {
+        startY: y,
+        head: [['FECHA', 'PESO', 'FACT.', 'SALDO']],
+        body: bodyRows,
+        theme: 'grid',
+        headStyles: { fillColor: [220, 226, 230], textColor: 0, fontSize: 6, fontStyle: 'bold', halign: 'center' },
+        styles: { fontSize: 6, cellPadding: 0.8, halign: 'center' },
+        columnStyles: {
+          0: { cellWidth: 20 },
+          1: { cellWidth: 16 },
+          2: { cellWidth: 17, halign: 'right' },
+          3: { cellWidth: 17, halign: 'right', fontStyle: 'bold' }
+        },
+        margin: { left: 5, right: 5 }
+      });
+      y = (targetDoc as any).lastAutoTable.finalY + 6;
+
+      targetDoc.setLineWidth(0.3);
+      targetDoc.line(6, y, 36, y);
+      targetDoc.line(44, y, 74, y);
+      targetDoc.setFontSize(6).setFont("helvetica", "bold");
+      targetDoc.text("COBRANZAS", 21, y + 3, { align: 'center' });
+      targetDoc.text("CLIENTE RECIBE", 59, y + 3, { align: 'center' });
+      y += 7;
+
+      return y;
+    };
+
+    const finalY = renderContent(dummyDoc);
+    const doc = new jsPDF({ unit: 'mm', format: [80, Math.max(130, finalY)] });
+    renderContent(doc);
+    handlePDFOutput(doc, `TicketCobranza_${month.replace(/\s+/g, '_')}_${group.clientName.replace(/\s+/g, '_')}.pdf`);
+  };
+
   // ==========================================
-  // 3. REGISTRO DE NUEVO ABONO
+  // 7. REGISTRO DE NUEVO ABONO
   // ==========================================
   const handleOpenPayModal = (order: ClientOrder) => {
     setSelectedOrderForPay(order);
@@ -744,6 +1255,14 @@ const Collections: React.FC = () => {
     setPayOpNumber('');
     setPayNote('');
     setPayDate(new Date().toISOString().slice(0, 10));
+  };
+
+  const handleOpenClientPaymentModal = (group: ClientGroup) => {
+    const pending = group.orders.filter(o => calculateBalance(o).balance > 0.05);
+    const target = pending.length > 0 ? pending[0] : group.orders[0];
+    if (target) {
+      handleOpenPayModal(target);
+    }
   };
 
   const handleProcessPayment = () => {
@@ -1002,18 +1521,19 @@ const Collections: React.FC = () => {
             const isPartial = group.totalPaid > 0 && !isFullyPaid;
 
             // Group orders by month
-            const monthlyStats: Record<string, { totalDue: number, totalPaid: number, balance: number, orders: ClientOrder[] }> = {};
+            const monthlyStats: Record<string, { totalDue: number, totalPaid: number, balance: number, netKg: number, orders: ClientOrder[] }> = {};
             
             group.orders.forEach(order => {
                const orderDate = getSafeDateObj(order.date, order.id);
                const monthYear = orderDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
                if (!monthlyStats[monthYear]) {
-                 monthlyStats[monthYear] = { totalDue: 0, totalPaid: 0, balance: 0, orders: [] };
+                 monthlyStats[monthYear] = { totalDue: 0, totalPaid: 0, balance: 0, netKg: 0, orders: [] };
                }
                const bal = calculateBalance(order);
                monthlyStats[monthYear].totalDue += bal.totalDue;
                monthlyStats[monthYear].totalPaid += bal.totalPaid;
                monthlyStats[monthYear].balance += bal.balance;
+               monthlyStats[monthYear].netKg += bal.netKg;
                monthlyStats[monthYear].orders.push(order);
             });
 
@@ -1035,21 +1555,45 @@ const Collections: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between md:justify-end gap-6 w-full md:w-auto">
+                  <div className="flex flex-wrap items-center justify-between md:justify-end gap-3 md:gap-5 w-full md:w-auto">
                     <div className="text-left md:text-right">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Deuda General</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Deuda General</p>
                       <p className={`font-digital font-bold text-lg md:text-xl ${isFullyPaid ? 'text-emerald-600' : 'text-red-600'}`}>
                         S/. {group.balance.toFixed(2)}
                       </p>
                     </div>
                     <div className="text-left md:text-right hidden sm:block">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Facturado / Abonado</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Facturado / Abonado</p>
                       <p className="font-digital font-bold text-slate-700 text-sm">
                         S/. {group.totalDue.toFixed(2)} / <span className="text-emerald-600">S/. {group.totalPaid.toFixed(2)}</span>
                       </p>
                     </div>
-                    <div className="p-2 bg-slate-100 text-slate-400 rounded-lg">
-                      {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleOpenClientPaymentModal(group); }}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase flex items-center gap-1 shadow-sm active:scale-95 transition-all"
+                        title="Registrar Abono a cuenta de este cliente"
+                      >
+                        <DollarSign size={12} /> + Abono
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); generateClientCollectionsA4PDF(group); }}
+                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-bold flex items-center gap-1 transition-all"
+                        title="Descargar Reporte Completo de Cobranzas A4"
+                      >
+                        <FileText size={12} /> A4
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); generateClientCollectionsTicketPDF(group); }}
+                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-bold flex items-center gap-1 transition-all"
+                        title="Imprimir Ticket Térmico de Cobranza 80mm"
+                      >
+                        <Printer size={12} /> Ticket
+                      </button>
+                      <div className="p-1.5 bg-slate-100 text-slate-400 rounded-lg">
+                        {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1059,19 +1603,41 @@ const Collections: React.FC = () => {
                     {/* Monthly Breakdowns */}
                     {Object.entries(monthlyStats).map(([month, stats]) => (
                       <div key={month} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                        <div className="bg-slate-100/80 p-3 border-b border-slate-200 flex justify-between items-center">
-                           <h4 className="font-black text-slate-800 uppercase text-[11px] tracking-wider capitalize">{month}</h4>
-                           <div className="flex gap-4">
-                             <span className="text-[10px] font-bold text-slate-500 uppercase">Facturado: <span className="text-slate-800">S/. {stats.totalDue.toFixed(2)}</span></span>
-                             <span className="text-[10px] font-bold text-slate-500 uppercase">Saldo: <span className={`${stats.balance <= 0.05 ? 'text-emerald-600' : 'text-red-600'}`}>S/. {stats.balance.toFixed(2)}</span></span>
+                        <div className="bg-slate-100/90 p-3 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2">
+                           <div className="flex items-center gap-2">
+                              <h4 className="font-black text-slate-800 uppercase text-xs tracking-wider capitalize">{month}</h4>
+                              <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded-full">{stats.orders.length} pesas</span>
+                              <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">{stats.netKg.toFixed(1)} kg</span>
+                           </div>
+                           <div className="flex items-center gap-3">
+                             <div className="text-[10px] font-bold text-slate-500 uppercase">Facturado: <span className="text-slate-800">S/. {stats.totalDue.toFixed(2)}</span></div>
+                             <div className="text-[10px] font-bold text-slate-500 uppercase">Saldo: <span className={`${stats.balance <= 0.05 ? 'text-emerald-600' : 'text-red-600'}`}>S/. {stats.balance.toFixed(2)}</span></div>
+                             
+                             <div className="flex items-center gap-1 border-l border-slate-300 pl-2">
+                               <button
+                                 onClick={() => generateMonthCollectionsA4PDF(group, month, stats)}
+                                 className="px-2 py-1 bg-white hover:bg-slate-200 border border-slate-300 text-slate-700 rounded text-[9px] font-bold flex items-center gap-1 transition-colors"
+                                 title="Descargar Reporte del Mes (A4)"
+                               >
+                                 <FileText size={11} /> Mes A4
+                               </button>
+                               <button
+                                 onClick={() => generateMonthCollectionsTicketPDF(group, month, stats)}
+                                 className="px-2 py-1 bg-white hover:bg-slate-200 border border-slate-300 text-slate-700 rounded text-[9px] font-bold flex items-center gap-1 transition-colors"
+                                 title="Imprimir Ticket del Mes (80mm)"
+                               >
+                                 <Printer size={11} /> Ticket
+                               </button>
+                             </div>
                            </div>
                         </div>
                         <div className="overflow-x-auto">
-                          <table className="w-full text-left border-collapse min-w-[600px]">
+                          <table className="w-full text-left border-collapse min-w-[650px]">
                             <thead>
                               <tr className="bg-slate-50 text-slate-500 text-[9px] font-black uppercase tracking-widest border-b border-slate-100">
-                                <th className="py-2.5 px-4">Fecha / Orden</th>
+                                <th className="py-2.5 px-4">Día / Fecha de Pesaje</th>
                                 <th className="py-2.5 px-3">Lote</th>
+                                <th className="py-2.5 px-3 text-right">Detalle de Pesas</th>
                                 <th className="py-2.5 px-3 text-right">Facturado</th>
                                 <th className="py-2.5 px-3 text-right">Abonado</th>
                                 <th className="py-2.5 px-3 text-right">Saldo</th>
@@ -1080,19 +1646,26 @@ const Collections: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-50 text-xs">
                               {stats.orders.map(order => {
-                                const { totalDue, totalPaid, balance, percentPaid } = calculateBalance(order);
+                                const { totalDue, totalPaid, balance, netKg, pricePerKg } = calculateBalance(order);
                                 const isOrderPaid = balance <= 0.05 || order.paymentStatus === 'PAID';
                                 const batchName = getBatchName(order.batchId);
                                 const orderDate = getSafeDateString(order.date, order.id);
+                                const records = order.records || [];
+                                const totalBirds = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.birds || 0), 0);
+                                const totalCrates = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.quantity || 1), 0);
 
                                 return (
                                   <tr key={order.id} className="hover:bg-blue-50/30 transition-colors bg-white">
                                     <td className="py-2.5 px-4">
-                                      <div className="font-bold text-slate-800 text-[11px]">{orderDate}</div>
+                                      <div className="font-black text-slate-800 text-[11px]">{orderDate}</div>
                                       <div className="text-[9px] text-slate-400 font-mono">ID: {order.id.slice(-6)}</div>
                                     </td>
                                     <td className="py-2.5 px-3">
-                                      <span className="text-[9px] bg-slate-100 text-slate-600 font-bold px-1.5 py-0.5 rounded uppercase">{batchName}</span>
+                                      <span className="text-[9px] bg-slate-100 text-slate-700 font-bold px-1.5 py-0.5 rounded uppercase">{batchName}</span>
+                                    </td>
+                                    <td className="py-2.5 px-3 text-right">
+                                      <div className="font-black text-slate-800 text-[11px]">{netKg.toFixed(1)} kg</div>
+                                      <div className="text-[9px] text-slate-400">{totalBirds}p / {totalCrates}j @ S/.{pricePerKg.toFixed(2)}</div>
                                     </td>
                                     <td className="py-2.5 px-3 text-right font-digital font-bold text-slate-700">S/. {totalDue.toFixed(2)}</td>
                                     <td className="py-2.5 px-3 text-right font-digital font-bold text-emerald-600">S/. {totalPaid.toFixed(2)}</td>
@@ -1101,32 +1674,37 @@ const Collections: React.FC = () => {
                                     </td>
                                     <td className="py-2.5 px-4 text-center">
                                       <div className="flex items-center justify-center gap-1.5">
-                                        {!isOrderPaid && (
+                                        {!isOrderPaid ? (
                                           <button 
                                             onClick={(e) => { e.stopPropagation(); handleOpenPayModal(order); }}
-                                            className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[9px] font-black uppercase flex items-center gap-1 shadow-sm active:scale-95"
+                                            className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase flex items-center gap-1 shadow-sm active:scale-95 transition-all"
+                                            title="Abonar o Cancelar esta fecha de pesaje"
                                           >
-                                            <DollarSign size={10} /> Abonar
+                                            <DollarSign size={11} /> Abonar
                                           </button>
+                                        ) : (
+                                          <span className="px-2 py-1 bg-emerald-50 text-emerald-700 text-[9px] font-black rounded-lg uppercase">
+                                            Al Día
+                                          </span>
                                         )}
                                         <button 
                                           onClick={(e) => { e.stopPropagation(); setViewHistoryOrder(order); }}
-                                          className="p-1.5 bg-slate-100 hover:bg-slate-200 text-blue-600 rounded"
-                                          title="Historial de Abonos"
+                                          className="p-1.5 bg-slate-100 hover:bg-slate-200 text-blue-600 rounded-lg transition-colors"
+                                          title="Historial de Abonos de esta fecha"
                                         >
-                                          <History size={12} />
+                                          <History size={13} />
                                         </button>
                                         <button 
                                           onClick={(e) => { e.stopPropagation(); generateBankStatementPDF(order); }}
-                                          className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded"
-                                          title="Estado de Cuenta"
+                                          className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors"
+                                          title="Estado de Cuenta A4"
                                         >
-                                          <FileText size={12} />
+                                          <FileText size={13} />
                                         </button>
                                       </div>
                                     </td>
                                   </tr>
-                                )
+                                );
                               })}
                             </tbody>
                           </table>
@@ -1136,7 +1714,7 @@ const Collections: React.FC = () => {
                   </div>
                 )}
               </div>
-            )
+            );
           })}
           
           {clientGroups.length === 0 && (
@@ -1256,180 +1834,246 @@ const Collections: React.FC = () => {
       {/* ========================================================================= */}
       {/* 4. MODAL DE REGISTRAR ABONO CON DESGLOSE Y TICKET INMEDIATO              */}
       {/* ========================================================================= */}
-      {selectedOrderForPay && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden animate-scale-up">
-            
-            {/* Modal Header */}
-            <div className="p-6 bg-slate-900 text-white flex justify-between items-center">
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
-                  <DollarSign size={24} />
-                </div>
-                <div>
-                  <h3 className="text-xl font-black uppercase tracking-tight">Registrar Abono a Cuenta</h3>
-                  <p className="text-xs text-slate-400 font-medium">{selectedOrderForPay.clientName}</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setSelectedOrderForPay(null)}
-                className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
+      {selectedOrderForPay && (() => {
+        const currentBal = calculateBalance(selectedOrderForPay);
+        const records = selectedOrderForPay.records || [];
+        const totalBirds = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.birds || 0), 0);
+        const totalCrates = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.quantity || 1), 0);
+        const clientOrdersList = orders
+          .filter(o => (o.clientName || '').trim().toLowerCase() === (selectedOrderForPay.clientName || '').trim().toLowerCase())
+          .sort((a, b) => getSafeDateObj(b.date, b.id).getTime() - getSafeDateObj(a.date, a.id).getTime());
 
-            {/* Modal Form */}
-            <div className="p-6 md:p-8 space-y-5">
+        return (
+          <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in overflow-y-auto">
+            <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden animate-scale-up my-auto">
               
-              {/* Deuda Actual Indicator */}
-              <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                <div>
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Saldo Deudor Actual</span>
-                  <span className="text-xs font-bold text-slate-700">{getBatchName(selectedOrderForPay.batchId)}</span>
+              {/* Modal Header */}
+              <div className="p-6 bg-slate-900 text-white flex justify-between items-center">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
+                    <DollarSign size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black uppercase tracking-tight">Registrar Abono a Cuenta</h3>
+                    <p className="text-xs text-slate-400 font-medium">{selectedOrderForPay.clientName} {selectedOrderForPay.clientDni && `• DNI: ${selectedOrderForPay.clientDni}`}</p>
+                  </div>
                 </div>
-                <span className="font-digital font-black text-2xl text-red-600">
-                  S/. {calculateBalance(selectedOrderForPay).balance.toFixed(2)}
-                </span>
-              </div>
-
-              {/* Monto a abonar con quick buttons */}
-              <div>
-                <label className="text-[11px] font-black text-slate-700 uppercase tracking-widest block mb-2 ml-1">
-                  Monto a Abonar (S/.)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-xl font-bold">S/.</span>
-                  <input 
-                    type="number" 
-                    step="0.01"
-                    inputMode="decimal"
-                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl py-3.5 pl-14 pr-4 font-mono font-black text-2xl text-slate-900 outline-none focus:border-emerald-500 focus:bg-white transition-all" 
-                    value={payAmount} 
-                    onChange={e => setPayAmount(e.target.value)} 
-                    autoFocus 
-                    placeholder="0.00"
-                  />
-                </div>
-
-                {/* Quick percentage buttons */}
-                <div className="flex gap-2 mt-2.5">
-                  <button 
-                    type="button" 
-                    onClick={() => setPayAmount(calculateBalance(selectedOrderForPay).balance.toFixed(2))}
-                    className="flex-1 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black text-[10px] uppercase tracking-wider rounded-lg transition-colors"
-                  >
-                    100% (Total)
-                  </button>
-                  <button 
-                    type="button" 
-                    onClick={() => setPayAmount((calculateBalance(selectedOrderForPay).balance / 2).toFixed(2))}
-                    className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-[10px] uppercase tracking-wider rounded-lg transition-colors"
-                  >
-                    50%
-                  </button>
-                  <button 
-                    type="button" 
-                    onClick={() => setPayAmount((calculateBalance(selectedOrderForPay).balance * 0.25).toFixed(2))}
-                    className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-[10px] uppercase tracking-wider rounded-lg transition-colors"
-                  >
-                    25%
-                  </button>
-                </div>
-              </div>
-
-              {/* Medio de Pago & N° de Operación */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">
-                    Medio de Pago
-                  </label>
-                  <select 
-                    value={payMethod} 
-                    onChange={e => setPayMethod(e.target.value as any)}
-                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2.5 font-bold text-xs text-slate-800 outline-none focus:border-blue-500"
-                  >
-                    <option value="EFECTIVO">💵 Efectivo</option>
-                    <option value="TRANSFERENCIA">🏦 Transferencia Bancaria</option>
-                    <option value="YAPE_PLIN">📱 Yape / Plin</option>
-                    <option value="DEPOSITO">💳 Depósito Bancario</option>
-                    <option value="CHEQUE">📑 Cheque</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">
-                    N° de Operación / Ref. (Opcional)
-                  </label>
-                  <input 
-                    type="text" 
-                    placeholder="Ej. OP-184920"
-                    value={payOpNumber} 
-                    onChange={e => setPayOpNumber(e.target.value)}
-                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2.5 font-bold text-xs text-slate-800 outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              {/* Fecha y Nota */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">
-                    Fecha del Abono
-                  </label>
-                  <input 
-                    type="date" 
-                    value={payDate} 
-                    onChange={e => setPayDate(e.target.value)}
-                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2.5 font-bold text-xs text-slate-800 outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">
-                    Concepto / Detalle
-                  </label>
-                  <input 
-                    type="text" 
-                    placeholder="Ej. Abono a cuenta"
-                    value={payNote} 
-                    onChange={e => setPayNote(e.target.value)}
-                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2.5 font-bold text-xs text-slate-800 outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              {/* Nuevo Saldo Calculado */}
-              <div className="flex justify-between items-center p-4 bg-blue-50 rounded-2xl border border-blue-100">
-                <span className="text-xs font-bold text-blue-900 uppercase tracking-wider">Nuevo Saldo Restante</span>
-                <span className="font-digital font-black text-blue-900 text-xl">
-                  S/. {Math.max(0, calculateBalance(selectedOrderForPay).balance - (parseFloat(payAmount) || 0)).toFixed(2)}
-                </span>
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-2">
                 <button 
-                  type="button"
                   onClick={() => setSelectedOrderForPay(null)}
-                  className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold text-xs uppercase tracking-widest transition-colors"
+                  className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
                 >
-                  Cancelar
-                </button>
-                <button 
-                  type="button"
-                  onClick={handleProcessPayment}
-                  disabled={!parseFloat(payAmount) || parseFloat(payAmount) <= 0}
-                  className="flex-[2] bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  <Printer size={18} /> Procesar e Imprimir Ticket
+                  <X size={20} />
                 </button>
               </div>
 
+              {/* Modal Form */}
+              <div className="p-6 md:p-8 space-y-4">
+                
+                {/* Selector de Fecha de Pesaje / Cuenta a Abonar */}
+                {clientOrdersList.length > 1 && (
+                  <div>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1.5 ml-1">
+                      📅 Seleccionar Fecha de Pesaje / Cuenta a Abonar
+                    </label>
+                    <select
+                      value={selectedOrderForPay.id}
+                      onChange={(e) => {
+                        const ord = clientOrdersList.find(o => o.id === e.target.value);
+                        if (ord) handleOpenPayModal(ord);
+                      }}
+                      className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2.5 font-bold text-xs text-slate-800 outline-none focus:border-blue-500"
+                    >
+                      {clientOrdersList.map(ord => {
+                        const b = calculateBalance(ord);
+                        const isP = b.balance <= 0.05 || ord.paymentStatus === 'PAID';
+                        const dStr = getSafeDateString(ord.date, ord.id);
+                        const bName = getBatchName(ord.batchId);
+                        return (
+                          <option key={ord.id} value={ord.id}>
+                            {dStr} - {bName} | Peso: {b.netKg.toFixed(1)}kg | Saldo: S/. {b.balance.toFixed(2)} {isP ? '✓ (CANCELADO)' : '⚠️ PENDIENTE'}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
+
+                {/* Tarjeta de Información Detallada de la Pesa Seleccionada */}
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Día y Lote de Pesaje</span>
+                      <span className="text-xs font-bold text-slate-800">
+                        {getSafeDateString(selectedOrderForPay.date, selectedOrderForPay.id)} • {getBatchName(selectedOrderForPay.batchId)}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Saldo Pendiente</span>
+                      <span className={`font-digital font-black text-xl ${currentBal.balance <= 0.05 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        S/. {currentBal.balance.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-200/60 text-[10px]">
+                    <div>
+                      <span className="text-slate-400 block font-bold">Peso Neto:</span>
+                      <span className="font-bold text-slate-700">{currentBal.netKg.toFixed(1)} kg</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-bold">Carga:</span>
+                      <span className="font-bold text-slate-700">{totalBirds}p / {totalCrates}j</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-bold">Precio / kg:</span>
+                      <span className="font-bold text-slate-700">S/. {currentBal.pricePerKg.toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-200/60">
+                    <span>Total Facturado: <strong className="text-slate-700">S/. {currentBal.totalDue.toFixed(2)}</strong></span>
+                    <span>Total Ya Abonado: <strong className="text-emerald-600">S/. {currentBal.totalPaid.toFixed(2)}</strong></span>
+                  </div>
+                </div>
+
+                {/* Monto a abonar con quick buttons */}
+                <div>
+                  <label className="text-[11px] font-black text-slate-700 uppercase tracking-widest block mb-2 ml-1">
+                    Monto a Abonar (S/.)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-xl font-bold">S/.</span>
+                    <input 
+                      type="number" 
+                      step="0.01"
+                      inputMode="decimal"
+                      className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl py-3.5 pl-14 pr-4 font-mono font-black text-2xl text-slate-900 outline-none focus:border-emerald-500 focus:bg-white transition-all" 
+                      value={payAmount} 
+                      onChange={e => setPayAmount(e.target.value)} 
+                      autoFocus 
+                      placeholder="0.00"
+                    />
+                  </div>
+
+                  {/* Quick percentage buttons */}
+                  <div className="flex gap-2 mt-2.5">
+                    <button 
+                      type="button" 
+                      onClick={() => setPayAmount(currentBal.balance.toFixed(2))}
+                      className="flex-1 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black text-[10px] uppercase tracking-wider rounded-lg transition-colors"
+                    >
+                      100% (Cancelar)
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => setPayAmount((currentBal.balance / 2).toFixed(2))}
+                      className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-[10px] uppercase tracking-wider rounded-lg transition-colors"
+                    >
+                      50%
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => setPayAmount((currentBal.balance * 0.25).toFixed(2))}
+                      className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-[10px] uppercase tracking-wider rounded-lg transition-colors"
+                    >
+                      25%
+                    </button>
+                  </div>
+                </div>
+
+                {/* Medio de Pago & N° de Operación */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">
+                      Medio de Pago
+                    </label>
+                    <select 
+                      value={payMethod} 
+                      onChange={e => setPayMethod(e.target.value as any)}
+                      className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2.5 font-bold text-xs text-slate-800 outline-none focus:border-blue-500"
+                    >
+                      <option value="EFECTIVO">💵 Efectivo</option>
+                      <option value="TRANSFERENCIA">🏦 Transferencia Bancaria</option>
+                      <option value="YAPE_PLIN">📱 Yape / Plin</option>
+                      <option value="DEPOSITO">💳 Depósito Bancario</option>
+                      <option value="CHEQUE">📑 Cheque</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">
+                      N° de Operación / Ref. (Opcional)
+                    </label>
+                    <input 
+                      type="text" 
+                      placeholder="Ej. OP-184920"
+                      value={payOpNumber} 
+                      onChange={e => setPayOpNumber(e.target.value)}
+                      className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2.5 font-bold text-xs text-slate-800 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Fecha y Nota */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">
+                      Fecha del Abono
+                    </label>
+                    <input 
+                      type="date" 
+                      value={payDate} 
+                      onChange={e => setPayDate(e.target.value)}
+                      className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2.5 font-bold text-xs text-slate-800 outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">
+                      Concepto / Detalle
+                    </label>
+                    <input 
+                      type="text" 
+                      placeholder="Ej. Abono a cuenta"
+                      value={payNote} 
+                      onChange={e => setPayNote(e.target.value)}
+                      className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-3 py-2.5 font-bold text-xs text-slate-800 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Nuevo Saldo Calculado */}
+                <div className="flex justify-between items-center p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                  <span className="text-xs font-bold text-blue-900 uppercase tracking-wider">Nuevo Saldo Restante</span>
+                  <span className="font-digital font-black text-blue-900 text-xl">
+                    S/. {Math.max(0, currentBal.balance - (parseFloat(payAmount) || 0)).toFixed(2)}
+                  </span>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    type="button"
+                    onClick={() => setSelectedOrderForPay(null)}
+                    className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold text-xs uppercase tracking-widest transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={handleProcessPayment}
+                    disabled={!parseFloat(payAmount) || parseFloat(payAmount) <= 0}
+                    className="flex-[2] bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <Printer size={18} /> Procesar e Imprimir Ticket
+                  </button>
+                </div>
+
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ========================================================================= */}
       {/* 5. MODAL DE HISTORIAL DE ABONOS, TICKETS Y ESTADO DE CUENTA              */}

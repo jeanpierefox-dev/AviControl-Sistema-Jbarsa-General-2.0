@@ -1411,12 +1411,33 @@ const Reports = () => {
       });
       y = (targetDoc as any).lastAutoTable.finalY + 4;
 
-      // Detalle de pesos
+      // Detalle de pesos agrupados por mes
       targetDoc.setFontSize(8.5).setFont("helvetica", "bold");
-      targetDoc.text("DETALLE DE TODAS LAS PESAS", 40, y, { align: 'center' });
-      y += 3;
+      targetDoc.text("DETALLE DE TODAS LAS PESAS POR MES", 40, y, { align: 'center' });
+      y += 4;
 
-      y = renderTicketWeightsForOrders(targetDoc, group.orders, y);
+      const monthlyGrouped = groupOrdersByMonth(group.orders);
+      Object.entries(monthlyGrouped).forEach(([month, mStats]) => {
+        // Separador y título de Mes
+        targetDoc.setFillColor(240, 245, 250);
+        targetDoc.rect(5, y, 70, 5.5, 'F');
+        targetDoc.setFontSize(7.5).setFont("helvetica", "bold").setTextColor(15, 23, 42);
+        targetDoc.text(`=== MES: ${month.toUpperCase()} ===`, 40, y + 3.8, { align: 'center' });
+        targetDoc.setTextColor(0, 0, 0);
+        y += 7;
+
+        targetDoc.setFontSize(6.5).setFont("helvetica", "normal");
+        targetDoc.text(`Órdenes: ${mStats.orders.length} | Neto: ${mStats.net.toFixed(1)} kg | Saldo: S/. ${mStats.balance.toFixed(2)}`, 40, y, { align: 'center' });
+        y += 4;
+
+        // Pesas pertenecientes a este mes
+        y = renderTicketWeightsForOrders(targetDoc, mStats.orders, y);
+
+        targetDoc.setLineWidth(0.2);
+        targetDoc.setDrawColor(200, 200, 200);
+        targetDoc.line(5, y, 75, y);
+        y += 3;
+      });
 
       // Totales financieros históricos
       autoTable(targetDoc, {
@@ -1649,31 +1670,51 @@ const Reports = () => {
          styles: { fontSize: 10 }
      });
 
-     // Desglose de pesadas por orden en el reporte general
-     group.orders.forEach((order, idx) => {
-        const oRecords = order.records || [];
-        if (oRecords.length === 0) return;
-        const oT = calculateTotals(order);
+     // Desglose de pesadas agrupadas detalladamente por mes en el reporte general
+     Object.entries(stats).forEach(([month, mStats]) => {
         let curY = (doc as any).lastAutoTable.finalY + 12;
-        if (curY > 230) { doc.addPage(); addAppWatermarkToPdf(doc); curY = 20; }
-        
-        doc.setFontSize(10).setFont("helvetica", "bold");
-        doc.text(`ORDEN #${idx + 1}: ${getSafeDateString(order)} - LOTE: ${getBatchName(order.batchId || '').toUpperCase()} (PESO NETO: ${oT.net.toFixed(1)} KG)`, 14, curY);
-        curY += 3;
+        if (curY > 225) { doc.addPage(); addAppWatermarkToPdf(doc); curY = 20; }
 
-        const fullRecords = oRecords.filter(r => r.type === 'FULL');
-        const emptyRecords = oRecords.filter(r => r.type === 'EMPTY');
-        const mortRecords = oRecords.filter(r => r.type === 'MORTALITY');
+        // Encabezado de Mes destacado
+        doc.setFillColor(15, 23, 42); // Slate 900
+        doc.rect(14, curY, 182, 8, 'F');
+        doc.setFontSize(10).setFont("helvetica", "bold").setTextColor(255, 255, 255);
+        doc.text(`MES: ${month.toUpperCase()}  |  ÓRDENES: ${mStats.orders.length}  |  PESO NETO: ${mStats.net.toFixed(1)} KG  |  FACTURADO: S/. ${mStats.totalDue.toFixed(2)}  |  SALDO: S/. ${mStats.balance.toFixed(2)}`, 18, curY + 5.5);
+        doc.setTextColor(0, 0, 0);
+        curY += 12;
 
-        if (fullRecords.length > 0) {
-          curY = renderCategoryGridA4(doc, order.weighingMode === WeighingType.SOLO_POLLO ? "SACOS" : "JABAS LLENAS", fullRecords, oT.wF, oT.qF, curY);
-        }
-        if (emptyRecords.length > 0) {
-          curY = renderCategoryGridA4(doc, "JABAS VACÍAS", emptyRecords, oT.wE, oT.qE, curY + 4);
-        }
-        if (mortRecords.length > 0) {
-          curY = renderCategoryGridA4(doc, "MORTALIDAD", mortRecords, oT.wM, oT.qM, curY + 4);
-        }
+        // Iterar las pesas de cada orden pertenecientes a este mes
+        mStats.orders.forEach((order, idx) => {
+          const oRecords = order.records || [];
+          if (oRecords.length === 0) return;
+          const oT = calculateTotals(order);
+          if (curY > 235) { doc.addPage(); addAppWatermarkToPdf(doc); curY = 20; }
+          
+          doc.setFillColor(241, 245, 249);
+          doc.rect(14, curY, 182, 6.5, 'F');
+          doc.setFontSize(9).setFont("helvetica", "bold").setTextColor(30, 41, 59);
+          doc.text(`ORDEN #${idx + 1} (${getSafeDateString(order)}) - LOTE: ${getBatchName(order.batchId || '').toUpperCase()}  [NETO: ${oT.net.toFixed(1)} KG | FACT.: S/. ${oT.totalAmount.toFixed(2)} | SALDO: S/. ${oT.balance.toFixed(2)}]`, 17, curY + 4.5);
+          doc.setTextColor(0, 0, 0);
+          curY += 9;
+
+          const fullRecords = oRecords.filter(r => r.type === 'FULL');
+          const emptyRecords = oRecords.filter(r => r.type === 'EMPTY');
+          const mortRecords = oRecords.filter(r => r.type === 'MORTALITY');
+
+          if (fullRecords.length > 0) {
+            curY = renderCategoryGridA4(doc, order.weighingMode === WeighingType.SOLO_POLLO ? "SACOS" : "JABAS LLENAS", fullRecords, oT.wF, oT.qF, curY);
+          }
+          if (emptyRecords.length > 0) {
+            curY = renderCategoryGridA4(doc, "JABAS VACÍAS", emptyRecords, oT.wE, oT.qE, curY + 4);
+          }
+          if (mortRecords.length > 0) {
+            curY = renderCategoryGridA4(doc, "MORTALIDAD", mortRecords, oT.wM, oT.qM, curY + 4);
+          }
+          curY += 4;
+        });
+
+        // Subtotal separator for month
+        (doc as any).lastAutoTable = { finalY: curY };
      });
 
      drawA4Signatures(doc, group.orders, (doc as any).lastAutoTable.finalY);
