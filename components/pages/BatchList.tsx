@@ -271,6 +271,8 @@ const BatchList: React.FC = () => {
         y += 5.5;
 
         // Single Table for DETALLE DE CARGA
+        const pesoLlegada = Math.max(0, totalFullWeight - totalEmptyWeight);
+
         autoTable(doc, {
             startY: y,
             head: [[
@@ -282,6 +284,7 @@ const BatchList: React.FC = () => {
             body: [
                 ['Jabas Llenas:', `${totalFullCrates}`, `${totalBirds}`, `${totalFullWeight.toFixed(2)} kg`],
                 ['Jabas Vacías:', `${displayEmptyCrates}`, `-`, `-${totalEmptyWeight.toFixed(2)} kg`],
+                ['Pollo Llegada:', `${totalFullCrates}`, `${totalBirds}`, `${pesoLlegada.toFixed(2)} kg`],
                 ['Pollos Muertos:', `-`, `${totalMort}`, `-${totalMortWeight.toFixed(2)} kg`],
                 ['Pollos Vivos:', `-`, `${pollosVivos}`, `${netWeight.toFixed(2)} kg`]
             ],

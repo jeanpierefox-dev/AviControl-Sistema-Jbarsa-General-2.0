@@ -613,6 +613,7 @@ const Reports = () => {
 
     // Single Table for DETALLE DE CARGA
     const pollosVivos = Math.max(0, t.bF - t.qM);
+    const pesoLlegada = Math.max(0, t.wF - t.wE);
 
     autoTable(doc, {
         startY: y,
@@ -625,6 +626,7 @@ const Reports = () => {
         body: [
             ['Jabas Llenas:', `${t.qF}`, `${t.bF}`, `${t.wF.toFixed(2)} kg`],
             ['Jabas Vacías:', `${displayEmptyCrates}`, `-`, `-${t.wE.toFixed(2)} kg`],
+            ['Pollo Llegada:', `${t.qF}`, `${t.bF}`, `${pesoLlegada.toFixed(2)} kg`],
             ['Pollos Muertos:', `-`, `${t.qM}`, `-${t.wM.toFixed(2)} kg`],
             ['Pollos Vivos:', `-`, `${pollosVivos}`, `${t.net.toFixed(2)} kg`]
         ],

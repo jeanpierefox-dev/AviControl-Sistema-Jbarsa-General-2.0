@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useMemo } from 'react';
+import React, { useState, useEffect, useContext, useMemo, useCallback } from 'react';
 import { getOrders, saveOrder, getConfig, getVisibleUserIds, getBatches, getEffectiveBranding } from '../../services/storage';
 import { addLogoToPdf, addAppWatermarkToPdf } from '../../services/pdfHelper';
 import { ClientOrder, WeighingType, UserRole, Payment } from '../../types';
@@ -7,14 +7,34 @@ import {
   DollarSign, ArrowUpRight, X, Calendar, User, CreditCard, Building2, 
   Receipt, ArrowDownRight, AlertTriangle, CheckCircle2, ChevronRight,
   TrendingDown, TrendingUp, Wallet, Eye, Download, ShieldCheck,
-  Smartphone, Landmark, FileSpreadsheet, RefreshCw, Layers
-, ChevronUp, ChevronDown} from 'lucide-react';
+  Smartphone, Landmark, FileSpreadsheet, RefreshCw, Layers,
+  ChevronUp, ChevronDown, CalendarDays, AlertCircle, ArrowRight
+} from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { AuthContext } from '../../App';
 
 type FilterStatus = 'ALL' | 'PENDING' | 'PARTIAL' | 'PAID';
 type ViewMode = 'LIST' | 'GRID';
+
+export interface ClientPaymentRecord {
+  id: string;
+  amount: number;
+  timestamp: number;
+  method?: string;
+  operationNumber?: string;
+  note?: string;
+  registeredByName?: string;
+  orderId: string;
+  orderDate: string;
+  batchId?: string;
+  batchName: string;
+  orderTotalDue: number;
+  orderTotalPaid: number;
+  orderBalance: number;
+  orderNetKg: number;
+  order: ClientOrder;
+}
 
 interface BalanceCalculation {
   netKg: number;
@@ -53,6 +73,16 @@ const getSafeDateObj = (dateVal: string | number | undefined | null, fallbackId:
     return new Date();
 };
 
+export type ClientGroup = {
+  clientName: string;
+  clientDni: string;
+  orders: ClientOrder[];
+  totalDue: number;
+  totalPaid: number;
+  balance: number;
+  percentPaid: number;
+};
+
 const Collections: React.FC = () => {
   const [orders, setOrders] = useState<ClientOrder[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -60,6 +90,19 @@ const Collections: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('LIST');
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'balance_desc' | 'client_asc'>('date_desc');
   
+  // Sub-tabs per client (for expanded cards): 'DAYS' | 'PAYMENTS' | 'PENDING'
+  const [clientActiveTab, setClientActiveTab] = useState<Record<string, 'DAYS' | 'PAYMENTS' | 'PENDING'>>({});
+  // Day filter per client ('ALL' vs 'PENDING')
+  const [clientDayFilter, setClientDayFilter] = useState<Record<string, 'ALL' | 'PENDING'>>({});
+
+  // Full Client Account Statement Modal
+  const [selectedClientStatement, setSelectedClientStatement] = useState<ClientGroup | null>(null);
+  const [statementModalTab, setStatementModalTab] = useState<'DAYS' | 'PAYMENTS' | 'PENDING'>('DAYS');
+  const [statementDayFilter, setStatementDayFilter] = useState<'ALL' | 'PENDING'>('ALL');
+
+  // Main View Category: 'CLIENTS' or 'ALL_PAYMENTS'
+  const [activeMainSection, setActiveMainSection] = useState<'CLIENTS' | 'ALL_PAYMENTS'>('CLIENTS');
+
   // Modals
   const [selectedOrderForPay, setSelectedOrderForPay] = useState<ClientOrder | null>(null);
   const [viewHistoryOrder, setViewHistoryOrder] = useState<ClientOrder | null>(null);
@@ -173,15 +216,35 @@ const Collections: React.FC = () => {
     });
   }, [orders, searchTerm, statusFilter, sortBy, batches]);
 
-  type ClientGroup = {
-    clientName: string;
-    clientDni: string;
-    orders: ClientOrder[];
-    totalDue: number;
-    totalPaid: number;
-    balance: number;
-    percentPaid: number;
-  };
+  const getClientPayments = useCallback((clientOrders: ClientOrder[]): ClientPaymentRecord[] => {
+    const list: ClientPaymentRecord[] = [];
+    clientOrders.forEach(ord => {
+      const bal = calculateBalance(ord);
+      const bName = getBatchName(ord.batchId);
+      const dStr = getSafeDateString(ord.date, ord.id);
+      (ord.payments || []).forEach(p => {
+        list.push({
+          id: p.id,
+          amount: p.amount,
+          timestamp: p.timestamp,
+          method: p.method,
+          operationNumber: p.operationNumber,
+          note: p.note,
+          registeredByName: p.registeredByName,
+          orderId: ord.id,
+          orderDate: dStr,
+          batchId: ord.batchId,
+          batchName: bName,
+          orderTotalDue: bal.totalDue,
+          orderTotalPaid: bal.totalPaid,
+          orderBalance: bal.balance,
+          orderNetKg: bal.netKg,
+          order: ord
+        });
+      });
+    });
+    return list.sort((a, b) => b.timestamp - a.timestamp);
+  }, [batches]);
 
   const clientGroups = useMemo(() => {
     const groups: Record<string, ClientGroup> = {};
@@ -216,6 +279,22 @@ const Collections: React.FC = () => {
        return b.balance - a.balance; // Default to highest balance first for groups
     });
   }, [filteredOrders, sortBy]);
+
+  const allSystemPayments = useMemo(() => {
+    return getClientPayments(orders);
+  }, [orders, getClientPayments]);
+
+  const filteredSystemPayments = useMemo(() => {
+    const s = searchTerm.toLowerCase();
+    if (!s) return allSystemPayments;
+    return allSystemPayments.filter(p => 
+      p.batchName.toLowerCase().includes(s) ||
+      (p.order.clientName || '').toLowerCase().includes(s) ||
+      (p.operationNumber || '').toLowerCase().includes(s) ||
+      (p.method || '').toLowerCase().includes(s) ||
+      p.orderDate.toLowerCase().includes(s)
+    );
+  }, [allSystemPayments, searchTerm]);
 
   const [expandedClients, setExpandedClients] = useState<Record<string, boolean>>({});
 
@@ -736,7 +815,7 @@ const Collections: React.FC = () => {
   // =========================================================================
   // 3. REPORTE A4 DE COBRANZAS DEL CLIENTE AGRUPADO POR MES Y DÍAS DE PESAJE
   // =========================================================================
-  const generateClientCollectionsA4PDF = (group: ClientGroup) => {
+  const generateClientCollectionsA4PDF = (group: ClientGroup, mode: 'FULL' | 'PENDING_ONLY' = 'FULL') => {
     const doc = new jsPDF();
     addAppWatermarkToPdf(doc);
     const branding = getEffectiveBranding({} as any, user);
@@ -747,8 +826,11 @@ const Collections: React.FC = () => {
 
     doc.setFillColor(15, 23, 42); // Slate 900
     doc.rect(14, y, 182, 13, 'F');
-    doc.setFontSize(11).setFont("helvetica", "bold").setTextColor(255, 255, 255);
-    doc.text("ESTADO DE CUENTA Y COBRANZAS POR MES Y DÍAS DE PESAJE", 105, y + 8, { align: 'center' });
+    doc.setFontSize(10.5).setFont("helvetica", "bold").setTextColor(255, 255, 255);
+    const titleText = mode === 'PENDING_ONLY' 
+      ? "ESTADO DE CUENTA - SALDOS Y CUENTAS PENDIENTES POR PAGAR" 
+      : "ESTADO DE CUENTA INTEGRAL Y COBRANZAS POR MES Y DÍAS";
+    doc.text(titleText, 105, y + 8.5, { align: 'center' });
     doc.setTextColor(0, 0, 0);
     y += 18;
 
@@ -772,101 +854,176 @@ const Collections: React.FC = () => {
       y += 4.5;
     }
 
+    const pendingOrdersCount = group.orders.filter(o => calculateBalance(o).balance > 0.05).length;
+
     // Resumen General Acumulado
     autoTable(doc, {
       startY: y + 2,
-      head: [['Total Facturado Histórico', 'Total Abonado Histórico', 'Deuda General Pendiente', 'Estado']],
+      head: [['Total Facturado Histórico', 'Total Abonado Histórico', 'Deuda General Pendiente', 'Estado de Cuenta', 'Despachos Pendientes']],
       body: [[
         `S/. ${group.totalDue.toFixed(2)}`,
         `S/. ${group.totalPaid.toFixed(2)}`,
         `S/. ${group.balance.toFixed(2)}`,
-        group.balance <= 0.05 ? 'AL DÍA / CANCELADO' : 'CUENTA CON SALDO PENDIENTE'
+        group.balance <= 0.05 ? 'AL DÍA / CANCELADO' : 'CUENTA CON SALDO PENDIENTE',
+        `${pendingOrdersCount} de ${group.orders.length} órdenes`
       ]],
       theme: 'grid',
-      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
-      styles: { fontSize: 8.5, halign: 'center', cellPadding: 2 }
+      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center', fontSize: 7.5 },
+      styles: { fontSize: 8, halign: 'center', cellPadding: 2 }
     });
 
-    y = (doc as any).lastAutoTable.finalY + 7;
+    y = (doc as any).lastAutoTable.finalY + 6;
 
-    // Group orders by month
-    const monthlyData: Record<string, { totalDue: number; totalPaid: number; balance: number; netKg: number; orders: ClientOrder[] }> = {};
-    group.orders.forEach(o => {
-      const oDate = getSafeDateObj(o.date, o.id);
-      const monthKey = oDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase();
-      if (!monthlyData[monthKey]) {
-        monthlyData[monthKey] = { totalDue: 0, totalPaid: 0, balance: 0, netKg: 0, orders: [] };
-      }
-      const bal = calculateBalance(o);
-      monthlyData[monthKey].totalDue += bal.totalDue;
-      monthlyData[monthKey].totalPaid += bal.totalPaid;
-      monthlyData[monthKey].balance += bal.balance;
-      monthlyData[monthKey].netKg += bal.netKg;
-      monthlyData[monthKey].orders.push(o);
-    });
-
-    Object.entries(monthlyData).forEach(([month, mData]) => {
-      if (y > 230) {
+    // SECTION 1: ÚLTIMOS PAGOS Y ABONOS REALIZADOS SEGÚN LOTE ABONADO
+    const paymentsList = getClientPayments(group.orders);
+    if (paymentsList.length > 0) {
+      if (y > 220) {
         doc.addPage();
         addAppWatermarkToPdf(doc);
         y = 20;
       }
 
-      // Month Section Banner
-      doc.setFillColor(30, 41, 59);
-      doc.rect(14, y, 182, 7, 'F');
-      doc.setFontSize(8.5).setFont("helvetica", "bold").setTextColor(255, 255, 255);
-      doc.text(`MES: ${month}  |  TOTAL PESO: ${mData.netKg.toFixed(1)} KG  |  FACTURADO: S/. ${mData.totalDue.toFixed(2)}  |  ABONADO: S/. ${mData.totalPaid.toFixed(2)}  |  SALDO: S/. ${mData.balance.toFixed(2)}`, 18, y + 4.8);
+      doc.setFillColor(16, 185, 129); // Emerald 500
+      doc.rect(14, y, 182, 6.5, 'F');
+      doc.setFontSize(8).setFont("helvetica", "bold").setTextColor(255, 255, 255);
+      doc.text(`HISTORIAL DE ÚLTIMOS PAGOS Y ABONOS REALIZADOS SEGÚN LOTE ABONADO (${paymentsList.length} PAGOS)`, 18, y + 4.5);
       doc.setTextColor(0, 0, 0);
-      y += 9;
+      y += 8;
 
-      const rows = mData.orders.map((ord, idx) => {
-        const bal = calculateBalance(ord);
-        const isPaid = bal.balance <= 0.05 || ord.paymentStatus === 'PAID';
-        const records = ord.records || [];
-        const totalBirds = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.birds || 0), 0);
-        const totalCrates = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.quantity || 1), 0);
-        const dateStr = getSafeDateString(ord.date, ord.id);
-        const batchStr = getBatchName(ord.batchId);
-
+      const paymentRows = paymentsList.slice(0, 20).map((p, idx) => {
+        const pDate = new Date(p.timestamp).toLocaleDateString([], { dateStyle: 'short' });
         return [
           String(idx + 1).padStart(2, '0'),
-          dateStr,
-          batchStr,
-          `${bal.netKg.toFixed(1)} kg`,
-          `${totalBirds}p / ${totalCrates}j`,
-          `S/. ${bal.pricePerKg.toFixed(2)}`,
-          `S/. ${bal.totalDue.toFixed(2)}`,
-          `S/. ${bal.totalPaid.toFixed(2)}`,
-          `S/. ${bal.balance.toFixed(2)}`,
-          isPaid ? 'CANCELADO' : 'PENDIENTE'
+          pDate,
+          p.batchName,
+          p.orderDate,
+          p.operationNumber || `REC-${p.id.slice(-6).toUpperCase()}`,
+          p.method || 'EFECTIVO',
+          `S/. ${p.amount.toFixed(2)}`,
+          `S/. ${p.orderBalance.toFixed(2)}`
         ];
       });
 
       autoTable(doc, {
         startY: y,
-        head: [['#', 'Día / Fecha', 'Lote', 'Neto (kg)', 'Pollos/Jabas', 'Precio/kg', 'Facturado', 'Abonado', 'Saldo', 'Estado']],
-        body: rows,
+        head: [['#', 'Fecha Pago', 'Lote Abonado', 'Día Despacho', 'N° Operación / Ref', 'Medio Pago', 'Monto Abonado', 'Saldo Lote']],
+        body: paymentRows,
         theme: 'grid',
-        headStyles: { fillColor: [71, 85, 105], textColor: [255, 255, 255], fontSize: 7, fontStyle: 'bold', halign: 'center' },
+        headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontSize: 7, fontStyle: 'bold', halign: 'center' },
         styles: { fontSize: 7, cellPadding: 1.8, halign: 'center' },
         columnStyles: {
           0: { halign: 'center', cellWidth: 7 },
           1: { halign: 'center', cellWidth: 20 },
-          2: { halign: 'left', cellWidth: 25 },
-          3: { halign: 'right', cellWidth: 18, fontStyle: 'bold' },
-          4: { halign: 'center', cellWidth: 20 },
-          5: { halign: 'right', cellWidth: 16 },
-          6: { halign: 'right', cellWidth: 20, fontStyle: 'bold' },
-          7: { halign: 'right', cellWidth: 18 },
-          8: { halign: 'right', cellWidth: 18, fontStyle: 'bold' },
-          9: { halign: 'center', cellWidth: 20 }
+          2: { halign: 'left', cellWidth: 32, fontStyle: 'bold' },
+          3: { halign: 'center', cellWidth: 22 },
+          4: { halign: 'left', cellWidth: 30 },
+          5: { halign: 'center', cellWidth: 20 },
+          6: { halign: 'right', cellWidth: 26, fontStyle: 'bold', textColor: [5, 150, 105] },
+          7: { halign: 'right', cellWidth: 25, fontStyle: 'bold' }
         },
         margin: { left: 14, right: 14 }
       });
 
-      y = (doc as any).lastAutoTable.finalY + 6;
-    });
+      y = (doc as any).lastAutoTable.finalY + 7;
+    }
+
+    // SECTION 2: DESGLOSE DE CUENTAS POR DÍAS DE PESAJE (TODOS O SOLO PENDIENTES)
+    const targetOrders = mode === 'PENDING_ONLY' 
+      ? group.orders.filter(o => calculateBalance(o).balance > 0.05)
+      : group.orders;
+
+    if (targetOrders.length === 0 && mode === 'PENDING_ONLY') {
+      if (y > 230) {
+        doc.addPage();
+        addAppWatermarkToPdf(doc);
+        y = 20;
+      }
+      doc.setFillColor(240, 253, 244);
+      doc.roundedRect(14, y, 182, 16, 2, 2, 'F');
+      doc.setFontSize(9.5).setFont("helvetica", "bold").setTextColor(5, 150, 105);
+      doc.text("EL CLIENTE SE ENCUENTRA 100% AL DÍA • NO REGISTRA NINGÚN SALDO PENDIENTE", 105, y + 10, { align: 'center' });
+      y += 22;
+    } else {
+      // Group target orders by month
+      const monthlyData: Record<string, { totalDue: number; totalPaid: number; balance: number; netKg: number; orders: ClientOrder[] }> = {};
+      targetOrders.forEach(o => {
+        const oDate = getSafeDateObj(o.date, o.id);
+        const monthKey = oDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase();
+        if (!monthlyData[monthKey]) {
+          monthlyData[monthKey] = { totalDue: 0, totalPaid: 0, balance: 0, netKg: 0, orders: [] };
+        }
+        const bal = calculateBalance(o);
+        monthlyData[monthKey].totalDue += bal.totalDue;
+        monthlyData[monthKey].totalPaid += bal.totalPaid;
+        monthlyData[monthKey].balance += bal.balance;
+        monthlyData[monthKey].netKg += bal.netKg;
+        monthlyData[monthKey].orders.push(o);
+      });
+
+      Object.entries(monthlyData).forEach(([month, mData]) => {
+        if (y > 230) {
+          doc.addPage();
+          addAppWatermarkToPdf(doc);
+          y = 20;
+        }
+
+        // Month Section Banner
+        doc.setFillColor(30, 41, 59);
+        doc.rect(14, y, 182, 7, 'F');
+        doc.setFontSize(8).setFont("helvetica", "bold").setTextColor(255, 255, 255);
+        const bannerTitle = mode === 'PENDING_ONLY' ? `[SOLO PENDIENTES] MES: ${month}` : `MES: ${month}`;
+        doc.text(`${bannerTitle}  |  TOTAL PESO: ${mData.netKg.toFixed(1)} KG  |  FACTURADO: S/. ${mData.totalDue.toFixed(2)}  |  ABONADO: S/. ${mData.totalPaid.toFixed(2)}  |  SALDO: S/. ${mData.balance.toFixed(2)}`, 18, y + 4.8);
+        doc.setTextColor(0, 0, 0);
+        y += 9;
+
+        const rows = mData.orders.map((ord, idx) => {
+          const bal = calculateBalance(ord);
+          const isPaid = bal.balance <= 0.05 || ord.paymentStatus === 'PAID';
+          const records = ord.records || [];
+          const totalBirds = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.birds || 0), 0);
+          const totalCrates = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.quantity || 1), 0);
+          const dateStr = getSafeDateString(ord.date, ord.id);
+          const batchStr = getBatchName(ord.batchId);
+
+          return [
+            String(idx + 1).padStart(2, '0'),
+            dateStr,
+            batchStr,
+            `${bal.netKg.toFixed(1)} kg`,
+            `${totalBirds}p / ${totalCrates}j`,
+            `S/. ${bal.pricePerKg.toFixed(2)}`,
+            `S/. ${bal.totalDue.toFixed(2)}`,
+            `S/. ${bal.totalPaid.toFixed(2)}`,
+            `S/. ${bal.balance.toFixed(2)}`,
+            isPaid ? 'CANCELADO' : 'PENDIENTE'
+          ];
+        });
+
+        autoTable(doc, {
+          startY: y,
+          head: [['#', 'Día / Fecha', 'Lote', 'Neto (kg)', 'Pollos/Jabas', 'Precio/kg', 'Facturado', 'Abonado', 'Saldo Deudor', 'Estado']],
+          body: rows,
+          theme: 'grid',
+          headStyles: { fillColor: mode === 'PENDING_ONLY' ? [185, 28, 28] : [71, 85, 105], textColor: [255, 255, 255], fontSize: 7, fontStyle: 'bold', halign: 'center' },
+          styles: { fontSize: 7, cellPadding: 1.8, halign: 'center' },
+          columnStyles: {
+            0: { halign: 'center', cellWidth: 7 },
+            1: { halign: 'center', cellWidth: 20 },
+            2: { halign: 'left', cellWidth: 25 },
+            3: { halign: 'right', cellWidth: 18, fontStyle: 'bold' },
+            4: { halign: 'center', cellWidth: 20 },
+            5: { halign: 'right', cellWidth: 16 },
+            6: { halign: 'right', cellWidth: 20, fontStyle: 'bold' },
+            7: { halign: 'right', cellWidth: 18 },
+            8: { halign: 'right', cellWidth: 18, fontStyle: 'bold', textColor: [220, 38, 38] },
+            9: { halign: 'center', cellWidth: 20 }
+          },
+          margin: { left: 14, right: 14 }
+        });
+
+        y = (doc as any).lastAutoTable.finalY + 6;
+      });
+    }
 
     // Firmas
     if (y > 240) {
@@ -885,13 +1042,13 @@ const Collections: React.FC = () => {
     doc.text("Firma / Sello Tesorería", 47.5, y + 8, { align: 'center' });
     doc.text(group.clientName.toUpperCase(), 162.5, y + 8, { align: 'center' });
 
-    handlePDFOutput(doc, `Cobranzas_${group.clientName.replace(/\s+/g, '_')}.pdf`);
+    handlePDFOutput(doc, `Cobranzas_${mode === 'PENDING_ONLY' ? 'Solo_Pendientes_' : ''}${group.clientName.replace(/\s+/g, '_')}.pdf`);
   };
 
   // =========================================================================
   // 4. TICKET TÉRMICO 80mm DE COBRANZAS AGRUPADO POR MES Y DÍAS DE PESAJE
   // =========================================================================
-  const generateClientCollectionsTicketPDF = (group: ClientGroup) => {
+  const generateClientCollectionsTicketPDF = (group: ClientGroup, mode: 'FULL' | 'PENDING_ONLY' = 'FULL') => {
     const branding = getEffectiveBranding({} as any, user);
     const dummyDoc = new jsPDF({ unit: 'mm', format: [80, 25000] });
 
@@ -908,7 +1065,7 @@ const Collections: React.FC = () => {
         y += 4;
       });
       targetDoc.setFontSize(8).setFont("helvetica", "bold");
-      targetDoc.text("ESTADO DE COBRANZAS Y DEUDA", 40, y, { align: 'center' });
+      targetDoc.text(mode === 'PENDING_ONLY' ? "ESTADO DE SALDOS PENDIENTES" : "ESTADO DE COBRANZAS Y DEUDA", 40, y, { align: 'center' });
       y += 3.5;
       targetDoc.setFontSize(6.5).setFont("helvetica", "normal");
       targetDoc.text(`EMISIÓN: ${new Date().toLocaleDateString()}`, 40, y, { align: 'center' });
@@ -942,66 +1099,110 @@ const Collections: React.FC = () => {
         ],
         theme: 'grid',
         styles: { fontSize: 7, cellPadding: 1 },
-        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 42 }, 1: { halign: 'right', cellWidth: 28 } },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 42 }, 1: { halign: 'right', cellWidth: 28, fontStyle: 'bold' } },
         margin: { left: 5, right: 5 }
       });
       y = (targetDoc as any).lastAutoTable.finalY + 3.5;
 
-      // Group orders by month
-      const monthlyData: Record<string, { totalDue: number; totalPaid: number; balance: number; netKg: number; orders: ClientOrder[] }> = {};
-      group.orders.forEach(o => {
-        const oDate = getSafeDateObj(o.date, o.id);
-        const monthKey = oDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase();
-        if (!monthlyData[monthKey]) {
-          monthlyData[monthKey] = { totalDue: 0, totalPaid: 0, balance: 0, netKg: 0, orders: [] };
-        }
-        const bal = calculateBalance(o);
-        monthlyData[monthKey].totalDue += bal.totalDue;
-        monthlyData[monthKey].totalPaid += bal.totalPaid;
-        monthlyData[monthKey].balance += bal.balance;
-        monthlyData[monthKey].netKg += bal.netKg;
-        monthlyData[monthKey].orders.push(o);
-      });
-
-      Object.entries(monthlyData).forEach(([month, mData]) => {
-        targetDoc.setFillColor(240, 245, 250);
+      // Section: Últimos Abonos Recibidos (por lote)
+      const pList = getClientPayments(group.orders);
+      if (pList.length > 0) {
+        targetDoc.setFillColor(230, 245, 235);
         targetDoc.rect(5, y, 70, 5, 'F');
-        targetDoc.setFontSize(7).setFont("helvetica", "bold");
-        targetDoc.text(`MES: ${month}`, 7, y + 3.5);
+        targetDoc.setFontSize(6.5).setFont("helvetica", "bold");
+        targetDoc.text(`ÚLTIMOS ABONOS RECIBIDOS (${pList.length})`, 7, y + 3.5);
         y += 6;
 
-        const bodyRows = mData.orders.map(ord => {
-          const bal = calculateBalance(ord);
-          const dateStr = getSafeDateString(ord.date, ord.id);
-          return [
-            dateStr,
-            `${bal.netKg.toFixed(1)}kg`,
-            `S/.${bal.totalDue.toFixed(1)}`,
-            `S/.${bal.balance.toFixed(1)}`
-          ];
-        });
+        const payTicketRows = pList.slice(0, 8).map(p => [
+          new Date(p.timestamp).toLocaleDateString([], { dateStyle: 'short' }),
+          p.batchName.slice(0, 14),
+          `S/.${p.amount.toFixed(1)}`
+        ]);
 
         autoTable(targetDoc, {
           startY: y,
-          head: [['FECHA', 'PESO', 'FACT.', 'SALDO']],
-          body: bodyRows,
+          head: [['FECHA', 'LOTE ABONADO', 'MONTO']],
+          body: payTicketRows,
           theme: 'grid',
-          headStyles: { fillColor: [220, 226, 230], textColor: 0, fontSize: 6, fontStyle: 'bold', halign: 'center' },
-          styles: { fontSize: 6, cellPadding: 0.8, halign: 'center' },
+          headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontSize: 5.5, fontStyle: 'bold', halign: 'center' },
+          styles: { fontSize: 5.5, cellPadding: 0.8, halign: 'center' },
           columnStyles: {
-            0: { cellWidth: 20 },
-            1: { cellWidth: 16 },
-            2: { cellWidth: 17, halign: 'right' },
-            3: { cellWidth: 17, halign: 'right', fontStyle: 'bold' }
+            0: { cellWidth: 18 },
+            1: { cellWidth: 34, halign: 'left' },
+            2: { cellWidth: 18, halign: 'right', fontStyle: 'bold' }
           },
           margin: { left: 5, right: 5 }
         });
-        y = (targetDoc as any).lastAutoTable.finalY + 1.5;
+        y = (targetDoc as any).lastAutoTable.finalY + 3;
+      }
 
-        targetDoc.setFontSize(6.5).setFont("helvetica", "bold");
-        targetDoc.text(`Subtotal Mes: Fact. S/. ${mData.totalDue.toFixed(2)} | Saldo S/. ${mData.balance.toFixed(2)}`, 40, y + 2.5, { align: 'center' });
-        y += 5.5;
-      });
+      // Target orders for daily breakdown
+      const targetOrders = mode === 'PENDING_ONLY' 
+        ? group.orders.filter(o => calculateBalance(o).balance > 0.05)
+        : group.orders;
+
+      if (targetOrders.length === 0 && mode === 'PENDING_ONLY') {
+        targetDoc.setFontSize(6.5).setFont("helvetica", "bold").setTextColor(5, 150, 105);
+        targetDoc.text("AL DÍA: SIN CUENTAS PENDIENTES", 40, y + 3, { align: 'center' });
+        targetDoc.setTextColor(0, 0, 0);
+        y += 6;
+      } else {
+        // Group orders by month
+        const monthlyData: Record<string, { totalDue: number; totalPaid: number; balance: number; netKg: number; orders: ClientOrder[] }> = {};
+        targetOrders.forEach(o => {
+          const oDate = getSafeDateObj(o.date, o.id);
+          const monthKey = oDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase();
+          if (!monthlyData[monthKey]) {
+            monthlyData[monthKey] = { totalDue: 0, totalPaid: 0, balance: 0, netKg: 0, orders: [] };
+          }
+          const bal = calculateBalance(o);
+          monthlyData[monthKey].totalDue += bal.totalDue;
+          monthlyData[monthKey].totalPaid += bal.totalPaid;
+          monthlyData[monthKey].balance += bal.balance;
+          monthlyData[monthKey].netKg += bal.netKg;
+          monthlyData[monthKey].orders.push(o);
+        });
+
+        Object.entries(monthlyData).forEach(([month, mData]) => {
+          targetDoc.setFillColor(240, 245, 250);
+          targetDoc.rect(5, y, 70, 5, 'F');
+          targetDoc.setFontSize(6.5).setFont("helvetica", "bold");
+          targetDoc.text(mode === 'PENDING_ONLY' ? `[PENDIENTES] MES: ${month}` : `MES: ${month}`, 7, y + 3.5);
+          y += 6;
+
+          const bodyRows = mData.orders.map(ord => {
+            const bal = calculateBalance(ord);
+            const dateStr = getSafeDateString(ord.date, ord.id);
+            return [
+              dateStr,
+              `${bal.netKg.toFixed(1)}kg`,
+              `S/.${bal.totalDue.toFixed(1)}`,
+              `S/.${bal.balance.toFixed(1)}`
+            ];
+          });
+
+          autoTable(targetDoc, {
+            startY: y,
+            head: [['FECHA', 'PESO', 'FACT.', 'SALDO']],
+            body: bodyRows,
+            theme: 'grid',
+            headStyles: { fillColor: mode === 'PENDING_ONLY' ? [185, 28, 28] : [220, 226, 230], textColor: mode === 'PENDING_ONLY' ? [255, 255, 255] : 0, fontSize: 6, fontStyle: 'bold', halign: 'center' },
+            styles: { fontSize: 6, cellPadding: 0.8, halign: 'center' },
+            columnStyles: {
+              0: { cellWidth: 20 },
+              1: { cellWidth: 16 },
+              2: { cellWidth: 17, halign: 'right' },
+              3: { cellWidth: 17, halign: 'right', fontStyle: 'bold', textColor: [220, 38, 38] }
+            },
+            margin: { left: 5, right: 5 }
+          });
+          y = (targetDoc as any).lastAutoTable.finalY + 1.5;
+
+          targetDoc.setFontSize(6.5).setFont("helvetica", "bold");
+          targetDoc.text(`Subtotal: Fact. S/. ${mData.totalDue.toFixed(2)} | Saldo S/. ${mData.balance.toFixed(2)}`, 40, y + 2.5, { align: 'center' });
+          y += 5.5;
+        });
+      }
 
       y += 6;
       targetDoc.setLineWidth(0.3);
@@ -1018,7 +1219,7 @@ const Collections: React.FC = () => {
     const finalY = renderContent(dummyDoc);
     const doc = new jsPDF({ unit: 'mm', format: [80, Math.max(130, finalY)] });
     renderContent(doc);
-    handlePDFOutput(doc, `TicketCobranza_${group.clientName.replace(/\s+/g, '_')}.pdf`);
+    handlePDFOutput(doc, `TicketCobranza_${mode === 'PENDING_ONLY' ? 'Pendientes_' : ''}${group.clientName.replace(/\s+/g, '_')}.pdf`);
   };
 
   // =========================================================================
@@ -1351,23 +1552,42 @@ const Collections: React.FC = () => {
           </div>
 
           {/* Quick Refresh & View Toggles */}
-          <div className="flex items-center gap-3 self-stretch lg:self-auto">
+          <div className="flex flex-wrap items-center gap-3 self-stretch lg:self-auto">
             <div className="bg-white/10 p-1 rounded-2xl flex items-center border border-white/10">
               <button 
-                onClick={() => setViewMode('LIST')}
-                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${viewMode === 'LIST' ? 'bg-white text-slate-900 shadow-md' : 'text-blue-200 hover:text-white'}`}
-                title="Vista de Listado / Tabla Ordenada"
+                onClick={() => setActiveMainSection('CLIENTS')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all ${activeMainSection === 'CLIENTS' ? 'bg-white text-slate-900 shadow-md' : 'text-blue-200 hover:text-white'}`}
+                title="Gestión de Clientes y Estados de Cuenta"
               >
-                <Layers size={16} /> Listado
+                <User size={15} /> Clientes & Cuentas
               </button>
               <button 
-                onClick={() => setViewMode('GRID')}
-                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${viewMode === 'GRID' ? 'bg-white text-slate-900 shadow-md' : 'text-blue-200 hover:text-white'}`}
-                title="Vista de Tarjetas Cuadrícula"
+                onClick={() => setActiveMainSection('ALL_PAYMENTS')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all ${activeMainSection === 'ALL_PAYMENTS' ? 'bg-white text-slate-900 shadow-md' : 'text-blue-200 hover:text-white'}`}
+                title="Historial de Últimos Abonos Realizados por Lote"
               >
-                <Wallet size={16} /> Tarjetas
+                <History size={15} /> Últimos Abonos (Lotes)
               </button>
             </div>
+
+            {activeMainSection === 'CLIENTS' && (
+              <div className="bg-white/10 p-1 rounded-2xl flex items-center border border-white/10">
+                <button 
+                  onClick={() => setViewMode('LIST')}
+                  className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all ${viewMode === 'LIST' ? 'bg-white text-slate-900 shadow-md' : 'text-blue-200 hover:text-white'}`}
+                  title="Vista de Listado / Tabla Ordenada"
+                >
+                  <Layers size={15} /> Listado
+                </button>
+                <button 
+                  onClick={() => setViewMode('GRID')}
+                  className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all ${viewMode === 'GRID' ? 'bg-white text-slate-900 shadow-md' : 'text-blue-200 hover:text-white'}`}
+                  title="Vista de Tarjetas Cuadrícula"
+                >
+                  <Wallet size={15} /> Tarjetas
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1510,8 +1730,125 @@ const Collections: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. MAIN CONTENT: LISTADO O CUADRÍCULA */}
-      {viewMode === 'LIST' ? (
+      {/* 3. MAIN CONTENT: HISTORIAL GLOBAL DE PAGOS O LISTADO/CUADRÍCULA */}
+      {activeMainSection === 'ALL_PAYMENTS' ? (
+        <div className="space-y-4">
+          {/* Header Summary for Global Payments */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-100 text-emerald-700 rounded-xl">
+                  <History size={20} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 uppercase text-base">Últimos Pagos Realizados según Lote Abonado</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Registro cronológico general de todos los abonos y cobranzas aplicados a cada lote de pesaje.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4 self-stretch md:self-auto justify-between md:justify-end border-t md:border-t-0 pt-3 md:pt-0 border-slate-100">
+              <div className="text-left md:text-right">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Total Abonos</span>
+                <span className="font-digital text-xl font-bold text-slate-800">{filteredSystemPayments.length} registros</span>
+              </div>
+              <div className="text-left md:text-right">
+                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600 block">Monto Cobrado</span>
+                <span className="font-digital text-xl font-bold text-emerald-600">
+                  S/. {filteredSystemPayments.reduce((acc, p) => acc + p.amount, 0).toFixed(2)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Payments Table */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            {filteredSystemPayments.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[760px]">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-200">
+                      <th className="py-3 px-4">Fecha y Hora</th>
+                      <th className="py-3 px-4">Cliente</th>
+                      <th className="py-3 px-4">Lote Abonado</th>
+                      <th className="py-3 px-3">Día Despacho</th>
+                      <th className="py-3 px-3">N° Operación / Ref</th>
+                      <th className="py-3 px-3">Método</th>
+                      <th className="py-3 px-4 text-right">Monto Abonado</th>
+                      <th className="py-3 px-4 text-right">Saldo Restante</th>
+                      <th className="py-3 px-3">Registrado Por</th>
+                      <th className="py-3 px-4 text-center">Ticket</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {filteredSystemPayments.map((p) => {
+                      const payDate = new Date(p.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+                      return (
+                        <tr key={p.id} className="hover:bg-blue-50/20 transition-colors">
+                          <td className="py-3 px-4 font-bold text-slate-800 text-[11px] whitespace-nowrap">
+                            {payDate}
+                          </td>
+                          <td className="py-3 px-4 font-black text-slate-900 uppercase text-xs">
+                            {p.order.clientName || 'Cliente'}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-[10px] bg-blue-50 text-blue-800 font-black px-2.5 py-1 rounded-lg border border-blue-200 uppercase">
+                              {p.batchName}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-slate-600 font-medium">
+                            {p.orderDate}
+                          </td>
+                          <td className="py-3 px-3 font-mono text-[11px] text-slate-600">
+                            {p.operationNumber || `REC-${p.id.slice(-6).toUpperCase()}`}
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className="text-[9px] bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded uppercase">
+                              {p.method || 'EFECTIVO'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right font-digital font-black text-emerald-600 text-sm">
+                            S/. {p.amount.toFixed(2)}
+                          </td>
+                          <td className="py-3 px-4 text-right font-digital font-bold text-slate-700">
+                            S/. {p.orderBalance.toFixed(2)}
+                          </td>
+                          <td className="py-3 px-3 text-[10px] text-slate-500">
+                            {p.registeredByName || 'Caja Central'}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <button
+                              onClick={() => {
+                                const targetPayment = (p.order.payments || []).find(x => x.id === p.id);
+                                if (targetPayment) {
+                                  const prevB = p.orderBalance + p.amount;
+                                  generateReceiptPDF(p.order, targetPayment, prevB, p.orderBalance);
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-black uppercase flex items-center gap-1 mx-auto transition-colors border border-emerald-200"
+                              title="Reimprimir Ticket de este Abono"
+                            >
+                              <Printer size={11} /> Ticket
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-16 text-center text-slate-400">
+                <History size={32} className="mx-auto mb-3 opacity-30" />
+                <p className="text-sm font-black uppercase tracking-wider text-slate-700">No se encontraron abonos</p>
+                <p className="text-xs text-slate-400 mt-1">No hay abonos registrados para la búsqueda o filtros aplicados.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : viewMode === 'LIST' ? (
         
         /* === VISTA DE LISTADO DE CLIENTES AGRUPADOS === */
         <div className="space-y-4">
@@ -1571,6 +1908,13 @@ const Collections: React.FC = () => {
 
                     <div className="flex items-center gap-1.5">
                       <button
+                        onClick={(e) => { e.stopPropagation(); setSelectedClientStatement(group); setStatementModalTab('DAYS'); }}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] font-black uppercase flex items-center gap-1 shadow-sm active:scale-95 transition-all"
+                        title="Abrir Estado de Cuenta del Cliente (General, Desglose por Días y Últimos Pagos)"
+                      >
+                        <FileText size={12} /> Estado de Cuenta
+                      </button>
+                      <button
                         onClick={(e) => { e.stopPropagation(); handleOpenClientPaymentModal(group); }}
                         className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase flex items-center gap-1 shadow-sm active:scale-95 transition-all"
                         title="Registrar Abono a cuenta de este cliente"
@@ -1598,121 +1942,417 @@ const Collections: React.FC = () => {
                   </div>
                 </div>
 
-                {isExpanded && (
-                  <div className="border-t border-slate-100 bg-slate-50/50 p-3 md:p-5 animate-fade-in space-y-4">
-                    {/* Monthly Breakdowns */}
-                    {Object.entries(monthlyStats).map(([month, stats]) => (
-                      <div key={month} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                        <div className="bg-slate-100/90 p-3 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2">
-                           <div className="flex items-center gap-2">
-                              <h4 className="font-black text-slate-800 uppercase text-xs tracking-wider capitalize">{month}</h4>
-                              <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded-full">{stats.orders.length} pesas</span>
-                              <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">{stats.netKg.toFixed(1)} kg</span>
-                           </div>
-                           <div className="flex items-center gap-3">
-                             <div className="text-[10px] font-bold text-slate-500 uppercase">Facturado: <span className="text-slate-800">S/. {stats.totalDue.toFixed(2)}</span></div>
-                             <div className="text-[10px] font-bold text-slate-500 uppercase">Saldo: <span className={`${stats.balance <= 0.05 ? 'text-emerald-600' : 'text-red-600'}`}>S/. {stats.balance.toFixed(2)}</span></div>
-                             
-                             <div className="flex items-center gap-1 border-l border-slate-300 pl-2">
-                               <button
-                                 onClick={() => generateMonthCollectionsA4PDF(group, month, stats)}
-                                 className="px-2 py-1 bg-white hover:bg-slate-200 border border-slate-300 text-slate-700 rounded text-[9px] font-bold flex items-center gap-1 transition-colors"
-                                 title="Descargar Reporte del Mes (A4)"
-                               >
-                                 <FileText size={11} /> Mes A4
-                               </button>
-                               <button
-                                 onClick={() => generateMonthCollectionsTicketPDF(group, month, stats)}
-                                 className="px-2 py-1 bg-white hover:bg-slate-200 border border-slate-300 text-slate-700 rounded text-[9px] font-bold flex items-center gap-1 transition-colors"
-                                 title="Imprimir Ticket del Mes (80mm)"
-                               >
-                                 <Printer size={11} /> Ticket
-                               </button>
-                             </div>
-                           </div>
-                        </div>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left border-collapse min-w-[650px]">
-                            <thead>
-                              <tr className="bg-slate-50 text-slate-500 text-[9px] font-black uppercase tracking-widest border-b border-slate-100">
-                                <th className="py-2.5 px-4">Día / Fecha de Pesaje</th>
-                                <th className="py-2.5 px-3">Lote</th>
-                                <th className="py-2.5 px-3 text-right">Detalle de Pesas</th>
-                                <th className="py-2.5 px-3 text-right">Facturado</th>
-                                <th className="py-2.5 px-3 text-right">Abonado</th>
-                                <th className="py-2.5 px-3 text-right">Saldo</th>
-                                <th className="py-2.5 px-4 text-center">Acciones</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-50 text-xs">
-                              {stats.orders.map(order => {
-                                const { totalDue, totalPaid, balance, netKg, pricePerKg } = calculateBalance(order);
-                                const isOrderPaid = balance <= 0.05 || order.paymentStatus === 'PAID';
-                                const batchName = getBatchName(order.batchId);
-                                const orderDate = getSafeDateString(order.date, order.id);
-                                const records = order.records || [];
-                                const totalBirds = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.birds || 0), 0);
-                                const totalCrates = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.quantity || 1), 0);
+                {isExpanded && (() => {
+                  const clientPayments = getClientPayments(group.orders);
+                  const pendingOrders = group.orders.filter(o => calculateBalance(o).balance > 0.05);
+                  const activeTab = clientActiveTab[group.clientName] || 'DAYS';
+                  const currentDayFilter = clientDayFilter[group.clientName] || 'ALL';
 
-                                return (
-                                  <tr key={order.id} className="hover:bg-blue-50/30 transition-colors bg-white">
-                                    <td className="py-2.5 px-4">
-                                      <div className="font-black text-slate-800 text-[11px]">{orderDate}</div>
-                                      <div className="text-[9px] text-slate-400 font-mono">ID: {order.id.slice(-6)}</div>
-                                    </td>
-                                    <td className="py-2.5 px-3">
-                                      <span className="text-[9px] bg-slate-100 text-slate-700 font-bold px-1.5 py-0.5 rounded uppercase">{batchName}</span>
-                                    </td>
-                                    <td className="py-2.5 px-3 text-right">
-                                      <div className="font-black text-slate-800 text-[11px]">{netKg.toFixed(1)} kg</div>
-                                      <div className="text-[9px] text-slate-400">{totalBirds}p / {totalCrates}j @ S/.{pricePerKg.toFixed(2)}</div>
-                                    </td>
-                                    <td className="py-2.5 px-3 text-right font-digital font-bold text-slate-700">S/. {totalDue.toFixed(2)}</td>
-                                    <td className="py-2.5 px-3 text-right font-digital font-bold text-emerald-600">S/. {totalPaid.toFixed(2)}</td>
-                                    <td className="py-2.5 px-3 text-right font-digital font-black">
-                                      <span className={isOrderPaid ? 'text-emerald-600' : 'text-red-600'}>S/. {balance.toFixed(2)}</span>
-                                    </td>
-                                    <td className="py-2.5 px-4 text-center">
-                                      <div className="flex items-center justify-center gap-1.5">
-                                        {!isOrderPaid ? (
-                                          <button 
-                                            onClick={(e) => { e.stopPropagation(); handleOpenPayModal(order); }}
-                                            className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase flex items-center gap-1 shadow-sm active:scale-95 transition-all"
-                                            title="Abonar o Cancelar esta fecha de pesaje"
-                                          >
-                                            <DollarSign size={11} /> Abonar
-                                          </button>
-                                        ) : (
-                                          <span className="px-2 py-1 bg-emerald-50 text-emerald-700 text-[9px] font-black rounded-lg uppercase">
-                                            Al Día
-                                          </span>
-                                        )}
-                                        <button 
-                                          onClick={(e) => { e.stopPropagation(); setViewHistoryOrder(order); }}
-                                          className="p-1.5 bg-slate-100 hover:bg-slate-200 text-blue-600 rounded-lg transition-colors"
-                                          title="Historial de Abonos de esta fecha"
-                                        >
-                                          <History size={13} />
-                                        </button>
-                                        <button 
-                                          onClick={(e) => { e.stopPropagation(); generateBankStatementPDF(order); }}
-                                          className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors"
-                                          title="Estado de Cuenta A4"
-                                        >
-                                          <FileText size={13} />
-                                        </button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                  return (
+                    <div className="border-t border-slate-100 bg-slate-50/70 p-3 md:p-5 animate-fade-in space-y-4">
+                      {/* Tab Navigation for Client Breakdown */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-sm">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            onClick={() => setClientActiveTab(prev => ({ ...prev, [group.clientName]: 'DAYS' }))}
+                            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${activeTab === 'DAYS' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                          >
+                            <CalendarDays size={14} /> Desglose por Días y Meses ({group.orders.length})
+                          </button>
+                          <button
+                            onClick={() => setClientActiveTab(prev => ({ ...prev, [group.clientName]: 'PAYMENTS' }))}
+                            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${activeTab === 'PAYMENTS' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                          >
+                            <History size={14} /> Últimos Pagos según Lote ({clientPayments.length})
+                          </button>
+                          <button
+                            onClick={() => setClientActiveTab(prev => ({ ...prev, [group.clientName]: 'PENDING' }))}
+                            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${activeTab === 'PENDING' ? 'bg-red-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                          >
+                            <AlertCircle size={14} /> Cuentas Pendientes por Pagar ({pendingOrders.length})
+                          </button>
+                        </div>
+
+                        {/* Quick Report Downloads for this Client */}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => generateClientCollectionsA4PDF(group, 'PENDING_ONLY')}
+                            className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
+                            title="Descargar solo órdenes con saldo pendiente en A4"
+                          >
+                            <FileText size={12} /> A4 Solo Pendientes
+                          </button>
+                          <button
+                            onClick={() => generateClientCollectionsTicketPDF(group, 'PENDING_ONLY')}
+                            className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
+                            title="Ticket solo órdenes con saldo pendiente"
+                          >
+                            <Printer size={12} /> Ticket Solo Pendientes
+                          </button>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+
+                      {/* TAB 1: DESGLOSE POR DÍAS Y MESES */}
+                      {activeTab === 'DAYS' && (
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between px-1">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                              Historial Cronológico de Pesajes y Despachos
+                            </span>
+                            <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 text-[10px] font-bold">
+                              <button
+                                onClick={() => setClientDayFilter(prev => ({ ...prev, [group.clientName]: 'ALL' }))}
+                                className={`px-2.5 py-1 rounded-lg transition-colors ${currentDayFilter === 'ALL' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                              >
+                                Todos ({group.orders.length})
+                              </button>
+                              <button
+                                onClick={() => setClientDayFilter(prev => ({ ...prev, [group.clientName]: 'PENDING' }))}
+                                className={`px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 ${currentDayFilter === 'PENDING' ? 'bg-red-600 text-white' : 'text-red-700 hover:bg-red-50'}`}
+                              >
+                                Solo Pendientes ({pendingOrders.length})
+                              </button>
+                            </div>
+                          </div>
+
+                          {Object.entries(monthlyStats).map(([month, stats]) => {
+                            const displayOrders = currentDayFilter === 'PENDING'
+                              ? stats.orders.filter(o => calculateBalance(o).balance > 0.05)
+                              : stats.orders;
+
+                            if (displayOrders.length === 0 && currentDayFilter === 'PENDING') return null;
+
+                            return (
+                              <div key={month} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                                <div className="bg-slate-100/90 p-3 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-black text-slate-800 uppercase text-xs tracking-wider capitalize">{month}</h4>
+                                    <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded-full">{displayOrders.length} pesas</span>
+                                    <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">{stats.netKg.toFixed(1)} kg</span>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <div className="text-[10px] font-bold text-slate-500 uppercase">Facturado: <span className="text-slate-800">S/. {stats.totalDue.toFixed(2)}</span></div>
+                                    <div className="text-[10px] font-bold text-slate-500 uppercase">Saldo: <span className={`${stats.balance <= 0.05 ? 'text-emerald-600' : 'text-red-600'}`}>S/. {stats.balance.toFixed(2)}</span></div>
+                                    
+                                    <div className="flex items-center gap-1 border-l border-slate-300 pl-2">
+                                      <button
+                                        onClick={() => generateMonthCollectionsA4PDF(group, month, stats)}
+                                        className="px-2 py-1 bg-white hover:bg-slate-200 border border-slate-300 text-slate-700 rounded text-[9px] font-bold flex items-center gap-1 transition-colors"
+                                        title="Descargar Reporte del Mes (A4)"
+                                      >
+                                        <FileText size={11} /> Mes A4
+                                      </button>
+                                      <button
+                                        onClick={() => generateMonthCollectionsTicketPDF(group, month, stats)}
+                                        className="px-2 py-1 bg-white hover:bg-slate-200 border border-slate-300 text-slate-700 rounded text-[9px] font-bold flex items-center gap-1 transition-colors"
+                                        title="Imprimir Ticket del Mes (80mm)"
+                                      >
+                                        <Printer size={11} /> Ticket
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left border-collapse min-w-[650px]">
+                                    <thead>
+                                      <tr className="bg-slate-50 text-slate-500 text-[9px] font-black uppercase tracking-widest border-b border-slate-100">
+                                        <th className="py-2.5 px-4">Día / Fecha de Pesaje</th>
+                                        <th className="py-2.5 px-3">Lote Abonado</th>
+                                        <th className="py-2.5 px-3 text-right">Detalle Pesas</th>
+                                        <th className="py-2.5 px-3 text-right">Facturado</th>
+                                        <th className="py-2.5 px-3 text-right">Abonado</th>
+                                        <th className="py-2.5 px-3 text-right">Saldo Deudor</th>
+                                        <th className="py-2.5 px-3">Último Pago en Lote</th>
+                                        <th className="py-2.5 px-4 text-center">Acciones</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50 text-xs">
+                                      {displayOrders.map(order => {
+                                        const { totalDue, totalPaid, balance, netKg, pricePerKg } = calculateBalance(order);
+                                        const isOrderPaid = balance <= 0.05 || order.paymentStatus === 'PAID';
+                                        const batchName = getBatchName(order.batchId);
+                                        const orderDate = getSafeDateString(order.date, order.id);
+                                        const records = order.records || [];
+                                        const totalBirds = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.birds || 0), 0);
+                                        const totalCrates = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.quantity || 1), 0);
+                                        const lastP = (order.payments && order.payments.length > 0) ? order.payments[order.payments.length - 1] : null;
+
+                                        return (
+                                          <tr key={order.id} className="hover:bg-blue-50/30 transition-colors bg-white">
+                                            <td className="py-2.5 px-4">
+                                              <div className="font-black text-slate-800 text-[11px]">{orderDate}</div>
+                                              <div className="text-[9px] text-slate-400 font-mono">ID: {order.id.slice(-6)}</div>
+                                            </td>
+                                            <td className="py-2.5 px-3">
+                                              <span className="text-[10px] bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded-lg border border-slate-200 uppercase">{batchName}</span>
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right">
+                                              <div className="font-black text-slate-800 text-[11px]">{netKg.toFixed(1)} kg</div>
+                                              <div className="text-[9px] text-slate-400">{totalBirds}p / {totalCrates}j @ S/.{pricePerKg.toFixed(2)}</div>
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right font-digital font-bold text-slate-700">S/. {totalDue.toFixed(2)}</td>
+                                            <td className="py-2.5 px-3 text-right font-digital font-bold text-emerald-600">S/. {totalPaid.toFixed(2)}</td>
+                                            <td className="py-2.5 px-3 text-right font-digital font-black">
+                                              <span className={isOrderPaid ? 'text-emerald-600' : 'text-red-600'}>S/. {balance.toFixed(2)}</span>
+                                            </td>
+                                            <td className="py-2.5 px-3">
+                                              {lastP ? (
+                                                <div>
+                                                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                                    +S/. {lastP.amount.toFixed(2)}
+                                                  </span>
+                                                  <span className="text-[9px] text-slate-400 block mt-0.5">
+                                                    {new Date(lastP.timestamp).toLocaleDateString([], { dateStyle: 'short' })} • {lastP.method || 'Efectivo'}
+                                                  </span>
+                                                </div>
+                                              ) : (
+                                                <span className="text-[9px] text-slate-400 italic">Sin abonos</span>
+                                              )}
+                                            </td>
+                                            <td className="py-2.5 px-4 text-center">
+                                              <div className="flex items-center justify-center gap-1.5">
+                                                {!isOrderPaid ? (
+                                                  <button 
+                                                    onClick={(e) => { e.stopPropagation(); handleOpenPayModal(order); }}
+                                                    className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase flex items-center gap-1 shadow-sm active:scale-95 transition-all"
+                                                    title="Abonar a este lote"
+                                                  >
+                                                    <DollarSign size={11} /> Abonar
+                                                  </button>
+                                                ) : (
+                                                  <span className="px-2 py-1 bg-emerald-50 text-emerald-700 text-[9px] font-black rounded-lg uppercase">
+                                                    Al Día
+                                                  </span>
+                                                )}
+                                                <button 
+                                                  onClick={(e) => { e.stopPropagation(); setViewHistoryOrder(order); }}
+                                                  className="p-1.5 bg-slate-100 hover:bg-slate-200 text-blue-600 rounded-lg transition-colors"
+                                                  title="Historial de Abonos de este lote"
+                                                >
+                                                  <History size={13} />
+                                                </button>
+                                                <button 
+                                                  onClick={(e) => { e.stopPropagation(); generateBankStatementPDF(order); }}
+                                                  className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors"
+                                                  title="Estado de Cuenta A4 de este despacho"
+                                                >
+                                                  <FileText size={13} />
+                                                </button>
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* TAB 2: ÚLTIMOS PAGOS SEGÚN LOTE ABONADO */}
+                      {activeTab === 'PAYMENTS' && (
+                        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                          <div className="p-4 bg-emerald-50/50 border-b border-emerald-100 flex flex-wrap justify-between items-center gap-2">
+                            <div>
+                              <h4 className="font-black text-emerald-950 uppercase text-xs tracking-wider">
+                                Historial de Últimos Pagos y Abonos Realizados
+                              </h4>
+                              <p className="text-[10px] text-emerald-700 mt-0.5">
+                                {clientPayments.length} pagos registrados a nombre de {group.clientName} clasificados por lote abonado
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase">Total Amortizado:</span>
+                              <span className="font-digital font-bold text-emerald-700 text-base ml-2">
+                                S/. {clientPayments.reduce((acc, curr) => acc + curr.amount, 0).toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {clientPayments.length > 0 ? (
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left border-collapse min-w-[700px]">
+                                <thead>
+                                  <tr className="bg-slate-50 text-slate-500 text-[9px] font-black uppercase tracking-widest border-b border-slate-100">
+                                    <th className="py-2.5 px-4">Fecha y Hora del Pago</th>
+                                    <th className="py-2.5 px-3">Lote Abonado</th>
+                                    <th className="py-2.5 px-3">Día Despacho</th>
+                                    <th className="py-2.5 px-3">N° Operación / Ref</th>
+                                    <th className="py-2.5 px-3">Método</th>
+                                    <th className="py-2.5 px-3 text-right">Monto Abonado</th>
+                                    <th className="py-2.5 px-3 text-right">Saldo Restante Lote</th>
+                                    <th className="py-2.5 px-3">Registrado Por</th>
+                                    <th className="py-2.5 px-4 text-center">Comprobante</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 text-xs">
+                                  {clientPayments.map((p) => {
+                                    const payDateFormatted = new Date(p.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+                                    return (
+                                      <tr key={p.id} className="hover:bg-emerald-50/20 transition-colors">
+                                        <td className="py-2.5 px-4 font-bold text-slate-800 text-[11px]">
+                                          {payDateFormatted}
+                                        </td>
+                                        <td className="py-2.5 px-3">
+                                          <span className="text-[10px] bg-blue-50 text-blue-800 font-black px-2 py-0.5 rounded-lg border border-blue-200 uppercase">
+                                            {p.batchName}
+                                          </span>
+                                        </td>
+                                        <td className="py-2.5 px-3 text-slate-600 text-[11px]">
+                                          {p.orderDate}
+                                        </td>
+                                        <td className="py-2.5 px-3 font-mono text-[10px] text-slate-600">
+                                          {p.operationNumber || `REC-${p.id.slice(-6).toUpperCase()}`}
+                                        </td>
+                                        <td className="py-2.5 px-3">
+                                          <span className="text-[9px] bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded uppercase">
+                                            {p.method || 'EFECTIVO'}
+                                          </span>
+                                        </td>
+                                        <td className="py-2.5 px-3 text-right font-digital font-black text-emerald-600 text-sm">
+                                          S/. {p.amount.toFixed(2)}
+                                        </td>
+                                        <td className="py-2.5 px-3 text-right font-digital font-bold text-slate-700">
+                                          S/. {p.orderBalance.toFixed(2)}
+                                        </td>
+                                        <td className="py-2.5 px-3 text-[10px] text-slate-500">
+                                          {p.registeredByName || 'Caja Central'}
+                                        </td>
+                                        <td className="py-2.5 px-4 text-center">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              const targetPayment = (p.order.payments || []).find(x => x.id === p.id);
+                                              if (targetPayment) {
+                                                const prevB = p.orderBalance + p.amount;
+                                                generateReceiptPDF(p.order, targetPayment, prevB, p.orderBalance);
+                                              }
+                                            }}
+                                            className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 mx-auto transition-colors border border-emerald-200"
+                                            title="Reimprimir Ticket de este Abono"
+                                          >
+                                            <Printer size={11} /> Ticket
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <div className="p-8 text-center text-slate-400">
+                              <History size={24} className="mx-auto mb-2 opacity-40" />
+                              <p className="text-xs font-bold uppercase tracking-wider">No se registran abonos aún para este cliente</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* TAB 3: CUENTAS PENDIENTES POR PAGAR */}
+                      {activeTab === 'PENDING' && (
+                        <div className="space-y-4">
+                          <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                            <div>
+                              <span className="text-[10px] font-black uppercase tracking-widest text-red-700 block">
+                                Total Deuda Pendiente del Cliente
+                              </span>
+                              <p className="font-digital text-2xl font-black text-red-600 mt-0.5">
+                                S/. {group.balance.toFixed(2)}
+                              </p>
+                              <p className="text-[11px] text-red-600/80 font-medium">
+                                {pendingOrders.length} {pendingOrders.length === 1 ? 'cuenta / día con saldo pendiente' : 'cuentas / días con saldo pendiente'}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => generateClientCollectionsA4PDF(group, 'PENDING_ONLY')}
+                                className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black uppercase flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                              >
+                                <FileText size={14} /> PDF A4 Solo Pendientes
+                              </button>
+                              <button
+                                onClick={() => generateClientCollectionsTicketPDF(group, 'PENDING_ONLY')}
+                                className="px-3 py-2 bg-white hover:bg-red-50 text-red-700 border border-red-300 rounded-xl text-xs font-black uppercase flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                              >
+                                <Printer size={14} /> Ticket Solo Pendientes
+                              </button>
+                            </div>
+                          </div>
+
+                          {pendingOrders.length > 0 ? (
+                            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse min-w-[650px]">
+                                  <thead>
+                                    <tr className="bg-slate-50 text-slate-500 text-[9px] font-black uppercase tracking-widest border-b border-slate-100">
+                                      <th className="py-2.5 px-4">Día / Fecha</th>
+                                      <th className="py-2.5 px-3">Lote Pendiente</th>
+                                      <th className="py-2.5 px-3 text-right">Peso Neto</th>
+                                      <th className="py-2.5 px-3 text-right">Total Facturado</th>
+                                      <th className="py-2.5 px-3 text-right">Total Ya Abonado</th>
+                                      <th className="py-2.5 px-3 text-right text-red-600">Saldo que le queda</th>
+                                      <th className="py-2.5 px-4 text-center">Acción</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100 text-xs">
+                                    {pendingOrders.map(order => {
+                                      const { totalDue, totalPaid, balance, netKg } = calculateBalance(order);
+                                      const batchName = getBatchName(order.batchId);
+                                      const orderDate = getSafeDateString(order.date, order.id);
+
+                                      return (
+                                        <tr key={order.id} className="hover:bg-red-50/30 transition-colors">
+                                          <td className="py-2.5 px-4 font-black text-slate-800 text-[11px]">
+                                            {orderDate}
+                                          </td>
+                                          <td className="py-2.5 px-3">
+                                            <span className="text-[10px] bg-red-50 text-red-800 font-black px-2 py-0.5 rounded-lg border border-red-200 uppercase">
+                                              {batchName}
+                                            </span>
+                                          </td>
+                                          <td className="py-2.5 px-3 text-right font-bold text-slate-700">
+                                            {netKg.toFixed(1)} kg
+                                          </td>
+                                          <td className="py-2.5 px-3 text-right font-digital font-bold text-slate-700">
+                                            S/. {totalDue.toFixed(2)}
+                                          </td>
+                                          <td className="py-2.5 px-3 text-right font-digital font-bold text-emerald-600">
+                                            S/. {totalPaid.toFixed(2)}
+                                          </td>
+                                          <td className="py-2.5 px-3 text-right font-digital font-black text-red-600 text-base">
+                                            S/. {balance.toFixed(2)}
+                                          </td>
+                                          <td className="py-2.5 px-4 text-center">
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); handleOpenPayModal(order); }}
+                                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase flex items-center gap-1 mx-auto shadow-sm active:scale-95 transition-all"
+                                            >
+                                              <DollarSign size={11} /> Abonar a este Lote
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="p-8 text-center bg-white rounded-xl border border-slate-200 text-emerald-600">
+                              <CheckCircle2 size={28} className="mx-auto mb-2" />
+                              <p className="text-sm font-black uppercase tracking-wider">¡El cliente está 100% al día!</p>
+                              <p className="text-xs text-slate-400 mt-0.5">No tiene ningún saldo ni cuenta pendiente por pagar.</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
@@ -2307,6 +2947,506 @@ const Collections: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 6. MODAL ESTADO DE CUENTA INTEGRAL DEL CLIENTE (DESGLOSE POR DÍAS Y ÚLTIMOS PAGOS SEGÚN LOTE) */}
+      {selectedClientStatement && (() => {
+        const clientPayments = getClientPayments(selectedClientStatement.orders);
+        const pendingOrders = selectedClientStatement.orders.filter(o => calculateBalance(o).balance > 0.05);
+        const isClientPaid = selectedClientStatement.balance <= 0.05;
+
+        // Group by month
+        const monthlyStats: Record<string, { totalDue: number, totalPaid: number, balance: number, netKg: number, orders: ClientOrder[] }> = {};
+        selectedClientStatement.orders.forEach(order => {
+          const orderDate = getSafeDateObj(order.date, order.id);
+          const monthYear = orderDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+          if (!monthlyStats[monthYear]) {
+            monthlyStats[monthYear] = { totalDue: 0, totalPaid: 0, balance: 0, netKg: 0, orders: [] };
+          }
+          const bal = calculateBalance(order);
+          monthlyStats[monthYear].totalDue += bal.totalDue;
+          monthlyStats[monthYear].totalPaid += bal.totalPaid;
+          monthlyStats[monthYear].balance += bal.balance;
+          monthlyStats[monthYear].netKg += bal.netKg;
+          monthlyStats[monthYear].orders.push(order);
+        });
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+            <div className="bg-slate-50 w-full max-w-6xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 p-5 md:p-6 text-white flex flex-wrap justify-between items-center gap-4 shrink-0">
+                <div className="flex items-center gap-3.5">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isClientPaid ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
+                    <FileText size={24} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-blue-300 bg-blue-500/20 px-2 py-0.5 rounded-md border border-blue-400/20">
+                        Estado de Cuenta de Cliente
+                      </span>
+                      {selectedClientStatement.clientDni && (
+                        <span className="text-[10px] text-slate-300 font-mono">DNI: {selectedClientStatement.clientDni}</span>
+                      )}
+                    </div>
+                    <h2 className="text-xl md:text-2xl font-black uppercase tracking-tight text-white mt-1">
+                      {selectedClientStatement.clientName}
+                    </h2>
+                  </div>
+                </div>
+
+                {/* PDF & Print Actions */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => generateClientCollectionsA4PDF(selectedClientStatement)}
+                    className="px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-xs font-bold text-white flex items-center gap-1.5 transition-all"
+                    title="Reporte A4 Completo"
+                  >
+                    <FileText size={14} /> Reporte A4
+                  </button>
+                  <button
+                    onClick={() => generateClientCollectionsTicketPDF(selectedClientStatement)}
+                    className="px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-xs font-bold text-white flex items-center gap-1.5 transition-all"
+                    title="Ticket Térmico Completo"
+                  >
+                    <Printer size={14} /> Ticket 80mm
+                  </button>
+                  <button
+                    onClick={() => generateClientCollectionsA4PDF(selectedClientStatement, 'PENDING_ONLY')}
+                    className="px-3 py-2 bg-red-600/80 hover:bg-red-600 border border-red-500 rounded-xl text-xs font-bold text-white flex items-center gap-1.5 transition-all"
+                    title="Reporte A4 Solo Pendientes"
+                  >
+                    <AlertCircle size={14} /> A4 Solo Pendientes
+                  </button>
+                  <button
+                    onClick={() => setSelectedClientStatement(null)}
+                    className="p-2 bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white rounded-xl transition-all ml-1"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+
+              {/* General Financial Summary */}
+              <div className="bg-white p-4 md:p-5 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Total Facturado</span>
+                  <span className="font-digital text-lg md:text-xl font-bold text-slate-900 mt-1 block">
+                    S/. {selectedClientStatement.totalDue.toFixed(2)}
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-bold">{selectedClientStatement.orders.length} pesajes en total</span>
+                </div>
+
+                <div className="bg-emerald-50/60 p-3.5 rounded-2xl border border-emerald-200">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700 block">Total Abonado</span>
+                  <span className="font-digital text-lg md:text-xl font-bold text-emerald-700 mt-1 block">
+                    S/. {selectedClientStatement.totalPaid.toFixed(2)}
+                  </span>
+                  <span className="text-[10px] text-emerald-600 font-bold">{clientPayments.length} abonos realizados</span>
+                </div>
+
+                <div className={`p-3.5 rounded-2xl border ${isClientPaid ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+                  <span className={`text-[10px] font-black uppercase tracking-widest block ${isClientPaid ? 'text-emerald-700' : 'text-red-700'}`}>
+                    Saldo Deudor General
+                  </span>
+                  <span className={`font-digital text-xl md:text-2xl font-black mt-1 block ${isClientPaid ? 'text-emerald-600' : 'text-red-600'}`}>
+                    S/. {selectedClientStatement.balance.toFixed(2)}
+                  </span>
+                  <span className={`text-[10px] font-bold ${isClientPaid ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {isClientPaid ? 'Cuenta cancelada' : `${pendingOrders.length} cuentas con saldo`}
+                  </span>
+                </div>
+
+                <div className="bg-blue-50/60 p-3.5 rounded-2xl border border-blue-200 flex flex-col justify-center">
+                  <button
+                    onClick={() => {
+                      handleOpenClientPaymentModal(selectedClientStatement);
+                    }}
+                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                  >
+                    <DollarSign size={15} /> + Registrar Abono
+                  </button>
+                </div>
+              </div>
+
+              {/* Subtabs Bar */}
+              <div className="bg-slate-100 px-4 md:px-6 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => setStatementModalTab('DAYS')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${statementModalTab === 'DAYS' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-200'}`}
+                  >
+                    <CalendarDays size={14} /> Desglose por Días y Lotes ({selectedClientStatement.orders.length})
+                  </button>
+                  <button
+                    onClick={() => setStatementModalTab('PAYMENTS')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${statementModalTab === 'PAYMENTS' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-200'}`}
+                  >
+                    <History size={14} /> Últimos Pagos Realizados según Lote ({clientPayments.length})
+                  </button>
+                  <button
+                    onClick={() => setStatementModalTab('PENDING')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${statementModalTab === 'PENDING' ? 'bg-red-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-200'}`}
+                  >
+                    <AlertCircle size={14} /> Cuentas Pendientes que le Quedan ({pendingOrders.length})
+                  </button>
+                </div>
+
+                {statementModalTab === 'DAYS' && (
+                  <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 text-[10px] font-bold">
+                    <button
+                      onClick={() => setStatementDayFilter('ALL')}
+                      className={`px-2.5 py-1 rounded-lg transition-colors ${statementDayFilter === 'ALL' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                    >
+                      Todos ({selectedClientStatement.orders.length})
+                    </button>
+                    <button
+                      onClick={() => setStatementDayFilter('PENDING')}
+                      className={`px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 ${statementDayFilter === 'PENDING' ? 'bg-red-600 text-white' : 'text-red-700 hover:bg-red-50'}`}
+                    >
+                      Solo Pendientes ({pendingOrders.length})
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="p-4 md:p-6 overflow-y-auto space-y-4 flex-1">
+                {/* MODAL TAB 1: DESGLOSE POR DÍAS */}
+                {statementModalTab === 'DAYS' && (
+                  <div className="space-y-4">
+                    {Object.entries(monthlyStats).map(([month, stats]) => {
+                      const displayOrders = statementDayFilter === 'PENDING'
+                        ? stats.orders.filter(o => calculateBalance(o).balance > 0.05)
+                        : stats.orders;
+
+                      if (displayOrders.length === 0 && statementDayFilter === 'PENDING') return null;
+
+                      return (
+                        <div key={month} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                          <div className="bg-slate-100 p-3.5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-black text-slate-800 uppercase text-xs tracking-wider capitalize">{month}</h4>
+                              <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded-full">{displayOrders.length} pesas</span>
+                              <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">{stats.netKg.toFixed(1)} kg</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className="text-[10px] font-bold text-slate-500 uppercase">Facturado: <span className="text-slate-800">S/. {stats.totalDue.toFixed(2)}</span></div>
+                              <div className="text-[10px] font-bold text-slate-500 uppercase">Saldo: <span className={`${stats.balance <= 0.05 ? 'text-emerald-600' : 'text-red-600'}`}>S/. {stats.balance.toFixed(2)}</span></div>
+                            </div>
+                          </div>
+
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-[700px]">
+                              <thead>
+                                <tr className="bg-slate-50 text-slate-500 text-[9px] font-black uppercase tracking-widest border-b border-slate-100">
+                                  <th className="py-2.5 px-4">Día / Fecha de Pesaje</th>
+                                  <th className="py-2.5 px-3">Lote Abonado</th>
+                                  <th className="py-2.5 px-3 text-right">Detalle Pesas</th>
+                                  <th className="py-2.5 px-3 text-right">Facturado</th>
+                                  <th className="py-2.5 px-3 text-right">Abonado</th>
+                                  <th className="py-2.5 px-3 text-right">Saldo Deudor</th>
+                                  <th className="py-2.5 px-3">Último Pago en Lote</th>
+                                  <th className="py-2.5 px-4 text-center">Acción</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 text-xs">
+                                {displayOrders.map(order => {
+                                  const { totalDue, totalPaid, balance, netKg, pricePerKg } = calculateBalance(order);
+                                  const isOrderPaid = balance <= 0.05 || order.paymentStatus === 'PAID';
+                                  const batchName = getBatchName(order.batchId);
+                                  const orderDate = getSafeDateString(order.date, order.id);
+                                  const records = order.records || [];
+                                  const totalBirds = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.birds || 0), 0);
+                                  const totalCrates = records.filter(r => r.type === 'FULL').reduce((a, b) => a + (b.quantity || 1), 0);
+                                  const lastP = (order.payments && order.payments.length > 0) ? order.payments[order.payments.length - 1] : null;
+
+                                  return (
+                                    <tr key={order.id} className="hover:bg-blue-50/30 transition-colors">
+                                      <td className="py-2.5 px-4">
+                                        <div className="font-black text-slate-800 text-[11px]">{orderDate}</div>
+                                        <div className="text-[9px] text-slate-400 font-mono">ID: {order.id.slice(-6)}</div>
+                                      </td>
+                                      <td className="py-2.5 px-3">
+                                        <span className="text-[10px] bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded-lg border border-slate-200 uppercase">{batchName}</span>
+                                      </td>
+                                      <td className="py-2.5 px-3 text-right">
+                                        <div className="font-black text-slate-800 text-[11px]">{netKg.toFixed(1)} kg</div>
+                                        <div className="text-[9px] text-slate-400">{totalBirds}p / {totalCrates}j @ S/.{pricePerKg.toFixed(2)}</div>
+                                      </td>
+                                      <td className="py-2.5 px-3 text-right font-digital font-bold text-slate-700">S/. {totalDue.toFixed(2)}</td>
+                                      <td className="py-2.5 px-3 text-right font-digital font-bold text-emerald-600">S/. {totalPaid.toFixed(2)}</td>
+                                      <td className="py-2.5 px-3 text-right font-digital font-black">
+                                        <span className={isOrderPaid ? 'text-emerald-600' : 'text-red-600'}>S/. {balance.toFixed(2)}</span>
+                                      </td>
+                                      <td className="py-2.5 px-3">
+                                        {lastP ? (
+                                          <div>
+                                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                              +S/. {lastP.amount.toFixed(2)}
+                                            </span>
+                                            <span className="text-[9px] text-slate-400 block mt-0.5">
+                                              {new Date(lastP.timestamp).toLocaleDateString([], { dateStyle: 'short' })} • {lastP.method || 'Efectivo'}
+                                            </span>
+                                          </div>
+                                        ) : (
+                                          <span className="text-[9px] text-slate-400 italic">Sin abonos</span>
+                                        )}
+                                      </td>
+                                      <td className="py-2.5 px-4 text-center">
+                                        <div className="flex items-center justify-center gap-1.5">
+                                          {!isOrderPaid ? (
+                                            <button 
+                                              onClick={() => handleOpenPayModal(order)}
+                                              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase flex items-center gap-1 shadow-sm active:scale-95 transition-all"
+                                              title="Abonar a este lote"
+                                            >
+                                              <DollarSign size={11} /> Abonar
+                                            </button>
+                                          ) : (
+                                            <span className="px-2 py-1 bg-emerald-50 text-emerald-700 text-[9px] font-black rounded-lg uppercase">
+                                              Al Día
+                                            </span>
+                                          )}
+                                          <button 
+                                            onClick={() => setViewHistoryOrder(order)}
+                                            className="p-1.5 bg-slate-100 hover:bg-slate-200 text-blue-600 rounded-lg transition-colors"
+                                            title="Historial de Abonos"
+                                          >
+                                            <History size={13} />
+                                          </button>
+                                          <button 
+                                            onClick={() => generateBankStatementPDF(order)}
+                                            className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors"
+                                            title="Estado de Cuenta A4 de esta fecha"
+                                          >
+                                            <FileText size={13} />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* MODAL TAB 2: ÚLTIMOS PAGOS SEGÚN LOTE */}
+                {statementModalTab === 'PAYMENTS' && (
+                  <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                    <div className="p-4 bg-emerald-50/50 border-b border-emerald-100 flex flex-wrap justify-between items-center gap-2">
+                      <div>
+                        <h4 className="font-black text-emerald-950 uppercase text-xs tracking-wider">
+                          Historial de Pagos Realizados según Lote Abonado
+                        </h4>
+                        <p className="text-[11px] text-emerald-700 mt-0.5">
+                          Lista cronológica de todos los abonos efectuados a las cuentas y lotes de este cliente.
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">Total Abonado:</span>
+                        <span className="font-digital font-bold text-emerald-700 text-lg ml-2">
+                          S/. {clientPayments.reduce((acc, curr) => acc + curr.amount, 0).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {clientPayments.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse min-w-[720px]">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-500 text-[9px] font-black uppercase tracking-widest border-b border-slate-100">
+                              <th className="py-2.5 px-4">Fecha y Hora</th>
+                              <th className="py-2.5 px-3">Lote Abonado</th>
+                              <th className="py-2.5 px-3">Día Despacho</th>
+                              <th className="py-2.5 px-3">N° Operación / Ref</th>
+                              <th className="py-2.5 px-3">Método</th>
+                              <th className="py-2.5 px-3 text-right">Monto Abonado</th>
+                              <th className="py-2.5 px-3 text-right">Saldo Restante</th>
+                              <th className="py-2.5 px-3">Registrado Por</th>
+                              <th className="py-2.5 px-4 text-center">Ticket</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-xs">
+                            {clientPayments.map((p) => {
+                              const payDateFormatted = new Date(p.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+                              return (
+                                <tr key={p.id} className="hover:bg-emerald-50/20 transition-colors">
+                                  <td className="py-2.5 px-4 font-bold text-slate-800 text-[11px]">
+                                    {payDateFormatted}
+                                  </td>
+                                  <td className="py-2.5 px-3">
+                                    <span className="text-[10px] bg-blue-50 text-blue-800 font-black px-2 py-0.5 rounded-lg border border-blue-200 uppercase">
+                                      {p.batchName}
+                                    </span>
+                                  </td>
+                                  <td className="py-2.5 px-3 text-slate-600 text-[11px]">
+                                    {p.orderDate}
+                                  </td>
+                                  <td className="py-2.5 px-3 font-mono text-[10px] text-slate-600">
+                                    {p.operationNumber || `REC-${p.id.slice(-6).toUpperCase()}`}
+                                  </td>
+                                  <td className="py-2.5 px-3">
+                                    <span className="text-[9px] bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded uppercase">
+                                      {p.method || 'EFECTIVO'}
+                                    </span>
+                                  </td>
+                                  <td className="py-2.5 px-3 text-right font-digital font-black text-emerald-600 text-sm">
+                                    S/. {p.amount.toFixed(2)}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-right font-digital font-bold text-slate-700">
+                                    S/. {p.orderBalance.toFixed(2)}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-[10px] text-slate-500">
+                                    {p.registeredByName || 'Caja Central'}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-center">
+                                    <button
+                                      onClick={() => {
+                                        const targetPayment = (p.order.payments || []).find(x => x.id === p.id);
+                                        if (targetPayment) {
+                                          const prevB = p.orderBalance + p.amount;
+                                          generateReceiptPDF(p.order, targetPayment, prevB, p.orderBalance);
+                                        }
+                                      }}
+                                      className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 mx-auto transition-colors border border-emerald-200"
+                                      title="Reimprimir Ticket de este Abono"
+                                    >
+                                      <Printer size={11} /> Ticket
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="p-8 text-center text-slate-400">
+                        <History size={24} className="mx-auto mb-2 opacity-40" />
+                        <p className="text-xs font-bold uppercase tracking-wider">No se registran abonos aún para este cliente</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* MODAL TAB 3: CUENTAS PENDIENTES */}
+                {statementModalTab === 'PENDING' && (
+                  <div className="space-y-4">
+                    <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-red-700 block">
+                          Total Deuda Pendiente del Cliente
+                        </span>
+                        <p className="font-digital text-2xl font-black text-red-600 mt-0.5">
+                          S/. {selectedClientStatement.balance.toFixed(2)}
+                        </p>
+                        <p className="text-[11px] text-red-600/80 font-medium">
+                          {pendingOrders.length} {pendingOrders.length === 1 ? 'cuenta / fecha de pesaje pendiente de pago' : 'cuentas / fechas de pesaje pendientes de pago'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => generateClientCollectionsA4PDF(selectedClientStatement, 'PENDING_ONLY')}
+                          className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black uppercase flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                        >
+                          <FileText size={14} /> PDF A4 Solo Pendientes
+                        </button>
+                        <button
+                          onClick={() => generateClientCollectionsTicketPDF(selectedClientStatement, 'PENDING_ONLY')}
+                          className="px-3 py-2 bg-white hover:bg-red-50 text-red-700 border border-red-300 rounded-xl text-xs font-black uppercase flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                        >
+                          <Printer size={14} /> Ticket Solo Pendientes
+                        </button>
+                      </div>
+                    </div>
+
+                    {pendingOrders.length > 0 ? (
+                      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse min-w-[650px]">
+                            <thead>
+                              <tr className="bg-slate-50 text-slate-500 text-[9px] font-black uppercase tracking-widest border-b border-slate-100">
+                                <th className="py-2.5 px-4">Día / Fecha</th>
+                                <th className="py-2.5 px-3">Lote Pendiente</th>
+                                <th className="py-2.5 px-3 text-right">Peso Neto</th>
+                                <th className="py-2.5 px-3 text-right">Total Facturado</th>
+                                <th className="py-2.5 px-3 text-right">Total Abonado</th>
+                                <th className="py-2.5 px-3 text-right text-red-600">Saldo que le queda</th>
+                                <th className="py-2.5 px-4 text-center">Acción</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-xs">
+                              {pendingOrders.map(order => {
+                                const { totalDue, totalPaid, balance, netKg } = calculateBalance(order);
+                                const batchName = getBatchName(order.batchId);
+                                const orderDate = getSafeDateString(order.date, order.id);
+
+                                return (
+                                  <tr key={order.id} className="hover:bg-red-50/30 transition-colors">
+                                    <td className="py-2.5 px-4 font-black text-slate-800 text-[11px]">
+                                      {orderDate}
+                                    </td>
+                                    <td className="py-2.5 px-3">
+                                      <span className="text-[10px] bg-red-50 text-red-800 font-black px-2 py-0.5 rounded-lg border border-red-200 uppercase">
+                                        {batchName}
+                                      </span>
+                                    </td>
+                                    <td className="py-2.5 px-3 text-right font-bold text-slate-700">
+                                      {netKg.toFixed(1)} kg
+                                    </td>
+                                    <td className="py-2.5 px-3 text-right font-digital font-bold text-slate-700">
+                                      S/. {totalDue.toFixed(2)}
+                                    </td>
+                                    <td className="py-2.5 px-3 text-right font-digital font-bold text-emerald-600">
+                                      S/. {totalPaid.toFixed(2)}
+                                    </td>
+                                    <td className="py-2.5 px-3 text-right font-digital font-black text-red-600 text-base">
+                                      S/. {balance.toFixed(2)}
+                                    </td>
+                                    <td className="py-2.5 px-4 text-center">
+                                      <button
+                                        onClick={() => handleOpenPayModal(order)}
+                                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase flex items-center gap-1 mx-auto shadow-sm active:scale-95 transition-all"
+                                      >
+                                        <DollarSign size={11} /> Abonar a este Lote
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-emerald-600">
+                        <CheckCircle2 size={32} className="mx-auto mb-2" />
+                        <p className="text-sm font-black uppercase tracking-wider">¡El cliente está 100% al día!</p>
+                        <p className="text-xs text-slate-400 mt-0.5">No tiene ningún saldo ni cuenta pendiente por pagar.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 bg-white border-t border-slate-200 flex justify-end shrink-0">
+                <button
+                  onClick={() => setSelectedClientStatement(null)}
+                  className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-slate-800 transition-colors"
+                >
+                  Cerrar Estado de Cuenta
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );
