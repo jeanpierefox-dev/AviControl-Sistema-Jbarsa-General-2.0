@@ -1,7 +1,7 @@
 
 import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, Calculator, Users, FileText, Settings, ArrowRight, Bird, Box, TrendingUp, ShieldCheck, Activity, Trash2 } from 'lucide-react';
+import { Package, Calculator, Users, FileText, Settings, ArrowRight, Bird, Box, TrendingUp, ShieldCheck, Activity, Trash2, Cloud, Database } from 'lucide-react';
 import { AuthContext } from '../../App';
 import { UserRole, WeighingType } from '../../types';
 import { getConfig, getOrders, getBatches, resetApp, getVisibleUserIds } from '../../services/storage';
@@ -95,14 +95,27 @@ const Dashboard: React.FC = () => {
             </div>
         </div>
         
-        <button 
-            onClick={() => { if(confirm('¿BORRAR TODO? Esto restaurará el sistema a fábrica.')) resetApp(); }}
-            className="relative z-10 bg-red-50 text-red-500 p-4 rounded-2xl hover:bg-red-100 transition-colors border border-red-100 shadow-sm flex items-center gap-2"
-            title="Borrar todos los datos"
-        >
-            <Trash2 size={20} />
-            <span className="hidden md:inline font-black text-[10px] uppercase tracking-widest">Borrar Datos</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+              onClick={() => navigate('/config')}
+              className="relative z-10 bg-blue-50 text-blue-900 hover:bg-blue-100 p-3 sm:px-4 sm:py-3 rounded-2xl transition-all border border-blue-200 shadow-sm flex items-center gap-2 font-black text-xs uppercase tracking-wider active:scale-95 cursor-pointer"
+              title="Migrar datos del dispositivo a la nube o descargar datos históricos"
+          >
+              <Cloud size={18} className="text-blue-600" />
+              <span className="hidden sm:inline">Nube y Migración</span>
+          </button>
+          
+          {user?.role === UserRole.ADMIN && (
+            <button 
+                onClick={() => { if(confirm('¿BORRAR TODO? Esto restaurará el sistema a fábrica localmente.')) resetApp(); }}
+                className="relative z-10 bg-red-50 text-red-500 p-3 rounded-2xl hover:bg-red-100 transition-colors border border-red-100 shadow-sm flex items-center gap-1.5"
+                title="Borrar memoria local"
+            >
+                <Trash2 size={18} />
+                <span className="hidden md:inline font-black text-[10px] uppercase tracking-widest">Reset Local</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Operaciones */}

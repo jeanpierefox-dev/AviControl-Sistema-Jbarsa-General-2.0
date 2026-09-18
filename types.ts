@@ -63,6 +63,7 @@ export interface ClientOrder {
   paymentMethod?: 'CASH' | 'CREDIT';
   payments: Payment[];
   createdBy?: string; // User ID
+  updatedAt?: number;
 }
 
 export interface Payment {
@@ -96,6 +97,7 @@ export interface Batch {
   dispatcherSignature?: string; // Base64 digital signature
   status: 'ACTIVE' | 'ARCHIVED';
   createdBy?: string; // User ID
+  updatedAt?: number;
 }
 
 export interface AppConfig {
